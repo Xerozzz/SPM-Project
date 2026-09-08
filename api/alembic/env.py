@@ -8,9 +8,9 @@ from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
 
+import models
 from alembic import context
 from core.config import get_settings
-from core.database import Base
 
 config = context.config
 
@@ -20,8 +20,9 @@ config.set_main_option("sqlalchemy.url", get_settings().database_url)
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Importing api models here is what lets `alembic revision --autogenerate` see them.
-target_metadata = Base.metadata
+# Autogenerate can only see models that have been imported. Importing the models
+# package (which re-exports every model) is what makes that true — see models/__init__.py.
+target_metadata = models.Base.metadata
 
 
 def run_migrations_online() -> None:

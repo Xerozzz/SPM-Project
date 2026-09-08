@@ -1,7 +1,8 @@
 """The FastAPI application.
 
-Built by a factory so tests can construct an app without importing module-level state,
-and so router registration is one obvious list rather than scattered decorators.
+Built by a factory so that router registration is one obvious list rather than a set of
+scattered decorators, and so a test can build a second app with overridden dependencies
+without disturbing the one the server is running.
 """
 
 from fastapi import FastAPI, HTTPException, status

@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     well-known signing key.
     """
 
+    # env_file is resolved from the working directory, so this reads api/.env when you
+    # run the API directly on your machine. Under Docker Compose there is no such file:
+    # Compose injects the values from the repository-root .env as real env vars.
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str

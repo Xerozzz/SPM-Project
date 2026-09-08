@@ -64,11 +64,17 @@ Each row gives the `make` target and the command it runs, so you can use either.
 | Start the stack | `make up` | `docker compose up --build` |
 | Stop it | `make down` | `docker compose down` |
 | Backend tests + coverage gate | `make test` | `docker compose run --rm api pytest --cov=. --cov-report=term-missing --cov-fail-under=90` |
-| Frontend tests | — | `npm --prefix web run test -- --run` |
-| Lint and type check | `make lint` | `docker compose run --rm api sh -c "ruff check . && ruff format --check . && mypy ."` |
-| Autoformat | `make fmt` | `docker compose run --rm api sh -c "ruff format . && ruff check --fix ."` |
+| Frontend tests | `make test` | `docker compose run --rm --no-deps web sh -c "npm run test -- --run"` |
+| Backend lint + types | `make lint` | `docker compose run --rm api sh -c "ruff check . && ruff format --check . && mypy ."` |
+| Frontend lint + types | `make lint` | `docker compose run --rm --no-deps web sh -c "npm run lint && npm run typecheck"` |
+| Autoformat the backend | `make fmt` | `docker compose run --rm api sh -c "ruff format . && ruff check --fix ."` |
+| Autoformat the frontend | `make fmt` | `docker compose run --rm --no-deps web npm run fmt` |
 | Apply migrations | `make migrate` | `docker compose run --rm api alembic upgrade head` |
 | New migration | `make revision m="add users table"` | `docker compose run --rm api alembic revision --autogenerate -m "add users table"` |
+
+`make test`, `make lint` and `make fmt` each run both of their rows. Every one of these
+runs inside a container, which is why Docker is the only prerequisite — you do not need
+Python or Node on your machine. `make down ARGS=-v` wipes the database volume too.
 
 The API container runs `alembic upgrade head` on every start, so a normal
 `docker compose up` already has the schema up to date.

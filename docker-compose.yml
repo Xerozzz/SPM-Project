@@ -36,6 +36,9 @@ services:
     command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://connectsphere:connectsphere@db:5432/connectsphere}
+      # core/config.py has no default for this, on purpose. The default lives here,
+      # in the local development environment, so `docker compose up` works from a
+      # clean clone — it is not a secret and must never be used anywhere real.
       JWT_SECRET: ${JWT_SECRET:-local-development-only-change-me}
       JWT_EXPIRY_MINUTES: ${JWT_EXPIRY_MINUTES:-60}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}

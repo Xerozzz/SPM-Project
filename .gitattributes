@@ -3,5 +3,7 @@
 # endings break them — so line endings are a portability decision, not a preference.
 * text=auto eol=lf
 
-# Lock files are generated; keep them out of diffs and merge conflicts.
-package-lock.json -diff linguist-generated
+# Lock files are generated. linguist-generated collapses them in GitHub's diff view;
+# we deliberately do NOT mark them -diff, so `git diff` still works when a lock file
+# conflicts and somebody has to read it.
+package-lock.json linguist-generated
