@@ -1,0 +1,18 @@
+# Runtime dependencies. This list is fixed by AGENTS.md §2 — adding to it needs an ADR.
+# Bounds are "the minor we developed against, up to the next breaking major" so a fresh
+# `pip install` is reproducible enough without a lock file to maintain.
+
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+
+sqlalchemy>=2.0,<2.1
+alembic>=1.13,<2.0
+psycopg[binary]>=3.2,<4.0
+
+pydantic>=2.8,<3.0
+pydantic-settings>=2.4,<3.0
+
+# Auth (AGENTS.md §2: "JWT bearer tokens with role claims", passlib[bcrypt] for hashing).
+# Unused until the auth story; listed here so the image never changes for it.
+pyjwt>=2.9,<3.0
+passlib[bcrypt]>=1.7,<2.0

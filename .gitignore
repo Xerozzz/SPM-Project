@@ -1,0 +1,32 @@
+# Secrets and local configuration — never committed. See .env.example.
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+api/traceability.md
+
+# Node
+node_modules/
+dist/
+*.local
+
+# Playwright
+e2e/playwright-report/
+e2e/test-results/
+e2e/blob-report/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/

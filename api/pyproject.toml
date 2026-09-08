@@ -1,0 +1,89 @@
+# Tooling configuration for the backend. Merged from config-snippets/pyproject.toml —
+# the governance-pack sections are kept verbatim; the comments explain what each one buys us.
+#
+# There is no [project] table on purpose: `api/` is run, not installed as a package.
+
+# ----------------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers -q"          # --strict-markers turns a typo'd marker into an error
+markers = [
+  "story(id): the user story this test provides evidence for",   # <-- traceability
+]
+# The test client is httpx's ASGI transport, which is async, so tests are async too.
+# "auto" means a test does not need its own @pytest.mark.asyncio decorator.
+asyncio_mode = "auto"
+
+# ----------------------------------------------------------------------- coverage
+[tool.coverage.run]
+branch = true
+source = ["."]
+# `*/__init__.py` is deliberately NOT omitted. CI runs
+#   coverage report --include='*/domain/*' --fail-under=100
+# and while domain/ holds nothing but its package docstring, omitting __init__.py
+# leaves that command with no files to report on, which coverage treats as an error
+# rather than as a vacuous 100%. Measuring the packages costs nothing — they are
+# docstrings and re-exports — and keeps the domain gate meaningful from day one.
+omit = ["tests/*", "alembic/*"]
+
+[tool.coverage.report]
+show_missing = true
+# Every exclusion needs a reason next to it in the code. The brief asks for coverage
+# to be justified where it is not complete.
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+]
+
+# ----------------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+  "E", "F", "W",   # pycodestyle, pyflakes
+  "I",             # import sorting
+  "B",             # bugbear
+  "UP",            # pyupgrade
+  "S",             # bandit — catches string-built SQL, weak crypto, hardcoded secrets
+  "DTZ",           # flake8-datetimez — enforces timezone-aware datetimes (AGENTS.md §3)
+  "ARG",           # unused arguments
+  "SIM",           # simplify
+  "TID",           # tidy-imports — used below to enforce the layering from ADR-0003
+]
+ignore = ["S101"]  # assert is fine in tests
+
+# Enforce the layering from ADR-0003 mechanically rather than by review discipline:
+# domain/ may not import the ORM or the web framework. The ban is declared globally and
+# then lifted (TID251) everywhere except domain/, because ruff has no "only here" form.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"sqlalchemy".msg = "domain/ must stay I/O-free — see ADR-0003"
+"fastapi".msg = "domain/ must stay framework-free — see ADR-0003"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S", "ARG", "TID251"]
+"routers/*" = ["TID251"]
+"services/*" = ["TID251"]
+"repositories/*" = ["TID251"]
+"models/*" = ["TID251"]
+"schemas/*" = ["TID251"]
+"core/*" = ["TID251"]
+"alembic/*" = ["TID251", "S", "ARG"]
+"main.py" = ["TID251"]
+
+# ----------------------------------------------------------------------- mypy
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+plugins = ["pydantic.mypy"]
+# Alembic revision filenames start with a digit, so they are not importable module names
+# and mypy cannot analyse them. This excludes the generated revision scripts only —
+# alembic/env.py, which we wrote by hand, stays fully type-checked.
+exclude = ["^alembic/versions/"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
