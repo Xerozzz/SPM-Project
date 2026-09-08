@@ -18,7 +18,13 @@ asyncio_mode = "auto"
 [tool.coverage.run]
 branch = true
 source = ["."]
-omit = ["tests/*", "alembic/*", "*/__init__.py"]
+# `*/__init__.py` is deliberately NOT omitted. CI runs
+#   coverage report --include='*/domain/*' --fail-under=100
+# and while domain/ holds nothing but its package docstring, omitting __init__.py
+# leaves that command with no files to report on, which coverage treats as an error
+# rather than as a vacuous 100%. Measuring the packages costs nothing — they are
+# docstrings and re-exports — and keeps the domain gate meaningful from day one.
+omit = ["tests/*", "alembic/*"]
 
 [tool.coverage.report]
 show_missing = true
