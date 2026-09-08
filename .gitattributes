@@ -1,0 +1,7 @@
+# Check everything out with LF, on every platform. The Makefile, the Dockerfiles and the
+# shell commands in docker-compose.yml all run inside Linux containers, where CRLF line
+# endings break them — so line endings are a portability decision, not a preference.
+* text=auto eol=lf
+
+# Lock files are generated; keep them out of diffs and merge conflicts.
+package-lock.json -diff linguist-generated
