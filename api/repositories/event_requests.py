@@ -34,6 +34,12 @@ def list_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventReques
     return list(db.scalars(statement))
 
 
+def add(db: Session, request: EventRequest) -> EventRequest:
+    """Stage a new request in the current transaction (no commit)."""
+    db.add(request)
+    return request
+
+
 def save(db: Session, request: EventRequest) -> EventRequest:
     """Commit the request's pending changes and reload it with database-set values."""
     db.add(request)

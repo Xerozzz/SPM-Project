@@ -37,11 +37,16 @@ def _http_error(exc: Exception) -> HTTPException:
         return HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
     if isinstance(exc, service.IncompleteEventRequestError):
         problems = [FieldProblemRead(field=p.field, reason=p.reason) for p in exc.problems]
-        return HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, [p.model_dump() for p in problems]
-        )
+        # A literal 422: Starlette renamed its constant between the versions we allow, so
+        # neither HTTP_422_UNPROCESSABLE_ENTITY nor _CONTENT exists on all of them.
+        return HTTPException(422, [p.model_dump() for p in problems])
     # Locked drafts and illegal transitions are conflicts with the request's current state.
-    return HTTPException(status.HTTP_409_CONFLICT, str(exc))
+    # The message is stable and for the organiser; the exception text is for logs.
+    if isinstance(exc, EventRequestLockedError):
+        detail = "This request has been submitted and can no longer be edited directly"
+    else:
+        detail = "This request has already been submitted"
+    return HTTPException(status.HTTP_409_CONFLICT, detail)
 
 
 @router.get("", response_model=list[EventRequestRead])

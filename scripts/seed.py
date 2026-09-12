@@ -89,7 +89,7 @@ def _seed_event_requests(db: Session) -> None:
         if existing is not None:
             event_requests_repo.delete(db, existing)
             db.flush()
-        db.add(EventRequest(id=sample_id, organiser_id=organiser.id, **fields))
+        event_requests_repo.add(db, EventRequest(id=sample_id, organiser_id=organiser.id, **fields))
 
 
 def main() -> None:

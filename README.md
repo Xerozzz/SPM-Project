@@ -63,7 +63,7 @@ Each row gives the `make` target and the command it runs, so you can use either.
 |---|---|---|
 | Start the stack | `make up` | `docker compose up --build` |
 | Stop it | `make down` | `docker compose down` |
-| Backend tests + coverage gate | `make test` | `docker compose run --rm -e DATABASE_URL=postgresql+psycopg://connectsphere:connectsphere@db:5432/connectsphere_test api pytest --cov=. --cov-report=term-missing --cov-fail-under=90` |
+| Backend tests + coverage gate | `make test` | `docker compose run --rm api pytest --cov=. --cov-report=term-missing --cov-fail-under=90` |
 | Frontend tests | `make test` | `docker compose run --rm --no-deps web sh -c "npm run test -- --run"` |
 | Backend lint + types | `make lint` | `docker compose run --rm api sh -c "ruff check . && ruff format --check . && mypy ."` |
 | Frontend lint + types | `make lint` | `docker compose run --rm --no-deps web sh -c "npm run lint && npm run typecheck"` |
@@ -78,9 +78,10 @@ Python or Node on your machine. `make down ARGS=-v` wipes the database volume to
 
 The API container runs `alembic upgrade head` and then the dev seed on every start, so a
 normal `docker compose up` has the schema up to date and accounts you can sign in with.
-`make test` points the backend at a separate `connectsphere_test` database (created and
-migrated automatically by `api/tests/conftest.py`), so tests never touch what you see in
-the browser.
+Backend tests always run against a separate `<database>_test` database — `api/tests/conftest.py`
+rewrites `DATABASE_URL` on the way in, and `api/tests/integration/conftest.py` creates and
+migrates it — so tests never touch what you see in the browser, whatever credentials you
+configured.
 
 ### Seeded accounts
 

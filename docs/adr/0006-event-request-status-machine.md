@@ -1,4 +1,4 @@
-# ADR-0006: Event request status is a transition table in the domain layer
+# ADR-0006: Event request storage, and status as a transition table in the domain layer
 
 - **Status:** Proposed
 - **Date:** 2026-09-12
@@ -35,6 +35,19 @@ request.status = event_status.submit(request.status)   # the only assignment, va
 Statuses are stored as their lowercase value in a `VARCHAR(30)` column (SQLAlchemy `Enum` with
 `native_enum=False`), so adding a status is a code change, not a Postgres type migration.
 
+**The table itself** (`event_requests`, migration `0003`) is shared by every event request
+story, so its shape is part of this decision:
+
+- One row per request, owned by `organiser_id` (FK to `users`), with all eleven fields the
+  ticket names (`name`, `purpose`, `description`, `start_at`, `end_at`,
+  `expected_attendance`, and the venue / accessibility / equipment / layout / registration
+  requirements), plus `created_at`, `updated_at`, `submitted_at`.
+- **Every content column is nullable.** The ticket calls the fields "required", but they are
+  required *to submit*, not *to exist*: SCRUM-29 saves half-finished drafts. Completeness is
+  therefore a domain rule (`domain/event_request.py`, run at submission) rather than a
+  `NOT NULL` constraint, and the rule can name every missing field at once.
+- Datetimes are `timestamptz`; the API converts any offset to UTC on the way in (AGENTS §3).
+
 Vocabulary so far: `draft`, `submitted`. Each story that introduces a status or a transition
 adds it here, with tests, in the same PR — and no story invents a status elsewhere.
 
@@ -46,6 +59,8 @@ adds it here, with tests, in the same PR — and no story invents a status elsew
 | Methods on the ORM model (`request.submit()`) | Couples the rule to persistence; cannot be unit-tested without the ORM, which ADR-0003 forbids in `domain/` |
 | A state-machine library | A new runtime dependency (needs an ADR of its own) for what is a dozen lines we can all read |
 | Postgres native `ENUM` type | Every new status becomes an `ALTER TYPE` migration; painful to test and to roll back |
+| `NOT NULL` on the required fields | Makes partial drafts impossible, and a database constraint can only report the first missing field, not all of them |
+| One table per status (draft table, submitted table, …) | Submission becomes a copy between tables; ids change; every reader has to union them |
 
 ## Consequences
 

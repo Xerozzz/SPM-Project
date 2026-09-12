@@ -148,6 +148,9 @@ async def test_a_submitted_request_cannot_be_edited(
         )
 
     assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "This request has been submitted and can no longer be edited directly"
+    )
     db.refresh(draft)
     assert draft.name == "Orientation Day"
     assert draft.status is EventStatus.SUBMITTED
@@ -170,6 +173,26 @@ async def test_editing_with_a_naive_datetime_is_rejected(
     assert response.status_code == 422
     db.refresh(draft)
     assert draft.start_at == original_start
+
+
+@pytest.mark.story("SCRUM-46")
+async def test_editing_with_another_timezone_is_stored_as_utc(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # AGENTS.md §3 says UTC at every layer, not merely "aware": 10:00 in +01:00 is stored
+    # and returned as 09:00 UTC. The instant is the same; only the representation moves.
+    organiser = make_user("organiser")
+    draft = make_draft(db, organiser)
+
+    async with make_client(organiser) as client:
+        response = await client.patch(
+            f"/api/event-requests/{draft.id}", json={"end_at": "2026-12-01T10:00:00+01:00"}
+        )
+
+    assert response.status_code == 200
+    assert response.json()["end_at"] == "2026-12-01T09:00:00Z"
+    db.refresh(draft)
+    assert draft.end_at == datetime(2026, 12, 1, 9, 0, tzinfo=UTC)
 
 
 # --------------------------------------------------------------------------- AC4
@@ -262,6 +285,7 @@ async def test_submitting_twice_is_a_conflict(
 
     assert first.status_code == 200
     assert second.status_code == 409
+    assert second.json()["detail"] == "This request has already been submitted"
 
 
 # --------------------------------------------------------------------------- listing

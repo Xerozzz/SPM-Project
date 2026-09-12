@@ -1,9 +1,9 @@
 """Request/response contracts for event requests (SCRUM-46)."""
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict, field_validator
 
 from domain.event_status import EventStatus
 
@@ -16,7 +16,7 @@ class EventRequestUpdate(BaseModel):
     purpose: str | None = None
     description: str | None = None
     # AwareDatetime: a value without a UTC offset is rejected at the door (AGENTS.md §3),
-    # so a naive datetime can never reach the database through this endpoint.
+    # so a naive datetime can never reach the database through this endpoint ...
     start_at: AwareDatetime | None = None
     end_at: AwareDatetime | None = None
     expected_attendance: int | None = None
@@ -25,6 +25,13 @@ class EventRequestUpdate(BaseModel):
     equipment_requirement: str | None = None
     layout_requirement: str | None = None
     registration_requirement: str | None = None
+
+    @field_validator("start_at", "end_at")
+    @classmethod
+    def _to_utc(cls, value: datetime | None) -> datetime | None:
+        """... and an aware one in another zone is converted, so the invariant is UTC at
+        every layer rather than merely "has a timezone". The instant is unchanged."""
+        return None if value is None else value.astimezone(UTC)
 
 
 class EventRequestRead(BaseModel):

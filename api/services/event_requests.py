@@ -8,8 +8,7 @@ router can map it to a status code without knowing any of the rules.
 import uuid
 from datetime import datetime
 
-from sqlalchemy.orm import Session
-
+from core.database import Session
 from domain import event_status
 from domain.event_request import (
     EventRequestFields,
