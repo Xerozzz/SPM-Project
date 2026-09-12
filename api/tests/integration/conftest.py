@@ -34,6 +34,7 @@ from alembic import command
 from core.config import get_settings
 from core.database import engine, get_db
 from core.security import create_access_token, hash_password
+from domain.roles import Role
 from models.user import User
 
 
@@ -93,11 +94,12 @@ def app(db: Session) -> FastAPI:
 def make_user(db: Session) -> Callable[..., User]:
     """Create a signed-up user with the given roles, e.g. make_user("organiser")."""
 
-    def _make(*roles: str, email: str | None = None) -> User:
+    def _make(*roles: Role | str, email: str | None = None) -> User:
         user = User(
             email=email or f"{uuid.uuid4()}@example.com",
             password_hash=hash_password("password123"),
-            roles=list(roles),
+            # Role(...) validates: a misspelt role in a test fails here, not as a 403.
+            roles=[Role(role).value for role in roles],
         )
         db.add(user)
         db.flush()

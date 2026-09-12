@@ -1,16 +1,7 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 import { login as apiLogin } from '../api/auth'
-
-interface AuthState {
-  token: string | null
-  roles: string[]
-  signIn: (email: string, password: string) => Promise<void>
-  signOut: () => void
-  hasRole: (...allowed: string[]) => boolean
-}
-
-const AuthContext = createContext<AuthState | null>(null)
+import { AuthContext, type AuthState } from './AuthContext'
 
 const STORAGE_KEY = 'connectsphere.token'
 
@@ -60,10 +51,4 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-export function useAuth(): AuthState {
-  const auth = useContext(AuthContext)
-  if (!auth) throw new Error('useAuth must be used inside AuthProvider')
-  return auth
 }

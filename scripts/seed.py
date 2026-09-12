@@ -11,22 +11,21 @@ every start, so a fresh `docker compose up` is immediately usable.
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy.orm import Session
-
-from core.database import SessionLocal
+from core.database import Session, SessionLocal
 from core.security import hash_password
+from domain.roles import Role
 from models.event_request import EventRequest
 from models.user import User
 from repositories import event_requests as event_requests_repo
 from repositories import users as users_repo
 
-_SEED_USERS: list[tuple[str, str, list[str]]] = [
-    ("organiser@example.com", "password123", ["organiser"]),
-    ("coordinator@example.com", "password123", ["coordinator"]),
-    ("venue-staff@example.com", "password123", ["venue_staff"]),
-    ("tech-support@example.com", "password123", ["tech_support"]),
-    ("attendee@example.com", "password123", ["attendee"]),
-    ("multi-role@example.com", "password123", ["organiser", "coordinator"]),
+_SEED_USERS: list[tuple[str, str, list[Role]]] = [
+    ("organiser@example.com", "password123", [Role.ORGANISER]),
+    ("coordinator@example.com", "password123", [Role.COORDINATOR]),
+    ("venue-staff@example.com", "password123", [Role.VENUE_STAFF]),
+    ("tech-support@example.com", "password123", [Role.TECH_SUPPORT]),
+    ("attendee@example.com", "password123", [Role.ATTENDEE]),
+    ("multi-role@example.com", "password123", [Role.ORGANISER, Role.COORDINATOR]),
 ]
 
 
@@ -76,7 +75,13 @@ def _seed_users(db: Session) -> None:
     """Insert missing seed users; never touch existing rows."""
     for email, password, roles in _SEED_USERS:
         if users_repo.get_by_email(db, email) is None:
-            db.add(User(email=email, password_hash=hash_password(password), roles=roles))
+            db.add(
+                User(
+                    email=email,
+                    password_hash=hash_password(password),
+                    roles=[role.value for role in roles],
+                )
+            )
 
 
 def _seed_event_requests(db: Session) -> None:
