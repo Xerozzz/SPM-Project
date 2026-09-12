@@ -12,6 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from core.config import get_settings
 from core.database import engine
+from routers import auth
 
 
 def create_app() -> FastAPI:
@@ -45,7 +46,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     # Feature routers are registered here, one line each, as stories land:
-    #     app.include_router(auth.router, prefix="/api")
+    app.include_router(auth.router, prefix="/api")
 
     return app
 

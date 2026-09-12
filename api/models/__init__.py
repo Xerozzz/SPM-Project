@@ -10,3 +10,4 @@ Add each new model here as you write it:
 """
 
 from core.database import Base as Base
+from models.user import User as User
