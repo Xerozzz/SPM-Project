@@ -1,8 +1,12 @@
-"""Shared fixtures. Read this once and every integration test in the repo makes sense.
+"""Fixtures for integration tests — the ones that need a real PostgreSQL.
 
-    migrated_database  session-scoped: make sure the database in DATABASE_URL exists and is
-                       at the latest migration. `make test` points DATABASE_URL at a
-                       separate *_test database so tests never touch development data.
+They live here rather than in tests/ so that pure unit tests (domain/, dependencies) never
+touch a database. Read this once and every integration test in the repo makes sense.
+
+    migrated_database  session-scoped, autouse for this directory: make sure the database
+                       in DATABASE_URL exists and is at the latest migration. `make test`
+                       points DATABASE_URL at a separate *_test database so tests never
+                       touch development data.
     db                 one transaction per test, rolled back at the end — tests are
                        isolated from each other and leave nothing behind, and a test that
                        calls `db.commit()` through the service layer still rolls back.
@@ -17,10 +21,12 @@ import uuid
 from collections.abc import Callable, Generator
 
 import httpx
+import psycopg
 import pytest
 from alembic.config import Config
 from fastapi import FastAPI
-from sqlalchemy import create_engine, make_url, text
+from psycopg import sql
+from sqlalchemy import make_url
 from sqlalchemy.orm import Session
 
 import main
@@ -35,21 +41,24 @@ from models.user import User
 def migrated_database() -> None:
     """Create the test database if it does not exist, then bring it to head.
 
-    autouse, because anything that touches `core.database.engine` needs the database to
-    exist — including tests that bring their own session rather than the `db` fixture.
+    autouse for this directory, because anything that touches `core.database.engine`
+    needs the database to exist — including tests that bring their own session rather
+    than the `db` fixture.
     """
     url = make_url(get_settings().database_url)
-    maintenance = create_engine(url.set(database="postgres"), isolation_level="AUTOCOMMIT")
-    with maintenance.connect() as connection:
+    name = str(url.database)
+    # CREATE DATABASE cannot take a bound parameter, so the name is composed as a quoted
+    # identifier with psycopg's sql module rather than concatenated into a string
+    # (AGENTS.md §3). The connection goes to the maintenance database, not the test one.
+    maintenance_dsn = url.set(drivername="postgresql", database="postgres").render_as_string(
+        hide_password=False
+    )
+    with psycopg.connect(maintenance_dsn, autocommit=True) as connection:
         exists = connection.execute(
-            text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": url.database}
-        ).scalar()
-        if not exists:
-            # CREATE DATABASE cannot take a bound parameter; the name comes from our own
-            # settings, and quoting it as an identifier keeps it from being parsed as SQL.
-            quoted = maintenance.dialect.identifier_preparer.quote(str(url.database))
-            connection.execute(text(f"CREATE DATABASE {quoted}"))
-    maintenance.dispose()
+            "SELECT 1 FROM pg_database WHERE datname = %s", (name,)
+        ).fetchone()
+        if exists is None:
+            connection.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
     command.upgrade(Config("alembic.ini"), "head")
 
 

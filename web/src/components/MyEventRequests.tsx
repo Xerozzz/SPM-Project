@@ -22,8 +22,12 @@ export default function MyEventRequests() {
   const queryClient = useQueryClient()
   const [outcome, setOutcome] = useState<Outcome | null>(null)
 
+  // The token is part of the key: the list is per-user, and without it a sign-out and
+  // sign-in as someone else on the same tab could briefly show the previous user's data
+  // from the cache.
+  const queryKey = ['event-requests', 'mine', token]
   const requests = useQuery({
-    queryKey: ['event-requests', 'mine'],
+    queryKey,
     queryFn: () => listMyEventRequests(token ?? ''),
     enabled: token !== null,
   })
@@ -32,7 +36,7 @@ export default function MyEventRequests() {
     mutationFn: (id: string) => submitEventRequest(token ?? '', id),
     onSuccess: (request) => {
       setOutcome({ kind: 'submitted', request })
-      void queryClient.invalidateQueries({ queryKey: ['event-requests', 'mine'] })
+      void queryClient.invalidateQueries({ queryKey })
     },
     onError: (error, id) => {
       if (error instanceof SubmissionRejectedError) {

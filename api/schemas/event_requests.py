@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict
 
 from domain.event_status import EventStatus
 
@@ -15,8 +15,10 @@ class EventRequestUpdate(BaseModel):
     name: str | None = None
     purpose: str | None = None
     description: str | None = None
-    start_at: datetime | None = None
-    end_at: datetime | None = None
+    # AwareDatetime: a value without a UTC offset is rejected at the door (AGENTS.md §3),
+    # so a naive datetime can never reach the database through this endpoint.
+    start_at: AwareDatetime | None = None
+    end_at: AwareDatetime | None = None
     expected_attendance: int | None = None
     venue_requirement: str | None = None
     accessibility_requirement: str | None = None

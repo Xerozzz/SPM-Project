@@ -4,8 +4,12 @@ import { expect, type Page, test } from '@playwright/test'
 //
 // Relies on the dev seed (scripts/seed.py), which the api container runs on every start:
 // organiser@example.com owns "Orientation Day" (complete) and "Hackathon (draft)"
-// (incomplete), both reset to Draft. Re-running this locally after a submit needs
-// `make seed` first, because the first test genuinely submits the request.
+// (incomplete), both recreated in Draft. The first test genuinely submits the request, so
+// it can only pass once per seed: re-running locally needs `make seed` first, and retries
+// are off for this file so a failure is reported as itself rather than as "already
+// submitted". Once SCRUM-28 adds POST /api/event-requests, this should create its own
+// draft instead of consuming shared seed data.
+test.describe.configure({ retries: 0 })
 
 async function signInAsOrganiser(page: Page) {
   await page.goto('/')

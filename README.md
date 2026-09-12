@@ -63,7 +63,7 @@ Each row gives the `make` target and the command it runs, so you can use either.
 |---|---|---|
 | Start the stack | `make up` | `docker compose up --build` |
 | Stop it | `make down` | `docker compose down` |
-| Backend tests + coverage gate | `make test` | `docker compose run --rm api pytest --cov=. --cov-report=term-missing --cov-fail-under=90` |
+| Backend tests + coverage gate | `make test` | `docker compose run --rm -e DATABASE_URL=postgresql+psycopg://connectsphere:connectsphere@db:5432/connectsphere_test api pytest --cov=. --cov-report=term-missing --cov-fail-under=90` |
 | Frontend tests | `make test` | `docker compose run --rm --no-deps web sh -c "npm run test -- --run"` |
 | Backend lint + types | `make lint` | `docker compose run --rm api sh -c "ruff check . && ruff format --check . && mypy ."` |
 | Frontend lint + types | `make lint` | `docker compose run --rm --no-deps web sh -c "npm run lint && npm run typecheck"` |
