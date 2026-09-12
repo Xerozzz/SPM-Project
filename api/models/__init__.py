@@ -10,4 +10,5 @@ Add each new model here as you write it:
 """
 
 from core.database import Base as Base
+from models.event_request import EventRequest as EventRequest
 from models.user import User as User

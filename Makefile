@@ -14,8 +14,12 @@ up:  ## Build and start web + api + db
 down:  ## Stop the stack (add ARGS=-v to also wipe the database volume)
 	docker compose down $(ARGS)
 
+# Tests get their own database (tests/conftest.py creates and migrates it) so they can
+# never touch the development data you are looking at in the browser.
+TEST_DATABASE_URL = postgresql+psycopg://connectsphere:connectsphere@db:5432/connectsphere_test
+
 test:  ## Backend tests with the coverage gate from AGENTS.md §4, then frontend tests
-	docker compose run --rm api pytest --cov=. --cov-report=term-missing --cov-fail-under=90
+	docker compose run --rm -e DATABASE_URL=$(TEST_DATABASE_URL) api pytest --cov=. --cov-report=term-missing --cov-fail-under=90
 	docker compose run --rm --no-deps web sh -c "npm run test -- --run"
 
 lint:  ## ruff + mypy on the backend, eslint + tsc on the frontend
