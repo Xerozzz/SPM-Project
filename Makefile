@@ -14,6 +14,8 @@ up:  ## Build and start web + api + db
 down:  ## Stop the stack (add ARGS=-v to also wipe the database volume)
 	docker compose down $(ARGS)
 
+# Backend tests run against a separate `<database>_test` database: api/tests/conftest.py
+# rewrites DATABASE_URL, so whatever credentials Compose was given still apply.
 test:  ## Backend tests with the coverage gate from AGENTS.md §4, then frontend tests
 	docker compose run --rm api pytest --cov=. --cov-report=term-missing --cov-fail-under=90
 	docker compose run --rm --no-deps web sh -c "npm run test -- --run"

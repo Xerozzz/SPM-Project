@@ -76,8 +76,26 @@ Each row gives the `make` target and the command it runs, so you can use either.
 runs inside a container, which is why Docker is the only prerequisite — you do not need
 Python or Node on your machine. `make down ARGS=-v` wipes the database volume too.
 
-The API container runs `alembic upgrade head` on every start, so a normal
-`docker compose up` already has the schema up to date.
+The API container runs `alembic upgrade head` and then the dev seed on every start, so a
+normal `docker compose up` has the schema up to date and accounts you can sign in with.
+Backend tests always run against a separate `<database>_test` database — `api/tests/conftest.py`
+rewrites `DATABASE_URL` on the way in, and `api/tests/integration/conftest.py` creates and
+migrates it — so tests never touch what you see in the browser, whatever credentials you
+configured.
+
+### Seeded accounts
+
+All passwords are `password123`. `make seed` re-runs the seed by hand; users are never
+modified once created, but the sample event requests are reset to Draft each time.
+
+| Email | Roles | Sample data |
+|---|---|---|
+| `organiser@example.com` | organiser | Two event requests: "Orientation Day" (complete) and "Hackathon (draft)" (incomplete) |
+| `coordinator@example.com` | coordinator | |
+| `venue-staff@example.com` | venue_staff | |
+| `tech-support@example.com` | tech_support | |
+| `attendee@example.com` | attendee | |
+| `multi-role@example.com` | organiser, coordinator | |
 
 ### End-to-end tests
 
@@ -180,6 +198,10 @@ side of the mapping in `docker-compose.yml`.
 Check the API is healthy with `docker compose ps` and
 `curl http://localhost:8000/health`. `docker compose logs api` usually says why. The API
 waits for the database before starting, so this normally means a migration failed.
+
+**`make seed` (or any `docker compose run ... /scripts/...`) fails with "Files/Git/app: not found".**
+Git Bash on Windows rewrites paths like `/app` into `C:/Program Files/Git/app` before Docker
+sees them. Run the command from PowerShell, or prefix it with `MSYS_NO_PATHCONV=1`.
 
 **Migrations fail, or the database is in a strange state.**
 `docker compose down -v && docker compose up --build` deletes the volume and rebuilds the

@@ -1,13 +1,15 @@
 """The SQLAlchemy engine, session factory, and the FastAPI session dependency.
 
 ADR-0003: repositories are the only layer that uses the session for queries. Everything
-else receives it through the `get_db` dependency and hands it straight on.
+else receives it through the `get_db` dependency and hands it straight on. `Session` is
+re-exported here so services can type that parameter without importing SQLAlchemy.
 """
 
 from collections.abc import Generator
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.orm import Session as Session
 
 from core.config import get_settings
 

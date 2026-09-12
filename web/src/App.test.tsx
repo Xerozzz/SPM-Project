@@ -35,6 +35,12 @@ test('valid sign-in enters the app and shows roles', async () => {
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       )
     }
+    if (url.endsWith('/api/event-requests')) {
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
     return new Response(JSON.stringify({ status: 'ok' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },

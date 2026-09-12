@@ -31,9 +31,13 @@ services:
 
   api:
     build: ./api
-    # Migrations run on every start, then the reloading dev server. Applying migrations
-    # here rather than in the Dockerfile keeps the image immutable and the schema current.
-    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+    # Migrations, then the idempotent dev seed, then the reloading dev server. Doing this
+    # here rather than in the Dockerfile keeps the image immutable and the schema current,
+    # and means a clean clone (or CI's e2e job) can sign in without a manual step.
+    command: >
+      sh -c "alembic upgrade head
+      && PYTHONPATH=/app python /scripts/seed.py
+      && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://connectsphere:connectsphere@db:5432/connectsphere}
       # core/config.py has no default for this, on purpose. The default lives here,
