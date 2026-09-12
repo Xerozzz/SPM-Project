@@ -38,8 +38,15 @@ def require_role(*allowed: Role) -> Callable[[dict[str, object]], dict[str, obje
     def check(
         user: Annotated[dict[str, object], Depends(get_current_user)],
     ) -> dict[str, object]:
-        roles = user.get("roles", [])
-        if not isinstance(roles, list) or not allowed_values.intersection(roles):
+        # Only string elements count as roles. The claim is ours and signed, but a malformed
+        # one (say, `roles: [{}]`) must still be a 403, not a TypeError from set arithmetic.
+        claimed = user.get("roles")
+        granted = (
+            {role for role in claimed if isinstance(role, str)}
+            if isinstance(claimed, list)
+            else set()
+        )
+        if not allowed_values & granted:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         return user
 

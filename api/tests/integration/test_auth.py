@@ -51,7 +51,8 @@ def test_sign_in_rejects_unknown_email_with_same_error(db: Session) -> None:
 def test_sign_in_treats_an_over_long_password_as_wrong_not_as_a_crash(
     db: Session, make_user: MakeUser
 ) -> None:
-    # bcrypt 5 raises for more than 72 bytes; that must surface as a normal failed login.
+    # Over bcrypt's 72-byte limit. core.security refuses it before bcrypt sees it, so this
+    # is a normal failed login on every supported bcrypt version.
     user = make_user(Role.ATTENDEE)
 
     with pytest.raises(InvalidCredentialsError):

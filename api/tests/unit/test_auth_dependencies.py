@@ -81,3 +81,20 @@ def test_require_role_forbids_a_malformed_roles_claim() -> None:
         require_role(Role.ORGANISER)(user)
 
     assert exc.value.status_code == 403
+
+
+@pytest.mark.story("SCRUM-27")
+def test_require_role_forbids_a_roles_claim_with_non_string_elements() -> None:
+    # A list, so it passes the shape check — but its element is not a role name and is not
+    # even hashable. This must be a 403, not a TypeError escaping as a 500.
+    token = jwt.encode(
+        {"sub": "user-id", "roles": [{}]},
+        get_settings().jwt_secret,
+        algorithm="HS256",
+    )
+    user = get_current_user(_credentials(token))
+
+    with pytest.raises(HTTPException) as exc:
+        require_role(Role.ORGANISER)(user)
+
+    assert exc.value.status_code == 403

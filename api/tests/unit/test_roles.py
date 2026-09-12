@@ -6,7 +6,7 @@ from domain.roles import Role
 
 
 @pytest.mark.story("SCRUM-27")
-def test_roles_are_the_five_the_brief_names_in_lowercase() -> None:
+def test_roles_are_the_five_roles_the_brief_names_in_lowercase() -> None:
     assert [r.value for r in Role] == [
         "organiser",
         "coordinator",
