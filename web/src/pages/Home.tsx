@@ -1,0 +1,39 @@
+import { useQuery } from '@tanstack/react-query'
+
+import { getHealth } from '../api/client'
+import { useAuth } from '../auth/context'
+
+/**
+ * Home page, visible only after sign-in. Shows the session roles and a sign-out button.
+ */
+export default function HomePage() {
+  const { roles, signOut } = useAuth()
+  const health = useQuery({ queryKey: ['health'], queryFn: getHealth })
+
+  return (
+    <main className="mx-auto max-w-xl p-8 font-sans">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">ConnectSphere</h1>
+          <p className="mt-1 text-sm text-slate-500">Signed in as: {roles.join(', ')}</p>
+        </div>
+        <button
+          type="button"
+          onClick={signOut}
+          className="rounded border border-slate-300 px-3 py-1.5 text-sm"
+        >
+          Sign out
+        </button>
+      </div>
+
+      <section className="mt-6 rounded-lg border border-slate-200 p-4">
+        <h2 className="font-medium">API health</h2>
+        <p className="mt-2 text-sm" role="status">
+          {health.isPending && 'Checking the API…'}
+          {health.isError && `Cannot reach the API: ${health.error.message}`}
+          {health.data && `API and database are ${health.data.status}`}
+        </p>
+      </section>
+    </main>
+  )
+}

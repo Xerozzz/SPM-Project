@@ -33,4 +33,4 @@ revision:  ## Create a migration: make revision m="add users table"
 	docker compose run --rm api alembic revision --autogenerate -m "$(m)"
 
 seed:  ## Seed one user per role for local development
-	@echo "scripts/seed.py lands with the auth story (US-1). Nothing to seed yet."
+	docker compose run --rm api sh -c "PYTHONPATH=/app python /scripts/seed.py"

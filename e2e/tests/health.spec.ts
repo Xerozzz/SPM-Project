@@ -1,10 +1,9 @@
 import { expect, test } from '@playwright/test'
 
-// Smoke test for the scaffold: prove the three containers are actually wired together
-// by loading the page and waiting for the status the API reports about its database.
-test('the home page reports that the API and database are healthy', async ({ page }) => {
+// SCRUM-27 (F1): unauthenticated users see sign-in; the scaffold health check
+// moves behind the session, so the public expectation is the sign-in page.
+test('unauthenticated users are shown the sign-in page', async ({ page }) => {
   await page.goto('/')
 
-  await expect(page.getByRole('heading', { name: 'ConnectSphere' })).toBeVisible()
-  await expect(page.getByRole('status')).toHaveText(/API and database are ok/)
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
 })
