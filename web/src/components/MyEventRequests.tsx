@@ -9,7 +9,7 @@ import {
   submitEventRequest,
   SubmissionRejectedError,
 } from '../api/eventRequests'
-import { useAuth } from '../auth/context'
+import { useAuth } from '../auth/useAuth'
 
 /**
  * SCRUM-46: an organiser's event requests, each with a Submit action while it is a draft.

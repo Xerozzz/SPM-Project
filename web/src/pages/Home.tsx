@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { getHealth } from '../api/client'
-import { useAuth } from '../auth/context'
+import { useAuth } from '../auth/useAuth'
 import MyEventRequests from '../components/MyEventRequests'
 
 /**

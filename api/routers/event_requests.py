@@ -11,12 +11,13 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.dependencies import require_role
 from domain.event_status import EventRequestLockedError, InvalidTransitionError
+from domain.roles import Role
 from schemas.event_requests import EventRequestRead, EventRequestUpdate, FieldProblemRead
 from services import event_requests as service
 
 router = APIRouter(prefix="/event-requests", tags=["event-requests"])
 
-Organiser = Annotated[dict[str, object], Depends(require_role("organiser"))]
+Organiser = Annotated[dict[str, object], Depends(require_role(Role.ORGANISER))]
 Db = Annotated[Session, Depends(get_db)]
 
 # Everything the service or the status machine can refuse with, in one tuple so each route

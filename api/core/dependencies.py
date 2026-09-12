@@ -8,6 +8,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWTError
 
 from core.security import decode_access_token
+from domain.roles import Role
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -26,14 +27,19 @@ def get_current_user(
         ) from exc
 
 
-def require_role(*allowed: str) -> Callable[[dict[str, object]], dict[str, object]]:
-    """Dependency factory: allow only tokens carrying one of the given roles."""
+def require_role(*allowed: Role) -> Callable[[dict[str, object]], dict[str, object]]:
+    """Dependency factory: allow only tokens carrying one of the given roles.
+
+    Takes `Role` members, not strings, so a misspelt role fails at import time rather than
+    as a 403 nobody can explain.
+    """
+    allowed_values = {role.value for role in allowed}
 
     def check(
         user: Annotated[dict[str, object], Depends(get_current_user)],
     ) -> dict[str, object]:
         roles = user.get("roles", [])
-        if not isinstance(roles, list) or not any(r in roles for r in allowed):
+        if not isinstance(roles, list) or not allowed_values.intersection(roles):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         return user
 

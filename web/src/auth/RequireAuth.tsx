@@ -1,4 +1,4 @@
-import { useAuth } from '../auth/context'
+import { useAuth } from '../auth/useAuth'
 import SignInPage from '../pages/SignIn'
 
 /**

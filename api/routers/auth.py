@@ -16,7 +16,7 @@ router = APIRouter(tags=["auth"])
 def login(body: LoginRequest, db: Annotated[Session, Depends(get_db)]) -> LoginResponse:
     """Sign in a supplied user; generic error so accounts cannot be enumerated."""
     try:
-        return sign_in(db, str(body.email), body.password)
+        return sign_in(db, body.email, body.password)
     except InvalidCredentialsError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

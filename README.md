@@ -165,13 +165,13 @@ SQLAlchemy or FastAPI inside `domain/` fails the lint step.
 
 ## Writing a story
 
-1. Branch: `feat/US-14-short-description`. One story per branch, one story per PR.
+1. Branch: `feat/SCRUM-14-short-description`. One story per branch, one story per PR.
 2. Check [docs/adr/README.md](./docs/adr/README.md) for a decision covering what you are
    about to touch, and write an ADR if you hit a trigger in AGENTS.md section 5.
 3. Write the code in the right layer, and the test beside it, tagged with the story:
 
    ```python
-   @pytest.mark.story("US-14")
+   @pytest.mark.story("SCRUM-14")
    def test_overlapping_booking_is_rejected(): ...
    ```
 

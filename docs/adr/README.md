@@ -17,6 +17,7 @@ someone else made two weeks ago.
 | [0004](0004-ai-assisted-development.md) | How we use AI assistants and stay accountable | Accepted |
 | [0005](0005-jwt-auth-for-sign-in.md) | JWT bearer auth with role claims for sign-in | Proposed |
 | [0006](0006-event-request-status-machine.md) | Event request storage, and status as a transition table in the domain layer | Proposed |
+| [0007](0007-bcrypt-directly-not-passlib.md) | Hash passwords with bcrypt directly, not through passlib | Proposed |
 
 ## When to write one
 

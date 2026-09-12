@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { useAuth } from '../auth/context'
+import { useAuth } from '../auth/useAuth'
 
 /**
  * F1 sign-in page. Shows a generic error that never says whether the account exists.

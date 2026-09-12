@@ -20,8 +20,17 @@ def hash_password(plain: str) -> str:
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    """Check a plain password against its hash."""
-    return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    """Check a plain password against its hash.
+
+    bcrypt only looks at the first 72 bytes and, since bcrypt 5, raises ValueError for
+    longer input rather than truncating. A too-long password is simply a wrong password:
+    turning that into a 500 would both crash on user input and break the generic-401
+    promise of ADR-0005.
+    """
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except ValueError:
+        return False
 
 
 def create_access_token(subject: str, roles: list[str]) -> str:

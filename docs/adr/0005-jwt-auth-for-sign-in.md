@@ -1,6 +1,6 @@
 # ADR-0005: JWT bearer auth with role claims for sign-in
 
-- **Status:** Proposed
+- **Status:** Proposed — password-hashing library superseded by ADR-0007
 - **Date:** 2026-09-12
 - **Deciders:** Alvin
 - **Related stories:** SCRUM-27 (F1)

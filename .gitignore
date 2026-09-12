@@ -30,3 +30,6 @@ e2e/blob-report/
 .DS_Store
 .idea/
 .vscode/
+
+# Git Bash crash dumps on Windows
+*.stackdump

@@ -12,7 +12,7 @@ psycopg[binary]>=3.2,<4.0
 pydantic>=2.8,<3.0
 pydantic-settings>=2.4,<3.0
 
-# Auth (AGENTS.md §2: "JWT bearer tokens with role claims", passlib[bcrypt] for hashing).
-# Unused until the auth story; listed here so the image never changes for it.
+# Auth: JWT bearer tokens with role claims (ADR-0005), bcrypt for password hashing.
+# bcrypt is used directly rather than through passlib — see ADR-0007.
 pyjwt>=2.9,<3.0
-passlib[bcrypt]>=1.7,<2.0
+bcrypt>=4.1,<6.0
