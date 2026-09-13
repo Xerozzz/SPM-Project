@@ -3,9 +3,9 @@
 import uuid
 from datetime import UTC, datetime
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, computed_field, field_validator
 
-from domain.event_status import EventStatus
+from domain.event_status import EventAction, EventStatus, allowed_actions
 
 
 class EventRequestUpdate(BaseModel):
@@ -59,6 +59,12 @@ class EventRequestRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     submitted_at: datetime | None
+
+    @computed_field
+    @property
+    def allowed_actions(self) -> list[EventAction]:
+        """SCRUM-35: what this request's status permits, sorted for a stable response."""
+        return sorted(allowed_actions(self.status))
 
 
 class FieldProblemRead(BaseModel):
