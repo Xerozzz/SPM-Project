@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { getHealth } from '../api/client'
 import { useAuth } from '../auth/useAuth'
 import MyEventRequests from '../components/MyEventRequests'
+import EventRequestForm from '../components/EventRequestForm'
 
 /**
  * Home page, visible only after sign-in. Shows the session roles and a sign-out button.
@@ -27,7 +28,12 @@ export default function HomePage() {
         </button>
       </div>
 
-      {hasRole('organiser') && <MyEventRequests />}
+      {hasRole('organiser') && (
+        <>
+          <EventRequestForm />
+          <MyEventRequests />
+        </>
+      )}
 
       <section className="mt-6 rounded-lg border border-slate-200 p-4">
         <h2 className="font-medium">API health</h2>

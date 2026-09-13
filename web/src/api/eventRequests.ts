@@ -27,6 +27,21 @@ export interface EventRequest {
   status_permits: EventAction[]
 }
 
+/** The fields required to start a new draft request (SCRUM-28). */
+export interface EventRequestCreate {
+  name: string
+  purpose: string
+  description: string
+  start_at: string
+  end_at: string
+  expected_attendance: number
+  venue_requirement: string
+  accessibility_requirement: string
+  equipment_requirement: string
+  layout_requirement: string
+  registration_requirement: string
+}
+
 /** One field the organiser has to fix before submission is accepted (AC2). */
 export interface FieldProblem {
   field: string
@@ -54,6 +69,21 @@ export async function listMyEventRequests(token: string): Promise<EventRequest[]
     throw new Error(`/api/event-requests responded ${response.status}`)
   }
   return (await response.json()) as EventRequest[]
+}
+
+export async function createEventRequest(
+  token: string,
+  request: EventRequestCreate,
+): Promise<EventRequest> {
+  const response = await fetch('/api/event-requests', {
+    method: 'POST',
+    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  if (!response.ok) {
+    throw new Error(`Could not create event request (${response.status})`)
+  }
+  return (await response.json()) as EventRequest
 }
 
 export async function submitEventRequest(token: string, id: string): Promise<EventRequest> {
