@@ -88,9 +88,7 @@ async def test_only_an_authenticated_organiser_can_create_a_draft(
 
 
 @pytest.mark.story("SCRUM-28")
-async def test_naive_datetimes_are_rejected(
-    make_user: MakeUser, make_client: MakeClient
-) -> None:
+async def test_naive_datetimes_are_rejected(make_user: MakeUser, make_client: MakeClient) -> None:
     async with make_client(make_user("organiser")) as client:
         response = await client.post(
             "/api/event-requests",

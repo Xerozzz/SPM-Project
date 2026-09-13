@@ -45,9 +45,7 @@ def list_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventReques
     return repo.list_for_organiser(db, organiser_id)
 
 
-def create(
-    db: Session, organiser_id: uuid.UUID, fields: EventRequestFields
-) -> EventRequest:
+def create(db: Session, organiser_id: uuid.UUID, fields: EventRequestFields) -> EventRequest:
     """Create a new request as a draft; creating it never submits or allocates anything."""
     request = EventRequest(organiser_id=organiser_id, **fields.__dict__)
     return repo.save(db, repo.add(db, request))
