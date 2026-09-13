@@ -28,6 +28,8 @@ class EventStatus(StrEnum):
     DRAFT = "draft"
     SUBMITTED = "submitted"
     CONFIRMED = "confirmed"
+    APPROVED = "approved"
+    REJECTED = "rejected"
 
 
 class EventAction(StrEnum):
@@ -35,6 +37,8 @@ class EventAction(StrEnum):
 
     EDIT = "edit"
     SUBMIT = "submit"
+    APPROVE = "approve"
+    REJECT = "reject"
 
 
 class InvalidTransitionError(Exception):
@@ -59,6 +63,9 @@ class EventRequestLockedError(Exception):
 # allowed_actions without anything else changing.
 _ALLOWED_TRANSITIONS: dict[tuple[EventStatus, EventStatus], EventAction] = {
     (EventStatus.DRAFT, EventStatus.SUBMITTED): EventAction.SUBMIT,
+    (EventStatus.SUBMITTED, EventStatus.APPROVED): EventAction.APPROVE,
+    (EventStatus.SUBMITTED, EventStatus.REJECTED): EventAction.REJECT,
+    (EventStatus.REJECTED, EventStatus.SUBMITTED): EventAction.SUBMIT,
 }
 
 
@@ -74,10 +81,20 @@ def submit(current: EventStatus) -> EventStatus:
     return transition(current, EventStatus.SUBMITTED)
 
 
+def approve(current: EventStatus) -> EventStatus:
+    """SCRUM-31: a coordinator accepts a submitted request for planning."""
+    return transition(current, EventStatus.APPROVED)
+
+
+def reject(current: EventStatus) -> EventStatus:
+    """SCRUM-31: a coordinator returns a submitted request with a reason."""
+    return transition(current, EventStatus.REJECTED)
+
+
 def is_editable(status: EventStatus) -> bool:
-    """Only a draft may be edited directly. After submission, changes go through the
-    assigned coordinator (Event Change Management, a later epic)."""
-    return status is EventStatus.DRAFT
+    """Drafts and rejected requests may be edited directly; an approved or submitted
+    request remains locked."""
+    return status in {EventStatus.DRAFT, EventStatus.REJECTED}
 
 
 def ensure_editable(status: EventStatus) -> None:

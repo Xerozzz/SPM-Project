@@ -281,7 +281,10 @@ interface DraftFormValues {
 type SubmitTarget = Pick<EventRequest, 'id' | 'name'>
 
 function StatusLabel({ status }: { status: EventRequest['status'] }) {
-  return status === 'submitted' ? <>Submitted</> : <>Draft</>
+  if (status === 'submitted') return <>Submitted</>
+  if (status === 'approved') return <>Approved</>
+  if (status === 'rejected') return <>Rejected</>
+  return <>Draft</>
 }
 
 function OutcomeMessage({ outcome }: { outcome: Outcome }) {

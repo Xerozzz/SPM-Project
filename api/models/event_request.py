@@ -63,9 +63,18 @@ class EventRequest(Base):
         DateTime(timezone=True), nullable=False, default=_now, onupdate=_now
     )
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
     # SCRUM-34: the Event Coordinator auto-assigned on first submission, and when.
     coordinator_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id")
     )
     assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decided_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), index=True
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rejection_reason: Mapped[str | None] = mapped_column(Text)
+    clarification_requested_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), index=True
+    )
+    clarification_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    clarification_request: Mapped[str | None] = mapped_column(Text)

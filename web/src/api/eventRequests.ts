@@ -2,9 +2,10 @@
  * Event request API calls for organisers. Mirrors api/schemas/event_requests.py.
  */
 
-export type EventStatus = 'draft' | 'submitted'
+export type EventStatus =
+  'draft' | 'submitted' | 'approved' | 'rejected'
 
-export type EventAction = 'edit' | 'submit'
+export type EventAction = 'edit' | 'submit' | 'approve' | 'reject'
 
 export const VENUE_REQUIREMENTS = [
   'Auditorium-type venue',
@@ -39,6 +40,9 @@ export interface EventRequest {
   submitted_at: string | null
   /** What the status allows, regardless of who is asking (SCRUM-35). Not an authorisation. */
   status_permits: EventAction[]
+  decided_by_id: string | null
+  decided_at: string | null
+  rejection_reason: string | null
 }
 
 /** The fields required to create an event request (SCRUM-28). */
@@ -151,6 +155,12 @@ export async function listMyEventRequests(token: string): Promise<EventRequest[]
   return (await response.json()) as EventRequest[]
 }
 
+export async function listRequestsForReview(token: string): Promise<EventRequest[]> {
+  const response = await fetch('/api/event-requests/review', { headers: authHeaders(token) })
+  if (!response.ok) throw new Error(`Could not load submitted requests (${response.status})`)
+  return (await response.json()) as EventRequest[]
+}
+
 export async function createEventRequest(
   token: string,
   request: EventRequestCreate,
@@ -229,6 +239,43 @@ export async function submitEventRequest(token: string, id: string): Promise<Eve
   if (!response.ok) {
     throw new Error(`Submission failed (${response.status})`)
   }
+  return (await response.json()) as EventRequest
+}
+
+export async function approveEventRequest(token: string, id: string): Promise<EventRequest> {
+  const response = await fetch(`/api/event-requests/${id}/approve`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  })
+  if (!response.ok) throw new Error(`Approval failed (${response.status})`)
+  return (await response.json()) as EventRequest
+}
+
+export async function rejectEventRequest(
+  token: string,
+  id: string,
+  reason: string,
+): Promise<EventRequest> {
+  const response = await fetch(`/api/event-requests/${id}/reject`, {
+    method: 'POST',
+    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  })
+  if (!response.ok) throw new Error(`Rejection failed (${response.status})`)
+  return (await response.json()) as EventRequest
+}
+
+export async function requestClarification(
+  token: string,
+  id: string,
+  request: string,
+): Promise<EventRequest> {
+  const response = await fetch(`/api/event-requests/${id}/request-clarification`, {
+    method: 'POST',
+    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ request }),
+  })
+  if (!response.ok) throw new Error(`Clarification request failed (${response.status})`)
   return (await response.json()) as EventRequest
 }
 

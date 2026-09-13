@@ -100,6 +100,38 @@ class EventRequestRead(BaseModel):
     # SCRUM-34: who was auto-assigned on first submission, and when.
     coordinator_id: uuid.UUID | None
     assigned_at: datetime | None
+    decided_by_id: uuid.UUID | None
+    decided_at: datetime | None
+    rejection_reason: str | None
+    clarification_requested_by_id: uuid.UUID | None
+    clarification_requested_at: datetime | None
+    clarification_request: str | None
+
+
+class EventRequestRejection(BaseModel):
+    """The reason required before a coordinator can reject a request."""
+
+    reason: str
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_is_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("is required")
+        return value
+
+
+class EventRequestClarification(BaseModel):
+    """The question or amendment request required to return a request to its organiser."""
+
+    request: str
+
+    @field_validator("request")
+    @classmethod
+    def _request_is_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("is required")
+        return value
 
     @computed_field
     def status_permits(self) -> list[EventAction]:

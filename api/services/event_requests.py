@@ -127,6 +127,34 @@ def submit(
     request.submitted_at = now
     if request.coordinator_id is None:
         _assign_coordinator(db, request, now)
+    # A resubmission is a fresh request for review, not a display of its old rejection.
+    request.decided_by_id = None
+    request.decided_at = None
+    request.rejection_reason = None
+    return repo.save(db, request)
+
+
+def approve(
+    db: Session, request_id: uuid.UUID, coordinator_id: uuid.UUID, now: datetime
+) -> EventRequest:
+    """Record an approval. This deliberately allocates no venue, equipment or registration."""
+    request = _for_decision(db, request_id)
+    request.status = event_status.approve(request.status)
+    request.decided_by_id = coordinator_id
+    request.decided_at = now
+    request.rejection_reason = None
+    return repo.save(db, request)
+
+
+def reject(
+    db: Session, request_id: uuid.UUID, coordinator_id: uuid.UUID, reason: str, now: datetime
+) -> EventRequest:
+    """Record a rejection and its mandatory coordinator-supplied reason."""
+    request = _for_decision(db, request_id)
+    request.status = event_status.reject(request.status)
+    request.decided_by_id = coordinator_id
+    request.decided_at = now
+    request.rejection_reason = reason.strip()
     return repo.save(db, request)
 
 
@@ -163,6 +191,14 @@ def _user_or_forbidden(db: Session, user_id: uuid.UUID) -> User:
     if user is None:
         raise NotTheOrganiserError
     return user
+
+
+def _for_decision(db: Session, request_id: uuid.UUID) -> EventRequest:
+    """Lock a request before applying a coordinator decision."""
+    request = repo.get_for_update(db, request_id)
+    if request is None:
+        raise EventRequestNotFoundError
+    return request
 
 
 def _fields_of(request: EventRequest) -> EventRequestFields:
