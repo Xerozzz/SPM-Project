@@ -1,6 +1,6 @@
 """SCRUM-28: organisers create a complete event request as an unsubmitted draft."""
 
-from typing import Callable
+from collections.abc import Callable
 
 import httpx
 import pytest
