@@ -2,7 +2,8 @@
  * Event request API calls for organisers (SCRUM-46). Mirrors api/schemas/event_requests.py.
  */
 
-export type EventStatus = 'draft' | 'submitted'
+export type EventStatus =
+  'draft' | 'submitted' | 'approved' | 'rejected' | 'clarification_requested'
 
 export type EventAction = 'edit' | 'submit'
 

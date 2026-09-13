@@ -21,6 +21,9 @@ class EventStatus(StrEnum):
 
     DRAFT = "draft"
     SUBMITTED = "submitted"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    CLARIFICATION_REQUESTED = "clarification_requested"
 
 
 class EventAction(StrEnum):

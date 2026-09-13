@@ -5,6 +5,7 @@ import {
   createEventRequest,
   type EventRequestCreate,
   FIELD_LABELS,
+  submitEventRequest,
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
 
@@ -72,7 +73,10 @@ export default function EventRequestForm() {
   const queryClient = useQueryClient()
   const [values, setValues] = useState<FormValues>(initialValues)
   const [errors, setErrors] = useState<FieldErrors>({})
-  const [createdName, setCreatedName] = useState<string | null>(null)
+  const [outcome, setOutcome] = useState<{
+    kind: 'draft' | 'submitted'
+    name: string | null
+  } | null>(null)
 
   const create = useMutation({
     mutationFn: (request: EventRequestCreate) => createEventRequest(token ?? '', request),
@@ -80,30 +84,53 @@ export default function EventRequestForm() {
       setValues(initialValues)
       setErrors({})
       void queryClient.invalidateQueries({ queryKey: ['event-requests', 'mine', token] })
-      setCreatedName(request.name)
+      setOutcome({ kind: 'draft', name: request.name })
+    },
+  })
+
+  const createAndSubmit = useMutation({
+    mutationFn: async (request: EventRequestCreate) => {
+      const draft = await createEventRequest(token ?? '', request)
+      return submitEventRequest(token ?? '', draft.id)
+    },
+    onSuccess: (request) => {
+      setValues(initialValues)
+      setErrors({})
+      void queryClient.invalidateQueries({ queryKey: ['event-requests', 'mine', token] })
+      setOutcome({ kind: 'submitted', name: request.name })
     },
   })
 
   function change(name: FieldName, value: string) {
     setValues((current) => ({ ...current, [name]: value }))
     setErrors((current) => ({ ...current, [name]: undefined }))
-    setCreatedName(null)
+    setOutcome(null)
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  function requestBody(): EventRequestCreate | null {
     const validationErrors = validate(values)
     setErrors(validationErrors)
-    if (Object.keys(validationErrors).length > 0) return
+    if (Object.keys(validationErrors).length > 0) return null
 
-    create.mutate({
+    return {
       ...values,
       expected_attendance: Number(values.expected_attendance),
       // datetime-local has no offset. Convert it at the browser boundary so the API receives
       // the timezone-aware UTC value required by AGENTS.md.
       start_at: new Date(values.start_at).toISOString(),
       end_at: new Date(values.end_at).toISOString(),
-    })
+    }
+  }
+
+  function saveDraft(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const request = requestBody()
+    if (request) create.mutate(request)
+  }
+
+  function submitForReview() {
+    const request = requestBody()
+    if (request) createAndSubmit.mutate(request)
   }
 
   return (
@@ -112,7 +139,7 @@ export default function EventRequestForm() {
       <p className="mt-1 text-sm text-slate-500">
         Fields marked * are required before a request can be submitted.
       </p>
-      <form className="mt-4 space-y-4" noValidate onSubmit={submit}>
+      <form className="mt-4 space-y-4" noValidate onSubmit={saveDraft}>
         {textFields.map(({ name, multiline }) => (
           <Field key={name} name={name} error={errors[name]}>
             {multiline ? (
@@ -179,23 +206,39 @@ export default function EventRequestForm() {
             className="w-full rounded border border-slate-300 p-2"
           />
         </Field>
-        {create.isError && (
+        {(create.isError || createAndSubmit.isError) && (
           <p role="alert" className="text-sm text-red-600">
-            {create.error.message}. Your entered details are still available to edit.
+            {(create.error ?? createAndSubmit.error).message}. Your entered details are still
+            available to edit.
           </p>
         )}
-        {createdName && (
+        {outcome?.kind === 'draft' && (
           <p role="status" className="text-sm text-green-700">
-            “{createdName}” was saved as a Draft. It has not been submitted for review.
+            “{outcome.name}” was saved as a Draft. It has not been submitted for review.
           </p>
         )}
-        <button
-          type="submit"
-          disabled={create.isPending}
-          className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-        >
-          Save draft
-        </button>
+        {outcome?.kind === 'submitted' && (
+          <p role="status" className="text-sm text-green-700">
+            “{outcome.name}” has been submitted for review.
+          </p>
+        )}
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={create.isPending || createAndSubmit.isPending}
+            className="rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
+          >
+            Save draft
+          </button>
+          <button
+            type="button"
+            onClick={submitForReview}
+            disabled={create.isPending || createAndSubmit.isPending}
+            className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+          >
+            Submit for review
+          </button>
+        </div>
       </form>
     </section>
   )

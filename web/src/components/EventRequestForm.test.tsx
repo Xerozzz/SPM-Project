@@ -125,6 +125,49 @@ test('creates a draft without submitting it or selecting resources', async () =>
   expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain('submit')
 })
 
+test('submits a complete form for review immediately', async () => {
+  const fetchMock = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 'request-1', name: 'Orientation Day', status: 'draft' }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ id: 'request-1', name: 'Orientation Day', status: 'submitted' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+  renderForm()
+  fillValidForm()
+  fireEvent.click(screen.getByRole('button', { name: 'Submit for review' }))
+
+  await waitFor(() => {
+    expect(screen.getByRole('status')).toHaveTextContent('has been submitted for review')
+  })
+  expect(fetchMock).toHaveBeenNthCalledWith(
+    1,
+    '/api/event-requests',
+    expect.objectContaining({ method: 'POST' }),
+  )
+  expect(fetchMock).toHaveBeenNthCalledWith(
+    2,
+    '/api/event-requests/request-1/submit',
+    expect.objectContaining({ method: 'POST' }),
+  )
+})
+
+test('does not submit an incomplete form for review', () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch')
+  renderForm()
+  fireEvent.click(screen.getByRole('button', { name: 'Submit for review' }))
+
+  expect(screen.getAllByText('This field is required.')).toHaveLength(11)
+  expect(fetchMock).not.toHaveBeenCalled()
+})
+
 test('offers catalogue requirement choices without offering a specific resource', () => {
   renderForm()
 

@@ -31,6 +31,13 @@ const submitted = {
   status: 'submitted',
   status_permits: [],
 }
+const approved = {
+  ...draft,
+  id: 'req-3',
+  name: 'Graduation Ceremony',
+  status: 'approved',
+  status_permits: [],
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -61,12 +68,14 @@ function renderSignedIn(handlers: Record<string, () => Response>) {
 }
 
 test('lists drafts with a submit button and submitted requests as locked', async () => {
-  renderSignedIn({ 'GET /api/event-requests': () => json([draft, submitted]) })
+  renderSignedIn({ 'GET /api/event-requests': () => json([draft, submitted, approved]) })
 
   expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Submit for review' })).toBeInTheDocument()
   expect(screen.getByText('Open Day')).toBeInTheDocument()
-  expect(screen.getByText(/Locked/)).toBeInTheDocument()
+  expect(screen.getByText('Graduation Ceremony')).toBeInTheDocument()
+  expect(screen.getByText('Approved')).toBeInTheDocument()
+  expect(screen.getAllByText(/Locked/)).toHaveLength(2)
 })
 
 test('submitting a complete draft shows confirmation and the new status', async () => {
