@@ -10,6 +10,7 @@ Stories add transitions here as they land, each with its own tests:
     SCRUM-46  draft -> submitted
     SCRUM-31  submitted -> approved | rejected        (review and decide)
     SCRUM-30  submitted -> clarification_requested    (request clarification)
+    SCRUM-35  allowed_actions: what a status permits
 """
 
 from enum import StrEnum
@@ -20,6 +21,13 @@ class EventStatus(StrEnum):
 
     DRAFT = "draft"
     SUBMITTED = "submitted"
+
+
+class EventAction(StrEnum):
+    """Something a user may do to an event request. Sent to the UI as these values."""
+
+    EDIT = "edit"
+    SUBMIT = "submit"
 
 
 class InvalidTransitionError(Exception):
@@ -69,3 +77,13 @@ def ensure_editable(status: EventStatus) -> None:
     """Raise unless the request may be edited directly."""
     if not is_editable(status):
         raise EventRequestLockedError(status)
+
+
+def allowed_actions(status: EventStatus) -> frozenset[EventAction]:
+    """SCRUM-35: what may be done to a request in `status`, from the rules above."""
+    actions = set()
+    if is_editable(status):
+        actions.add(EventAction.EDIT)
+    if (status, EventStatus.SUBMITTED) in _ALLOWED_TRANSITIONS:
+        actions.add(EventAction.SUBMIT)
+    return frozenset(actions)
