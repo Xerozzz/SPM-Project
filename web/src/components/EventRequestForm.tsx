@@ -208,8 +208,8 @@ export default function EventRequestForm() {
         </Field>
         {(create.isError || createAndSubmit.isError) && (
           <p role="alert" className="text-sm text-red-600">
-            {(create.error ?? createAndSubmit.error).message}. Your entered details are still
-            available to edit.
+            {create.error?.message ?? createAndSubmit.error?.message ?? 'Request failed'}. Your
+            entered details are still available to edit.
           </p>
         )}
         {outcome?.kind === 'draft' && (
