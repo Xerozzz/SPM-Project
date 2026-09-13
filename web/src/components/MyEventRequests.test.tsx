@@ -8,6 +8,9 @@ import MyEventRequests from './MyEventRequests'
 // SCRUM-46: the organiser's list, and what they see after submitting — confirmation for a
 // complete draft (AC1), the fields to fix for an incomplete one (AC2), and a lock once
 // submitted (AC3). The API is mocked; the rules live there, not here.
+//
+// SCRUM-35: the API also says which actions each status permits, and the component offers
+// only those. These fixtures carry the same `allowed_actions` the real API returns.
 
 afterEach(() => {
   localStorage.clear()
@@ -19,8 +22,15 @@ const draft = {
   status: 'draft',
   name: 'Orientation Day',
   submitted_at: null,
+  allowed_actions: ['edit', 'submit'],
 }
-const submitted = { ...draft, id: 'req-2', name: 'Open Day', status: 'submitted' }
+const submitted = {
+  ...draft,
+  id: 'req-2',
+  name: 'Open Day',
+  status: 'submitted',
+  allowed_actions: [],
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -64,8 +74,13 @@ test('submitting a complete draft shows confirmation and the new status', async 
   renderSignedIn({
     'GET /api/event-requests': () => json(listed),
     'POST /api/event-requests/req-1/submit': () => {
-      listed = [{ ...draft, status: 'submitted' }]
-      return json({ ...draft, status: 'submitted', submitted_at: '2026-09-12T09:00:00Z' })
+      listed = [{ ...draft, status: 'submitted', allowed_actions: [] }]
+      return json({
+        ...draft,
+        status: 'submitted',
+        allowed_actions: [],
+        submitted_at: '2026-09-12T09:00:00Z',
+      })
     },
   })
 

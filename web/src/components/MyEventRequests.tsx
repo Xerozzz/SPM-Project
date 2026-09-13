@@ -16,6 +16,9 @@ import { useAuth } from '../auth/useAuth'
  * Submitting a complete draft shows confirmation (AC1); an incomplete one lists the fields
  * to fix (AC2); a submitted request shows it is locked (AC3). No business rules live here —
  * the API decides, this component only shows the outcome.
+ *
+ * SCRUM-35: which actions to offer comes from the request's `allowed_actions`, so the
+ * status machine stays the only place that knows what a status permits.
  */
 export default function MyEventRequests() {
   const { token } = useAuth()
@@ -73,7 +76,7 @@ export default function MyEventRequests() {
                   {request.status === 'submitted' ? 'Submitted' : 'Draft'}
                 </p>
               </div>
-              {request.status === 'draft' ? (
+              {request.allowed_actions.includes('submit') ? (
                 <button
                   type="button"
                   onClick={() => submit.mutate(request)}

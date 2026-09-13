@@ -4,6 +4,8 @@
 
 export type EventStatus = 'draft' | 'submitted'
 
+export type EventAction = 'edit' | 'submit'
+
 export interface EventRequest {
   id: string
   status: EventStatus
@@ -21,6 +23,7 @@ export interface EventRequest {
   created_at: string
   updated_at: string
   submitted_at: string | null
+  allowed_actions: EventAction[]
 }
 
 /** One field the organiser has to fix before submission is accepted (AC2). */
