@@ -61,7 +61,6 @@ class EventRequestRead(BaseModel):
     submitted_at: datetime | None
 
     @computed_field
-    @property
     def allowed_actions(self) -> list[EventAction]:
         """SCRUM-35: what this request's status permits, sorted for a stable response."""
         return sorted(allowed_actions(self.status))
