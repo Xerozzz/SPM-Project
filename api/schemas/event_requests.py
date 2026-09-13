@@ -55,6 +55,9 @@ class EventRequestRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     submitted_at: datetime | None
+    # SCRUM-34: who was auto-assigned on first submission, and when.
+    coordinator_id: uuid.UUID | None
+    assigned_at: datetime | None
 
 
 class FieldProblemRead(BaseModel):

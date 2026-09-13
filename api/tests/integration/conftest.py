@@ -19,6 +19,7 @@ Tests use real PostgreSQL, never SQLite (ADR-0002).
 
 import uuid
 from collections.abc import Callable, Generator
+from datetime import UTC, datetime
 
 import httpx
 import psycopg
@@ -92,14 +93,25 @@ def app(db: Session) -> FastAPI:
 
 @pytest.fixture
 def make_user(db: Session) -> Callable[..., User]:
-    """Create a signed-up user with the given roles, e.g. make_user("organiser")."""
+    """Create a signed-up user with the given roles, e.g. make_user("organiser").
 
-    def _make(*roles: Role | str, email: str | None = None) -> User:
+    `is_active` and `created_at` exist for SCRUM-34: round-robin assignment only
+    considers active coordinators, in account-creation order.
+    """
+
+    def _make(
+        *roles: Role | str,
+        email: str | None = None,
+        is_active: bool = True,
+        created_at: datetime | None = None,
+    ) -> User:
         user = User(
             email=email or f"{uuid.uuid4()}@example.com",
             password_hash=hash_password("password123"),
             # Role(...) validates: a misspelt role in a test fails here, not as a 403.
             roles=[Role(role).value for role in roles],
+            is_active=is_active,
+            created_at=created_at or datetime.now(UTC),
         )
         db.add(user)
         db.flush()

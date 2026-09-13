@@ -54,3 +54,13 @@ def test_ensure_editable_passes_for_a_draft_and_raises_after_submission() -> Non
 def test_status_values_are_lowercase_strings_for_storage() -> None:
     assert EventStatus.SUBMITTED.value == "submitted"
     assert EventStatus("draft") is EventStatus.DRAFT
+
+
+@pytest.mark.story("SCRUM-34")
+def test_approved_is_a_reserved_status_with_no_transition_into_it_yet() -> None:
+    # SCRUM-34 needs the vocabulary to ask "is this coordinator already APPROVED that
+    # date"; the submitted -> approved transition itself is SCRUM-31's to add.
+    assert EventStatus("approved") is EventStatus.APPROVED
+
+    with pytest.raises(InvalidTransitionError):
+        transition(EventStatus.SUBMITTED, EventStatus.APPROVED)

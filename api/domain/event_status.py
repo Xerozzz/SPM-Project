@@ -10,6 +10,11 @@ Stories add transitions here as they land, each with its own tests:
     SCRUM-46  draft -> submitted
     SCRUM-31  submitted -> approved | rejected        (review and decide)
     SCRUM-30  submitted -> clarification_requested    (request clarification)
+
+SCRUM-34 pre-declares the `APPROVED` value below, ahead of SCRUM-31 landing the transition
+into it: coordinator assignment needs to ask "does this coordinator already have an approved
+event that date", and that question has to name a real status. The `submitted -> approved`
+transition itself — and who is allowed to make it — stays SCRUM-31's to add.
 """
 
 from enum import StrEnum
@@ -20,6 +25,7 @@ class EventStatus(StrEnum):
 
     DRAFT = "draft"
     SUBMITTED = "submitted"
+    APPROVED = "approved"
 
 
 class InvalidTransitionError(Exception):

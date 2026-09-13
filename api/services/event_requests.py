@@ -1,4 +1,5 @@
-"""Event request orchestration for SCRUM-46: list, edit a draft, submit for review.
+"""Event request orchestration for SCRUM-46 (list, edit a draft, submit for review) and
+SCRUM-34 (auto-assign an Event Coordinator on first submission).
 
 Each function loads the request, checks the caller owns it, asks the domain layer whether
 the action is allowed, and persists the outcome. Every failure is a typed exception so the
@@ -6,18 +7,21 @@ router can map it to a status code without knowing any of the rules.
 """
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from core.database import Session
 from domain import event_status
+from domain.coordinator_assignment import select_next_coordinator
 from domain.event_request import (
     EventRequestFields,
     FieldProblem,
     field_names,
     validate_for_submission,
 )
+from domain.roles import Role
 from models.event_request import EventRequest
 from repositories import event_requests as repo
+from repositories import users as users_repo
 
 
 class EventRequestError(Exception):
@@ -32,6 +36,10 @@ class NotTheOrganiserError(EventRequestError):
     """The request exists but belongs to a different organiser."""
 
 
+class NotAuthorisedError(EventRequestError):
+    """SCRUM-34: neither the owning organiser nor a coordinator may view this request."""
+
+
 class IncompleteEventRequestError(EventRequestError):
     """AC2: the request cannot be submitted until these fields are fixed."""
 
@@ -43,6 +51,21 @@ class IncompleteEventRequestError(EventRequestError):
 def list_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventRequest]:
     """The organiser's own requests, newest first."""
     return repo.list_for_organiser(db, organiser_id)
+
+
+def get(
+    db: Session, request_id: uuid.UUID, actor_id: uuid.UUID, actor_roles: list[str]
+) -> EventRequest:
+    """SCRUM-34: its organiser, or any Event Coordinator, may view a request — including
+    its coordinator assignment. Nobody else may, and nobody but the organiser may edit it
+    (see routers/event_requests.py: the edit and submit routes stay organiser-only)."""
+    request = repo.get(db, request_id)
+    if request is None:
+        raise EventRequestNotFoundError
+    is_owner = request.organiser_id == actor_id
+    if not (is_owner or Role.COORDINATOR.value in actor_roles):
+        raise NotAuthorisedError
+    return request
 
 
 def update_draft(
@@ -62,7 +85,13 @@ def submit(
 ) -> EventRequest:
     """AC1/AC2: move a complete draft to SUBMITTED; refuse an incomplete one, naming the
     fields. AC4 holds by construction — nothing here touches venues, equipment or
-    registration, and no other code runs on submission."""
+    registration, and no other code runs on submission.
+
+    SCRUM-34: this is also the only way a request becomes SUBMITTED, so it is the one
+    place that can be "first submission" — a coordinator is assigned here, once. A
+    request that already has one (because the transition table let it be submitted more
+    than once, e.g. after a future clarification round) is left alone.
+    """
     # Locked read: two organisers' browsers double-clicking "Submit" at the same instant
     # serialise here, and the second sees SUBMITTED and gets a 409 rather than a second
     # success. See repositories.event_requests.get_for_update.
@@ -74,7 +103,22 @@ def submit(
     # (AGENTS.md §3). InvalidTransitionError propagates if the request is not a draft.
     request.status = event_status.submit(request.status)
     request.submitted_at = now
+    if request.coordinator_id is None:
+        _assign_coordinator(db, request)
     return repo.save(db, request)
+
+
+def _assign_coordinator(db: Session, request: EventRequest) -> None:
+    """SCRUM-34: round-robin over active coordinators, skipping anyone already
+    APPROVED for that UTC date. Raises NoAvailableCoordinatorError if none are free."""
+    # validate_for_submission (called just before this, in submit()) already refused a
+    # missing start_at, so this is never None on a request that reaches here.
+    assert request.start_at is not None
+    pool = [coordinator.id for coordinator in users_repo.list_active_coordinators(db)]
+    last_assigned = repo.last_assigned_coordinator_id(db)
+    unavailable = repo.coordinator_ids_approved_on(db, request.start_at)
+    request.coordinator_id = select_next_coordinator(pool, last_assigned, unavailable)
+    request.assigned_at = datetime.now(UTC)
 
 
 def _owned_by(

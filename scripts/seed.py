@@ -22,6 +22,9 @@ from repositories import users as users_repo
 _SEED_USERS: list[tuple[str, str, list[Role]]] = [
     ("organiser@example.com", "password123", [Role.ORGANISER]),
     ("coordinator@example.com", "password123", [Role.COORDINATOR]),
+    # A second active coordinator, so a fresh `docker compose up` can demonstrate
+    # round-robin assignment (SCRUM-34) rather than always assigning the same one.
+    ("coordinator2@example.com", "password123", [Role.COORDINATOR]),
     ("venue-staff@example.com", "password123", [Role.VENUE_STAFF]),
     ("tech-support@example.com", "password123", [Role.TECH_SUPPORT]),
     ("attendee@example.com", "password123", [Role.ATTENDEE]),
