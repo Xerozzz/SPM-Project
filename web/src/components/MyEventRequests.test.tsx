@@ -9,8 +9,8 @@ import MyEventRequests from './MyEventRequests'
 // complete draft (AC1), the fields to fix for an incomplete one (AC2), and a lock once
 // submitted (AC3). The API is mocked; the rules live there, not here.
 //
-// SCRUM-35: the API also says which actions each status permits, and the component offers
-// only those. These fixtures carry the same `allowed_actions` the real API returns.
+// SCRUM-35: the API also says what each status permits, and the component offers only
+// those. These fixtures carry the same `status_permits` the real API returns.
 
 afterEach(() => {
   localStorage.clear()
@@ -22,14 +22,14 @@ const draft = {
   status: 'draft',
   name: 'Orientation Day',
   submitted_at: null,
-  allowed_actions: ['edit', 'submit'],
+  status_permits: ['edit', 'submit'],
 }
 const submitted = {
   ...draft,
   id: 'req-2',
   name: 'Open Day',
   status: 'submitted',
-  allowed_actions: [],
+  status_permits: [],
 }
 
 function json(body: unknown, status = 200) {
@@ -74,11 +74,11 @@ test('submitting a complete draft shows confirmation and the new status', async 
   renderSignedIn({
     'GET /api/event-requests': () => json(listed),
     'POST /api/event-requests/req-1/submit': () => {
-      listed = [{ ...draft, status: 'submitted', allowed_actions: [] }]
+      listed = [{ ...draft, status: 'submitted', status_permits: [] }]
       return json({
         ...draft,
         status: 'submitted',
-        allowed_actions: [],
+        status_permits: [],
         submitted_at: '2026-09-12T09:00:00Z',
       })
     },
@@ -123,12 +123,14 @@ test('shows an error when the list cannot be loaded', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('Could not load your requests')
 })
 
-test('offers only the actions the API returns, not those implied by the status', async () => {
-  // A draft the server has locked for some other reason. Status alone would offer Submit;
-  // allowed_actions does not, and the component must follow the server.
-  const lockedDraft = { ...draft, allowed_actions: ['edit'] }
-  renderSignedIn({ 'GET /api/event-requests': () => json([lockedDraft]) })
+test('offers only what the API permits, not what the status implies', async () => {
+  // A draft the server permits editing but not submitting. Status alone would offer
+  // Submit; status_permits does not, and the component must follow the server. Editing is
+  // still allowed, so it is not "Locked" either.
+  const notSubmittable = { ...draft, status_permits: ['edit'] }
+  renderSignedIn({ 'GET /api/event-requests': () => json([notSubmittable]) })
 
   expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Submit for review' })).not.toBeInTheDocument()
+  expect(screen.queryByText(/Locked/)).not.toBeInTheDocument()
 })

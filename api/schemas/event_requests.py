@@ -61,8 +61,12 @@ class EventRequestRead(BaseModel):
     submitted_at: datetime | None
 
     @computed_field
-    def allowed_actions(self) -> list[EventAction]:
-        """SCRUM-35: what this request's status permits, sorted for a stable response."""
+    def status_permits(self) -> list[EventAction]:
+        """SCRUM-35: what this request's status permits, sorted for a stable response.
+
+        Named for the status, not the caller: it does not know who is asking, so a reader
+        must not treat it as "what I may do". Authorisation is answered separately.
+        """
         return sorted(allowed_actions(self.status))
 
 

@@ -17,8 +17,9 @@ import { useAuth } from '../auth/useAuth'
  * to fix (AC2); a submitted request shows it is locked (AC3). No business rules live here —
  * the API decides, this component only shows the outcome.
  *
- * SCRUM-35: which actions to offer comes from the request's `allowed_actions`, so the
- * status machine stays the only place that knows what a status permits.
+ * SCRUM-35: what to offer comes from the request's `status_permits`, so the status machine
+ * stays the only place that knows what a status permits. Submit and edit are separate
+ * permissions, so the locked message keys off `edit`, not off the absence of `submit`.
  */
 export default function MyEventRequests() {
   const { token } = useAuth()
@@ -76,7 +77,7 @@ export default function MyEventRequests() {
                   {request.status === 'submitted' ? 'Submitted' : 'Draft'}
                 </p>
               </div>
-              {request.allowed_actions.includes('submit') ? (
+              {request.status_permits.includes('submit') && (
                 <button
                   type="button"
                   onClick={() => submit.mutate(request)}
@@ -85,7 +86,8 @@ export default function MyEventRequests() {
                 >
                   Submit for review
                 </button>
-              ) : (
+              )}
+              {!request.status_permits.includes('edit') && (
                 <span className="text-sm text-slate-500">
                   Locked — ask your coordinator to request changes
                 </span>
