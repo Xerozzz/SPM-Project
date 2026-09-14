@@ -9,6 +9,7 @@ import {
   rejectEventRequest,
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
+import { hasReviewNote } from '../validation/eventRequestReview'
 
 /** SCRUM-31: coordinator review is a decision only; it does not start planning work. */
 export default function EventRequestReview() {
@@ -162,7 +163,7 @@ function ReviewCard({
         <button
           type="button"
           onClick={onRequestClarification}
-          disabled={pending || !reason.trim()}
+          disabled={pending || !hasReviewNote(reason)}
           className="rounded bg-amber-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
         >
           Request clarification
@@ -170,7 +171,7 @@ function ReviewCard({
         <button
           type="button"
           onClick={onReject}
-          disabled={pending || !reason.trim()}
+          disabled={pending || !hasReviewNote(reason)}
           className="rounded bg-red-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
         >
           Reject
