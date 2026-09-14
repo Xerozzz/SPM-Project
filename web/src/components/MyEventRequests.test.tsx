@@ -122,3 +122,13 @@ test('shows an error when the list cannot be loaded', async () => {
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Could not load your requests')
 })
+
+test('offers only the actions the API returns, not those implied by the status', async () => {
+  // A draft the server has locked for some other reason. Status alone would offer Submit;
+  // allowed_actions does not, and the component must follow the server.
+  const lockedDraft = { ...draft, allowed_actions: ['edit'] }
+  renderSignedIn({ 'GET /api/event-requests': () => json([lockedDraft]) })
+
+  expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Submit for review' })).not.toBeInTheDocument()
+})

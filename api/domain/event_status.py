@@ -81,7 +81,7 @@ def ensure_editable(status: EventStatus) -> None:
 
 def allowed_actions(status: EventStatus) -> frozenset[EventAction]:
     """SCRUM-35: what may be done to a request in `status`, from the rules above."""
-    actions = set()
+    actions: set[EventAction] = set()
     if is_editable(status):
         actions.add(EventAction.EDIT)
     if (status, EventStatus.SUBMITTED) in _ALLOWED_TRANSITIONS:
