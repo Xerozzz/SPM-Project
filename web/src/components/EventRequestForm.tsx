@@ -5,18 +5,20 @@ import {
   createEventRequest,
   type EventRequestCreate,
   FIELD_LABELS,
+  SubmissionRejectedError,
   submitEventRequest,
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
+import {
+  type EventRequestFieldErrors,
+  type EventRequestFieldName,
+  type EventRequestFormValues,
+  validateEventRequest,
+} from '../validation/eventRequest'
 
-type FormValues = Omit<EventRequestCreate, 'expected_attendance' | 'start_at' | 'end_at'> & {
-  expected_attendance: string
-  start_at: string
-  end_at: string
-}
-
-type FieldName = keyof FormValues
-type FieldErrors = Partial<Record<FieldName, string>>
+type FormValues = EventRequestFormValues
+type FieldName = EventRequestFieldName
+type FieldErrors = EventRequestFieldErrors
 
 const initialValues: FormValues = {
   name: '',
@@ -48,8 +50,8 @@ const textFields: Array<{
 ]
 
 // These are requirement categories from the initial ConnectSphere catalogue, not individual
-// rooms or equipment items. Saving one describes a need for later review; it cannot allocate
-// a resource at this draft stage.
+// rooms or equipment items. Selecting one describes a need for later review; it cannot allocate
+// a resource during submission.
 const venueRequirementOptions = [
   'Auditorium-type venue',
   'Lecture theatre-type venue',
@@ -64,29 +66,15 @@ const equipmentRequirementOptions = [
 ]
 
 /**
- * SCRUM-28: collect a new event request. The venue and equipment fields describe needs;
- * they never choose catalogue items or reserve resources. The API remains the authority
- * for creating the Draft status.
+ * SCRUM-28: collect and submit a new event request. The venue and equipment fields describe
+ * needs; they never choose catalogue items or reserve resources.
  */
 export default function EventRequestForm() {
   const { token } = useAuth()
   const queryClient = useQueryClient()
   const [values, setValues] = useState<FormValues>(initialValues)
   const [errors, setErrors] = useState<FieldErrors>({})
-  const [outcome, setOutcome] = useState<{
-    kind: 'draft' | 'submitted'
-    name: string | null
-  } | null>(null)
-
-  const create = useMutation({
-    mutationFn: (request: EventRequestCreate) => createEventRequest(token ?? '', request),
-    onSuccess: (request) => {
-      setValues(initialValues)
-      setErrors({})
-      void queryClient.invalidateQueries({ queryKey: ['event-requests', 'mine', token] })
-      setOutcome({ kind: 'draft', name: request.name })
-    },
-  })
+  const [outcome, setOutcome] = useState<string | null>(null)
 
   const createAndSubmit = useMutation({
     mutationFn: async (request: EventRequestCreate) => {
@@ -97,7 +85,19 @@ export default function EventRequestForm() {
       setValues(initialValues)
       setErrors({})
       void queryClient.invalidateQueries({ queryKey: ['event-requests', 'mine', token] })
-      setOutcome({ kind: 'submitted', name: request.name })
+      setOutcome(`“${request.name}” has been submitted for review.`)
+    },
+    onError: (error) => {
+      if (error instanceof SubmissionRejectedError) {
+        const serverErrors: FieldErrors = {}
+        for (const problem of error.problems) {
+          if (problem.field in FIELD_LABELS) {
+            serverErrors[problem.field as FieldName] = problem.reason
+          }
+        }
+        setErrors(serverErrors)
+        void queryClient.invalidateQueries({ queryKey: ['event-requests', 'mine', token] })
+      }
     },
   })
 
@@ -108,7 +108,7 @@ export default function EventRequestForm() {
   }
 
   function requestBody(): EventRequestCreate | null {
-    const validationErrors = validate(values)
+    const validationErrors = validateEventRequest(values)
     setErrors(validationErrors)
     if (Object.keys(validationErrors).length > 0) return null
 
@@ -122,13 +122,8 @@ export default function EventRequestForm() {
     }
   }
 
-  function saveDraft(event: FormEvent<HTMLFormElement>) {
+  function submitForReview(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const request = requestBody()
-    if (request) create.mutate(request)
-  }
-
-  function submitForReview() {
     const request = requestBody()
     if (request) createAndSubmit.mutate(request)
   }
@@ -139,7 +134,7 @@ export default function EventRequestForm() {
       <p className="mt-1 text-sm text-slate-500">
         Fields marked * are required before a request can be submitted.
       </p>
-      <form className="mt-4 space-y-4" noValidate onSubmit={saveDraft}>
+      <form className="mt-4 space-y-4" noValidate onSubmit={submitForReview}>
         {textFields.map(({ name, multiline }) => (
           <Field key={name} name={name} error={errors[name]}>
             {multiline ? (
@@ -206,39 +201,23 @@ export default function EventRequestForm() {
             className="w-full rounded border border-slate-300 p-2"
           />
         </Field>
-        {(create.isError || createAndSubmit.isError) && (
+        {createAndSubmit.isError && !(createAndSubmit.error instanceof SubmissionRejectedError) && (
           <p role="alert" className="text-sm text-red-600">
-            {create.error?.message ?? createAndSubmit.error?.message ?? 'Request failed'}. Your
-            entered details are still available to edit.
+            {createAndSubmit.error.message}. Your entered details are still available to edit.
           </p>
         )}
-        {outcome?.kind === 'draft' && (
+        {outcome && (
           <p role="status" className="text-sm text-green-700">
-            “{outcome.name}” was saved as a Draft. It has not been submitted for review.
+            {outcome}
           </p>
         )}
-        {outcome?.kind === 'submitted' && (
-          <p role="status" className="text-sm text-green-700">
-            “{outcome.name}” has been submitted for review.
-          </p>
-        )}
-        <div className="flex gap-2">
-          <button
-            type="submit"
-            disabled={create.isPending || createAndSubmit.isPending}
-            className="rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
-          >
-            Save draft
-          </button>
-          <button
-            type="button"
-            onClick={submitForReview}
-            disabled={create.isPending || createAndSubmit.isPending}
-            className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-          >
-            Submit for review
-          </button>
-        </div>
+        <button
+          type="submit"
+          disabled={createAndSubmit.isPending}
+          className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+        >
+          Submit for review
+        </button>
       </form>
     </section>
   )
@@ -299,19 +278,4 @@ function Field({
       {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
     </div>
   )
-}
-
-function validate(values: FormValues): FieldErrors {
-  const errors: FieldErrors = {}
-  for (const [name, value] of Object.entries(values)) {
-    if (!value.trim()) errors[name as FieldName] = 'This field is required.'
-  }
-  const attendance = Number(values.expected_attendance)
-  if (values.expected_attendance && (!Number.isInteger(attendance) || attendance <= 0)) {
-    errors.expected_attendance = 'Enter a positive whole number.'
-  }
-  if (values.start_at && values.end_at && new Date(values.end_at) <= new Date(values.start_at)) {
-    errors.end_at = 'End date and time must be after the start date and time.'
-  }
-  return errors
 }

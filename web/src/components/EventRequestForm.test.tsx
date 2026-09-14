@@ -47,7 +47,7 @@ function fillValidForm() {
 test('shows every required field error and keeps entered details for correction', () => {
   renderForm()
   fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'Orientation Day' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Submit for review' }))
 
   expect(screen.getAllByText('This field is required.')).toHaveLength(10)
   expect(screen.getByLabelText('Name *')).toHaveValue('Orientation Day')
@@ -60,7 +60,7 @@ test('identifies an end time before the start and a non-whole attendance value',
     target: { value: '2026-12-01T08:00' },
   })
   fireEvent.change(screen.getByLabelText('Expected attendance *'), { target: { value: '1.5' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Submit for review' }))
 
   expect(
     screen.getByText('End date and time must be after the start date and time.'),
@@ -77,7 +77,7 @@ test('identifies an end time equal to the start time', () => {
   fireEvent.change(screen.getByLabelText('End date and time *'), {
     target: { value: '2026-12-01T09:00' },
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Submit for review' }))
 
   expect(
     screen.getByText('End date and time must be after the start date and time.'),
@@ -85,44 +85,31 @@ test('identifies an end time equal to the start time', () => {
 })
 
 test('rejects zero attendance and accepts the minimum value of one', async () => {
-  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-    new Response(JSON.stringify({ id: 'request-1', name: 'Orientation Day', status: 'draft' }), {
-      status: 201,
-      headers: { 'Content-Type': 'application/json' },
-    }),
-  )
+  const fetchMock = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 'request-1', name: 'Orientation Day', status: 'draft' }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 'request-1', name: 'Orientation Day', status: 'submitted' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
   renderForm()
   fillValidForm()
   const attendance = screen.getByLabelText('Expected attendance *')
   fireEvent.change(attendance, { target: { value: '0' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Submit for review' }))
   expect(screen.getByText('Enter a positive whole number.')).toBeInTheDocument()
   expect(fetchMock).not.toHaveBeenCalled()
 
   fireEvent.change(attendance, { target: { value: '1' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
-  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-})
-
-test('creates a draft without submitting it or selecting resources', async () => {
-  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-    new Response(JSON.stringify({ id: 'request-1', name: 'Orientation Day', status: 'draft' }), {
-      status: 201,
-      headers: { 'Content-Type': 'application/json' },
-    }),
-  )
-  renderForm()
-  fillValidForm()
-  fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
-
-  await waitFor(() => {
-    expect(screen.getByRole('status')).toHaveTextContent('was saved as a Draft')
-  })
-  expect(fetchMock).toHaveBeenCalledWith(
-    '/api/event-requests',
-    expect.objectContaining({ method: 'POST' }),
-  )
-  expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain('submit')
+  fireEvent.click(screen.getByRole('button', { name: 'Submit for review' }))
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
 })
 
 test('submits a complete form for review immediately', async () => {
@@ -165,6 +152,41 @@ test('does not submit an incomplete form for review', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Submit for review' }))
 
   expect(screen.getAllByText('This field is required.')).toHaveLength(11)
+  expect(fetchMock).not.toHaveBeenCalled()
+})
+
+test('shows server validation errors after the request is created', async () => {
+  vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 'request-1', name: 'Orientation Day', status: 'draft' }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ detail: [{ field: 'start_at', reason: 'must be in the future' }] }),
+        { status: 422, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+
+  renderForm()
+  fillValidForm()
+  fireEvent.click(screen.getByRole('button', { name: 'Submit for review' }))
+
+  await waitFor(() => expect(screen.getByText('must be in the future')).toBeInTheDocument())
+})
+
+test('rejects a start date in the past before creating a request', () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch')
+  renderForm()
+  fillValidForm()
+  fireEvent.change(screen.getByLabelText('Start date and time *'), {
+    target: { value: '2020-12-01T09:00' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Submit for review' }))
+
+  expect(screen.getByText('Start date and time must be in the future.')).toBeInTheDocument()
   expect(fetchMock).not.toHaveBeenCalled()
 })
 

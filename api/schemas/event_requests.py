@@ -122,6 +122,12 @@ class EventRequestRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     submitted_at: datetime | None
+    decided_by_id: uuid.UUID | None
+    decided_at: datetime | None
+    rejection_reason: str | None
+    clarification_requested_by_id: uuid.UUID | None
+    clarification_requested_at: datetime | None
+    clarification_request: str | None
 
     @computed_field
     def status_permits(self) -> list[EventAction]:
