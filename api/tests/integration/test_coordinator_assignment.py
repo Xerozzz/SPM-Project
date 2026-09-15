@@ -19,18 +19,28 @@ from services import event_requests as service
 from tests.integration.test_submit_event_request import MakeClient, MakeUser, make_draft
 
 
-def _approved(db: Session, organiser: User, coordinator: User, start_at: datetime) -> EventRequest:
+def _approved(
+    db: Session,
+    organiser: User,
+    coordinator: User,
+    start_at: datetime,
+    assigned_at: datetime | None = None,
+) -> EventRequest:
     """An APPROVED event request, arranged directly for the test — the review/approval
     workflow (SCRUM-31) that would normally produce one is a separate, not-yet-built
     story. Built from `make_draft` so it satisfies the same content rules, then moved
-    past the status machine by hand (test setup, not a code path any user can reach)."""
+    past the status machine by hand (test setup, not a code path any user can reach).
+
+    `assigned_at` defaults to `start_at`'s day minus a small offset if not given, so a
+    future `start_at` doesn't accidentally outrank real rotation history — pass it
+    explicitly when a test cares about ordering.
+    """
     request = make_draft(db, organiser, start_at=start_at, end_at=start_at + timedelta(hours=1))
     request.status = EventStatus.APPROVED
     request.coordinator_id = coordinator.id
-    request.assigned_at = start_at
+    request.assigned_at = assigned_at if assigned_at is not None else start_at - timedelta(days=1)
     db.flush()
     return request
-
 
 # ------------------------------------------------------------------ normal case
 

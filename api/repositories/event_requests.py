@@ -61,8 +61,11 @@ def last_assigned_coordinator_id(db: Session) -> uuid.UUID | None:
     (SCRUM-34)."""
     stmt = (
         select(EventRequest.coordinator_id)
-        .where(EventRequest.coordinator_id.is_not(None))
-        .order_by(EventRequest.assigned_at.desc())
+        .where(
+            EventRequest.coordinator_id.is_not(None),
+            EventRequest.assigned_at.is_not(None),
+        )
+        .order_by(EventRequest.assigned_at.desc().nulls_last())
         .limit(1)
     )
     return db.scalars(stmt).first()
