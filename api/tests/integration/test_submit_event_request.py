@@ -155,6 +155,32 @@ async def test_a_draft_field_can_be_cleared_with_null(
     assert draft.description is None
 
 
+@pytest.mark.story("SCRUM-28")
+async def test_a_draft_cannot_be_updated_with_unknown_catalogue_requirements(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    organiser = make_user("organiser")
+    draft = make_draft(db, organiser)
+
+    async with make_client(organiser) as client:
+        response = await client.patch(
+            f"/api/event-requests/{draft.id}",
+            json={
+                "venue_requirement": "A room chosen by the organiser",
+                "equipment_requirement": "Any available projector",
+            },
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == [
+        {"field": "venue_requirement", "reason": "is not a catalogue option"},
+        {"field": "equipment_requirement", "reason": "is not a catalogue option"},
+    ]
+    db.refresh(draft)
+    assert draft.venue_requirement == "Auditorium-type venue"
+    assert draft.equipment_requirement == "Projector-type requirement"
+
+
 @pytest.mark.story("SCRUM-46")
 async def test_an_unknown_field_is_rejected_not_ignored(
     db: Session, make_user: MakeUser, make_client: MakeClient

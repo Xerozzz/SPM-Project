@@ -14,6 +14,7 @@ from domain.event_request import (
     EventRequestFields,
     FieldProblem,
     field_names,
+    validate_catalogue_requirements,
     validate_event_request,
 )
 from models.event_request import EventRequest
@@ -62,6 +63,13 @@ def update_draft(
     """AC3: apply field changes to a request, which must still be a draft."""
     request = _owned_by(db, request_id, organiser_id)
     event_status.ensure_editable(request.status)
+    catalogue_changes = EventRequestFields(
+        venue_requirement=changes.get("venue_requirement"),
+        equipment_requirement=changes.get("equipment_requirement"),
+    )
+    problems = validate_catalogue_requirements(catalogue_changes)
+    if problems:
+        raise IncompleteEventRequestError(problems)
     for name in field_names():
         if name in changes:
             setattr(request, name, changes[name])
