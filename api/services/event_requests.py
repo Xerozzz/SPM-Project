@@ -7,6 +7,7 @@ router can map it to a status code without knowing any of the rules.
 
 import uuid
 from datetime import datetime
+from typing import cast
 
 from core.database import Session
 from domain import event_status
@@ -64,8 +65,8 @@ def update_draft(
     request = _owned_by(db, request_id, organiser_id)
     event_status.ensure_editable(request.status)
     catalogue_changes = EventRequestFields(
-        venue_requirement=changes.get("venue_requirement"),
-        equipment_requirement=changes.get("equipment_requirement"),
+        venue_requirement=cast(str | None, changes.get("venue_requirement")),
+        equipment_requirement=cast(str | None, changes.get("equipment_requirement")),
     )
     problems = validate_catalogue_requirements(catalogue_changes)
     if problems:

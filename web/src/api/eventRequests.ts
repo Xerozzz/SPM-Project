@@ -82,9 +82,16 @@ export class SubmissionRejectedError extends EventRequestValidationError {
 }
 
 function parseValidationProblems(body: unknown): FieldProblem[] | null {
-  if (!body || typeof body !== 'object' || !Array.isArray(body.detail)) return null
+  if (
+    !body ||
+    typeof body !== 'object' ||
+    !('detail' in body) ||
+    !Array.isArray(body.detail)
+  ) {
+    return null
+  }
 
-  const problems = body.detail.flatMap((problem): FieldProblem[] => {
+  const problems = body.detail.flatMap((problem: unknown): FieldProblem[] => {
     if (
       problem &&
       typeof problem === 'object' &&

@@ -7,11 +7,11 @@ from typing import Any
 import pytest
 
 from domain.event_request import (
-    REQUIRED_TEXT_FIELDS,
     EQUIPMENT_REQUIREMENTS,
+    REQUIRED_TEXT_FIELDS,
+    VENUE_REQUIREMENTS,
     EventRequestFields,
     FieldProblem,
-    VENUE_REQUIREMENTS,
     field_names,
     validate_catalogue_requirements,
     validate_event_request,
