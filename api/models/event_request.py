@@ -73,8 +73,3 @@ class EventRequest(Base):
     )
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     rejection_reason: Mapped[str | None] = mapped_column(Text)
-    clarification_requested_by_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), index=True
-    )
-    clarification_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    clarification_request: Mapped[str | None] = mapped_column(Text)

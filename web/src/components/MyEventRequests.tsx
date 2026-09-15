@@ -187,11 +187,6 @@ export default function MyEventRequests() {
                     Locked - ask your coordinator to request changes
                   </span>
                 )}
-                {request.status === 'submitted' && (
-                  <div className="basis-full">
-                    <ClarificationThread eventRequestId={request.id} mode="organiser" />
-                  </div>
-                )}
               </li>
             ))}
           </ul>

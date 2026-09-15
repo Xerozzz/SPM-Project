@@ -5,7 +5,6 @@ import {
   approveEventRequest,
   type EventRequest,
   listRequestsForReview,
-  requestClarification,
   rejectEventRequest,
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
@@ -39,15 +38,6 @@ export default function EventRequestReview() {
       refresh()
     },
   })
-  const clarification = useMutation({
-    mutationFn: ({ id, request }: { id: string; request: string }) =>
-      requestClarification(token ?? '', id, request),
-    onSuccess: (request) => {
-      setOutcome(`Clarification was requested for “${request.name}”.`)
-      refresh()
-    },
-  })
-
   return (
     <section className="mt-6 rounded-lg border border-slate-200 p-4">
       <h2 className="font-medium">Submitted event requests</h2>
@@ -68,10 +58,7 @@ export default function EventRequestReview() {
           onReasonChange={(value) => setReason({ ...reason, [request.id]: value })}
           onApprove={() => approve.mutate(request.id)}
           onReject={() => reject.mutate({ id: request.id, reason: reason[request.id] ?? '' })}
-          onRequestClarification={() =>
-            clarification.mutate({ id: request.id, request: reason[request.id] ?? '' })
-          }
-          pending={approve.isPending || reject.isPending || clarification.isPending}
+          pending={approve.isPending || reject.isPending}
         />
       ))}
       {outcome && (
@@ -79,7 +66,7 @@ export default function EventRequestReview() {
           {outcome}
         </p>
       )}
-      {(approve.isError || reject.isError || clarification.isError) && (
+      {(approve.isError || reject.isError) && (
         <p role="alert" className="mt-4 text-sm text-red-600">
           The decision could not be recorded.
         </p>
@@ -94,7 +81,6 @@ function ReviewCard({
   onReasonChange,
   onApprove,
   onReject,
-  onRequestClarification,
   pending,
 }: {
   request: EventRequest
@@ -102,7 +88,6 @@ function ReviewCard({
   onReasonChange: (value: string) => void
   onApprove: () => void
   onReject: () => void
-  onRequestClarification: () => void
   pending: boolean
 }) {
   return (
@@ -159,14 +144,6 @@ function ReviewCard({
           className="rounded bg-green-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
         >
           Approve
-        </button>
-        <button
-          type="button"
-          onClick={onRequestClarification}
-          disabled={pending || !hasReviewNote(reason)}
-          className="rounded bg-amber-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-        >
-          Request clarification
         </button>
         <button
           type="button"

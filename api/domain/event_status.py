@@ -30,8 +30,6 @@ class EventStatus(StrEnum):
     CONFIRMED = "confirmed"
     APPROVED = "approved"
     REJECTED = "rejected"
-
-
 class EventAction(StrEnum):
     """Something a user may do to an event request. Sent to the UI as these values."""
 

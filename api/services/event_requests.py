@@ -127,10 +127,6 @@ def submit(
     request.submitted_at = now
     if request.coordinator_id is None:
         _assign_coordinator(db, request, now)
-    # A resubmission is a fresh request for review, not a display of its old rejection.
-    request.decided_by_id = None
-    request.decided_at = None
-    request.rejection_reason = None
     return repo.save(db, request)
 
 

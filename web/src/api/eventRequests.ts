@@ -265,20 +265,6 @@ export async function rejectEventRequest(
   return (await response.json()) as EventRequest
 }
 
-export async function requestClarification(
-  token: string,
-  id: string,
-  request: string,
-): Promise<EventRequest> {
-  const response = await fetch(`/api/event-requests/${id}/request-clarification`, {
-    method: 'POST',
-    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ request }),
-  })
-  if (!response.ok) throw new Error(`Clarification request failed (${response.status})`)
-  return (await response.json()) as EventRequest
-}
-
 /** Human-readable field names, in the order the ticket lists them. */
 export const FIELD_LABELS: Record<string, string> = {
   name: 'Name',

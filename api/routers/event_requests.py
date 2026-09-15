@@ -16,7 +16,6 @@ from domain.event_status import EventRequestLockedError, InvalidTransitionError
 from domain.roles import Role
 from models.event_request import EventRequest
 from schemas.event_requests import (
-    EventRequestClarification,
     EventRequestCreate,
     EventRequestDraftCreate,
     EventRequestRead,
@@ -159,20 +158,6 @@ def reject(
     """Reject one submitted request with the reason validated by the request schema."""
     try:
         row = service.reject(db, request_id, _coordinator_id(user), body.reason, datetime.now(UTC))
-    except _REFUSALS as exc:
-        raise _http_error(exc) from exc
-    return EventRequestRead.model_validate(row)
-
-
-@router.post("/{request_id}/request-clarification", response_model=EventRequestRead)
-def request_clarification(
-    request_id: uuid.UUID, body: EventRequestClarification, user: Coordinator, db: Db
-) -> EventRequestRead:
-    """Ask the organiser for clarification or an amendment to a submitted request."""
-    try:
-        row = service.request_clarification(
-            db, request_id, _coordinator_id(user), body.request, datetime.now(UTC)
-        )
     except _REFUSALS as exc:
         raise _http_error(exc) from exc
     return EventRequestRead.model_validate(row)

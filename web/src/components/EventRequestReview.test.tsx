@@ -30,7 +30,7 @@ function json(body: unknown) {
   return new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } })
 }
 
-test('coordinator sees review details and must enter a note before requesting clarification', async () => {
+test('coordinator reviews a submitted request and approves it', async () => {
   localStorage.setItem(
     'connectsphere.token',
     JSON.stringify({ token: 'token', roles: ['coordinator'] }),
@@ -38,8 +38,8 @@ test('coordinator sees review details and must enter a note before requesting cl
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const key = `${init?.method ?? 'GET'} ${String(input)}`
     if (key === 'GET /api/event-requests/review') return json([submitted])
-    if (key === 'POST /api/event-requests/req-1/request-clarification') {
-      return json({ ...submitted, status: 'clarification_requested' })
+    if (key === 'POST /api/event-requests/req-1/approve') {
+      return json({ ...submitted, status: 'approved' })
     }
     throw new Error(`unexpected request ${key}`)
   })
@@ -54,14 +54,6 @@ test('coordinator sees review details and must enter a note before requesting cl
 
   expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
   expect(screen.getByText('Auditorium')).toBeInTheDocument()
-  const clarification = screen.getByRole('button', { name: 'Request clarification' })
-  expect(clarification).toBeDisabled()
-  fireEvent.change(screen.getByLabelText('Coordinator note'), {
-    target: { value: 'Needs a safer venue' },
-  })
-  expect(clarification).toBeEnabled()
-  fireEvent.click(clarification)
-  expect(await screen.findByRole('status')).toHaveTextContent(
-    'Clarification was requested for “Orientation Day”.',
-  )
+  fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+  expect(await screen.findByRole('status')).toHaveTextContent('“Orientation Day” has been approved.')
 })

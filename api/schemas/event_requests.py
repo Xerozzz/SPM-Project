@@ -103,9 +103,6 @@ class EventRequestRead(BaseModel):
     decided_by_id: uuid.UUID | None
     decided_at: datetime | None
     rejection_reason: str | None
-    clarification_requested_by_id: uuid.UUID | None
-    clarification_requested_at: datetime | None
-    clarification_request: str | None
 
 
 class EventRequestRejection(BaseModel):
@@ -119,28 +116,6 @@ class EventRequestRejection(BaseModel):
         if not value.strip():
             raise ValueError("is required")
         return value
-
-
-class EventRequestClarification(BaseModel):
-    """The question or amendment request required to return a request to its organiser."""
-
-    request: str
-
-    @field_validator("request")
-    @classmethod
-    def _request_is_not_blank(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("is required")
-        return value
-
-    @computed_field
-    def status_permits(self) -> list[EventAction]:
-        """SCRUM-35: what this request's status permits, sorted for a stable response.
-
-        Named for the status, not the caller: it does not know who is asking, so a reader
-        must not treat it as "what I may do". Authorisation is answered separately.
-        """
-        return sorted(allowed_actions(self.status))
 
 
 class FieldProblemRead(BaseModel):
