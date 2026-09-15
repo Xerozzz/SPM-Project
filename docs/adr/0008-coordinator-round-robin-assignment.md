@@ -7,11 +7,11 @@
 
 ## Context
 
-On first submission, an event request must be auto-assigned to exactly one active Event
-Coordinator, rotating fairly between them and skipping anyone who already has an APPROVED
-event on the requested date (the ticket calls this "Confirmed" — see Notes). Round-robin
-needs to remember whose turn is next, and that memory has to survive across requests and
-process restarts.
+CONFIRMED is pre-declared in EventStatus for this rule but not yet reachable by
+any transition in this release — no story here moves an event into CONFIRMED.
+The round-robin skip rule is written against CONFIRMED now so it doesn't need
+revisiting when a future story (auto-confirmation once arrangements settle)
+lands.
 
 This lands after SCRUM-46 already merged `event_requests`, its `EventStatus` machine
 (ADR-0006), and the organiser-facing submit/list/edit endpoints. SCRUM-34 hooks into the

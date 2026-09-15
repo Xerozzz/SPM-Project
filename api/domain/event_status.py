@@ -26,6 +26,7 @@ class EventStatus(StrEnum):
     DRAFT = "draft"
     SUBMITTED = "submitted"
     APPROVED = "approved"
+    CONFIRMED = "confirmed"
 
 
 class InvalidTransitionError(Exception):

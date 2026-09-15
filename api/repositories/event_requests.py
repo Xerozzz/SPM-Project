@@ -6,7 +6,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from domain.coordinator_assignment import utc_day_bounds
+from domain.coordinator_assignment import org_day_bounds
 from domain.event_status import EventStatus
 from models.event_request import EventRequest
 
@@ -71,14 +71,16 @@ def last_assigned_coordinator_id(db: Session) -> uuid.UUID | None:
     return db.scalars(stmt).first()
 
 
-def coordinator_ids_approved_on(db: Session, moment: datetime) -> set[uuid.UUID]:
-    """Coordinators already committed to an APPROVED event on `moment`'s UTC date
-    (SCRUM-34) — the round-robin conflict the ticket calls a "Confirmed" event."""
-    day_start, day_end = utc_day_bounds(moment)
+def coordinator_ids_confirmed_on(db: Session, moment: datetime) -> set[uuid.UUID]:
+    """Coordinators already committed to a CONFIRMED event overlapping `moment`'s
+    calendar day (SCRUM-34) — the round-robin conflict the ticket calls a
+    "Confirmed" event. Uses interval overlap, not just start_at, so an event
+    spanning midnight still counts (same half-open convention as ADR-0002)."""
+    day_start, day_end = org_day_bounds(moment)
     stmt = select(EventRequest.coordinator_id).where(
-        EventRequest.status == EventStatus.APPROVED,
+        EventRequest.status == EventStatus.CONFIRMED,
         EventRequest.coordinator_id.is_not(None),
-        EventRequest.start_at >= day_start,
         EventRequest.start_at < day_end,
+        EventRequest.end_at > day_start,
     )
-    return {coordinator_id for coordinator_id in db.scalars(stmt) if coordinator_id is not None}
+    return set(db.scalars(stmt))

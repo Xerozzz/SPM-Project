@@ -7,7 +7,7 @@ router can map it to a status code without knowing any of the rules.
 """
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 
 from core.database import Session
 from domain import event_status
@@ -104,21 +104,19 @@ def submit(
     request.status = event_status.submit(request.status)
     request.submitted_at = now
     if request.coordinator_id is None:
-        _assign_coordinator(db, request)
+        _assign_coordinator(db, request, now)
     return repo.save(db, request)
 
 
-def _assign_coordinator(db: Session, request: EventRequest) -> None:
+def _assign_coordinator(db: Session, request: EventRequest, now: datetime) -> None:
     """SCRUM-34: round-robin over active coordinators, skipping anyone already
-    APPROVED for that UTC date. Raises NoAvailableCoordinatorError if none are free."""
-    # validate_for_submission (called just before this, in submit()) already refused a
-    # missing start_at, so this is never None on a request that reaches here.
+    confirmed for that date. Raises NoAvailableCoordinatorError if none are free."""
     assert request.start_at is not None
     pool = [coordinator.id for coordinator in users_repo.list_active_coordinators(db)]
     last_assigned = repo.last_assigned_coordinator_id(db)
-    unavailable = repo.coordinator_ids_approved_on(db, request.start_at)
+    unavailable = repo.coordinator_ids_confirmed_on(db, request.start_at)
     request.coordinator_id = select_next_coordinator(pool, last_assigned, unavailable)
-    request.assigned_at = datetime.now(UTC)
+    request.assigned_at = now
 
 
 def _owned_by(

@@ -7,8 +7,8 @@ import pytest
 
 from domain.coordinator_assignment import (
     NoAvailableCoordinatorError,
+    org_day_bounds,
     select_next_coordinator,
-    utc_day_bounds,
 )
 
 _A, _B, _C = uuid4(), uuid4(), uuid4()
@@ -53,26 +53,27 @@ def test_conflict_when_there_is_no_active_coordinator_at_all() -> None:
 
 
 @pytest.mark.story("SCRUM-34")
-def test_utc_day_bounds_covers_the_whole_calendar_day_and_nothing_else() -> None:
-    start, end = utc_day_bounds(datetime(2026, 11, 3, 15, 30, tzinfo=UTC))
+def test_org_day_bounds_covers_the_whole_calendar_day_and_nothing_else() -> None:
+    start, end = org_day_bounds(datetime(2026, 11, 3, 15, 30, tzinfo=UTC))
 
-    assert start == datetime(2026, 11, 3, 0, 0, tzinfo=UTC)
-    assert end == datetime(2026, 11, 4, 0, 0, tzinfo=UTC)
+    assert start == datetime(2026, 11, 2, 16, 0, tzinfo=UTC)
+    assert end == datetime(2026, 11, 3, 16, 0, tzinfo=UTC)
 
 
 @pytest.mark.story("SCRUM-34")
-def test_utc_day_bounds_converts_a_non_utc_moment_to_its_utc_calendar_date() -> None:
-    # 23:30 in UTC+2 on 3 Nov is already 3 Nov 21:30 UTC — same UTC day, not the 4th.
+def test_org_day_bounds_converts_a_non_utc_moment_to_its_sgt_calendar_date() -> None:
+    # 23:30 in UTC+2 on 3 Nov is 21:30 UTC on 3 Nov, which is 05:30 SGT on 4 Nov —
+    # a different calendar day in Singapore even though it's still 3 Nov in UTC+2.
     plus_two = timezone(timedelta(hours=2))
-    start, end = utc_day_bounds(datetime(2026, 11, 3, 23, 30, tzinfo=plus_two))
+    start, end = org_day_bounds(datetime(2026, 11, 3, 23, 30, tzinfo=plus_two))
 
-    assert start == datetime(2026, 11, 3, 0, 0, tzinfo=UTC)
-    assert end == datetime(2026, 11, 4, 0, 0, tzinfo=UTC)
+    assert start == datetime(2026, 11, 3, 16, 0, tzinfo=UTC)
+    assert end == datetime(2026, 11, 4, 16, 0, tzinfo=UTC)
 
 
 @pytest.mark.story("SCRUM-34")
-def test_utc_day_bounds_rejects_a_naive_datetime() -> None:
+def test_org_day_bounds_rejects_a_naive_datetime() -> None:
     naive = datetime(2026, 11, 3, 12, 0, tzinfo=UTC).replace(tzinfo=None)
 
     with pytest.raises(ValueError, match="timezone-aware"):
-        utc_day_bounds(naive)
+        org_day_bounds(naive)

@@ -11,15 +11,16 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy.orm import Session
 
-from domain.coordinator_assignment import NoAvailableCoordinatorError
+from domain.coordinator_assignment import NoAvailableCoordinatorError, org_day_bounds
 from domain.event_status import EventStatus, InvalidTransitionError
 from models.event_request import EventRequest
 from models.user import User
+from repositories.event_requests import coordinator_ids_confirmed_on
 from services import event_requests as service
 from tests.integration.test_submit_event_request import MakeClient, MakeUser, make_draft
 
 
-def _approved(
+def _confirmed(
     db: Session,
     organiser: User,
     coordinator: User,
@@ -36,11 +37,12 @@ def _approved(
     explicitly when a test cares about ordering.
     """
     request = make_draft(db, organiser, start_at=start_at, end_at=start_at + timedelta(hours=1))
-    request.status = EventStatus.APPROVED
+    request.status = EventStatus.CONFIRMED
     request.coordinator_id = coordinator.id
     request.assigned_at = assigned_at if assigned_at is not None else start_at - timedelta(days=1)
     db.flush()
     return request
+
 
 # ------------------------------------------------------------------ normal case
 
@@ -151,7 +153,7 @@ def test_coordinator_approved_late_that_day_is_skipped_for_the_same_day(
     base = datetime(2026, 1, 1, tzinfo=UTC)
     busy = make_user("coordinator", created_at=base)
     free = make_user("coordinator", created_at=base + timedelta(minutes=1))
-    _approved(db, organiser, busy, datetime(2026, 6, 10, 23, 59, tzinfo=UTC))
+    _confirmed(db, organiser, busy, datetime(2026, 6, 10, 23, 59, tzinfo=UTC))
     now = datetime(2026, 1, 2, tzinfo=UTC)
     draft = make_draft(db, organiser, start_at=datetime(2026, 6, 10, 0, 0, 1, tzinfo=UTC))
 
@@ -166,9 +168,9 @@ def test_approved_event_the_day_before_does_not_block_assignment(
 ) -> None:
     organiser = make_user("organiser")
     coord = make_user("coordinator")
-    _approved(db, organiser, coord, datetime(2026, 6, 10, 23, 59, tzinfo=UTC))
+    _confirmed(db, organiser, coord, datetime(2026, 6, 10, 12, 0, tzinfo=UTC))
     now = datetime(2026, 1, 2, tzinfo=UTC)
-    draft = make_draft(db, organiser, start_at=datetime(2026, 6, 11, 0, 0, tzinfo=UTC))
+    draft = make_draft(db, organiser, start_at=datetime(2026, 6, 11, 4, 0, tzinfo=UTC))
 
     result = service.submit(db, draft.id, organiser.id, now)
 
@@ -184,7 +186,7 @@ def test_conflict_when_every_active_coordinator_already_has_an_approved_event_th
 ) -> None:
     organiser = make_user("organiser")
     coord = make_user("coordinator")
-    _approved(db, organiser, coord, datetime(2026, 7, 1, 10, 0, tzinfo=UTC))
+    _confirmed(db, organiser, coord, datetime(2026, 7, 1, 10, 0, tzinfo=UTC))
     now = datetime(2026, 1, 2, tzinfo=UTC)
     draft = make_draft(db, organiser, start_at=datetime(2026, 7, 1, 15, 0, tzinfo=UTC))
 
@@ -201,7 +203,7 @@ async def test_submit_endpoint_returns_409_when_no_coordinator_is_available(
     # Real wall-clock time: this goes through the HTTP endpoint, which stamps `now`
     # itself, so the date has to be safely in the future regardless of when this runs.
     clash_start = datetime(2027, 6, 1, 10, 0, tzinfo=UTC)
-    _approved(db, organiser, coord, clash_start)
+    _confirmed(db, organiser, coord, clash_start)
     draft = make_draft(
         db,
         organiser,
@@ -300,3 +302,26 @@ async def test_coordinator_can_view_but_not_edit_an_unassigned_event(
 
     assert view.status_code == 200
     assert edit.status_code == 403
+
+
+@pytest.mark.story("SCRUM-34")
+def test_overnight_confirmed_event_blocks_the_later_day(db: Session, make_user: MakeUser) -> None:
+    organiser = make_user("organiser")
+    coordinator = make_user("coordinator")
+    _confirmed(
+        db,
+        organiser,
+        coordinator,
+        start_at=datetime(2026, 6, 30, 22, 0, tzinfo=UTC),
+        assigned_at=datetime(2026, 6, 1, tzinfo=UTC),
+    )
+    unavailable = coordinator_ids_confirmed_on(db, datetime(2026, 7, 1, 12, 0, tzinfo=UTC))
+    assert coordinator.id in unavailable
+
+
+@pytest.mark.story("SCRUM-34")
+def test_org_day_bounds_uses_singapore_time_not_utc() -> None:
+    moment = datetime(2026, 6, 30, 16, 30, tzinfo=UTC)
+    start, end = org_day_bounds(moment)
+    assert start == datetime(2026, 6, 30, 16, 0, tzinfo=UTC)
+    assert end == datetime(2026, 7, 1, 16, 0, tzinfo=UTC)

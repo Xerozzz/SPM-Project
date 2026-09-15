@@ -9,6 +9,9 @@ from assignment history rather than kept in a dedicated pointer table.
 
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
+from zoneinfo import ZoneInfo
+
+_ORG_TZ = ZoneInfo("Asia/Singapore")
 
 
 class NoAvailableCoordinatorError(Exception):
@@ -43,13 +46,19 @@ def select_next_coordinator(
     raise NoAvailableCoordinatorError
 
 
-def utc_day_bounds(moment: datetime) -> tuple[datetime, datetime]:
-    """Return the `[start, end)` UTC-calendar-day window containing `moment`.
+def org_day_bounds(moment: datetime) -> tuple[datetime, datetime]:
+    """Return the `[start, end)` UTC window corresponding to the organisation's
+    (Singapore, UTC+8) calendar day containing `moment`.
 
-    Used to find coordinators already committed to an APPROVED event "on the same
-    date" — defined as the same UTC calendar date, per AGENTS.md's tz-aware-UTC rule.
+    "Same date" for round-robin conflict purposes is the customer's local
+    business day, not the UTC calendar day — AGENTS.md's tz-aware-UTC rule
+    governs storage/comparison format, not which timezone defines a day
+    boundary. Bounds are computed in SGT then converted back to UTC so callers
+    still compare against UTC-stored datetimes.
     """
     if moment.tzinfo is None:
         raise ValueError("moment must be timezone-aware")
-    start_of_day = moment.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-    return start_of_day, start_of_day + timedelta(days=1)
+    local_moment = moment.astimezone(_ORG_TZ)
+    local_start = local_moment.replace(hour=0, minute=0, second=0, microsecond=0)
+    local_end = local_start + timedelta(days=1)
+    return local_start.astimezone(UTC), local_end.astimezone(UTC)
