@@ -8,6 +8,7 @@ router can map it to a status code without knowing any of the rules.
 
 import uuid
 from datetime import datetime
+from typing import cast
 
 from core.database import Session
 from domain import event_status
@@ -16,7 +17,8 @@ from domain.event_request import (
     EventRequestFields,
     FieldProblem,
     field_names,
-    validate_for_submission,
+    validate_catalogue_requirements,
+    validate_event_request,
 )
 from domain.roles import Role
 from models.event_request import EventRequest
@@ -68,12 +70,30 @@ def get(
     return request
 
 
+def create(
+    db: Session, organiser_id: uuid.UUID, fields: EventRequestFields, now: datetime
+) -> EventRequest:
+    """Create a new request without submitting or allocating anything."""
+    problems = validate_event_request(fields, now)
+    if problems:
+        raise IncompleteEventRequestError(problems)
+    request = EventRequest(organiser_id=organiser_id, **fields.__dict__)
+    return repo.save(db, repo.add(db, request))
+
+
 def update_draft(
     db: Session, request_id: uuid.UUID, organiser_id: uuid.UUID, changes: dict[str, object]
 ) -> EventRequest:
     """AC3: apply field changes to a request, which must still be a draft."""
-    request = _owned_by(db, request_id, organiser_id, lock=True)
+    request = _owned_by(db, request_id, organiser_id)
     event_status.ensure_editable(request.status)
+    catalogue_changes = EventRequestFields(
+        venue_requirement=cast(str | None, changes.get("venue_requirement")),
+        equipment_requirement=cast(str | None, changes.get("equipment_requirement")),
+    )
+    problems = validate_catalogue_requirements(catalogue_changes)
+    if problems:
+        raise IncompleteEventRequestError(problems)
     for name in field_names():
         if name in changes:
             setattr(request, name, changes[name])
@@ -96,7 +116,7 @@ def submit(
     # serialise here, and the second sees SUBMITTED and gets a 409 rather than a second
     # success. See repositories.event_requests.get_for_update.
     request = _owned_by(db, request_id, organiser_id, lock=True)
-    problems = validate_for_submission(_fields_of(request), now)
+    problems = validate_event_request(_fields_of(request), now)
     if problems:
         raise IncompleteEventRequestError(problems)
     # The only place status changes, and the value comes from the state machine
@@ -122,6 +142,12 @@ def _assign_coordinator(db: Session, request: EventRequest, now: datetime) -> No
 def _owned_by(
     db: Session, request_id: uuid.UUID, organiser_id: uuid.UUID, *, lock: bool = False
 ) -> EventRequest:
+    """Load the request, or raise if it is missing or not the caller's.
+
+    `lock=True` performs a locked read (SELECT ... FOR UPDATE): both callers that pass it
+    change the row, so two browsers double-clicking at the same instant serialise here and
+    the second one sees the first one's result. See repositories.event_requests.get_for_update.
+    """
     request = repo.get_for_update(db, request_id) if lock else repo.get(db, request_id)
     if request is None:
         raise EventRequestNotFoundError

@@ -4,6 +4,22 @@
 
 export type EventStatus = 'draft' | 'submitted'
 
+export type EventAction = 'edit' | 'submit'
+
+export const VENUE_REQUIREMENTS = [
+  'Auditorium-type venue',
+  'Lecture theatre-type venue',
+  'Seminar room-type venue',
+  'Outdoor event space',
+] as const
+
+export const EQUIPMENT_REQUIREMENTS = [
+  'Projector-type requirement',
+  'Microphone-type requirement',
+  'PA system-type requirement',
+  'Display screen-type requirement',
+] as const
+
 export interface EventRequest {
   id: string
   status: EventStatus
@@ -21,6 +37,23 @@ export interface EventRequest {
   created_at: string
   updated_at: string
   submitted_at: string | null
+  /** What the status allows, regardless of who is asking (SCRUM-35). Not an authorisation. */
+  status_permits: EventAction[]
+}
+
+/** The fields required to create an event request (SCRUM-28). */
+export interface EventRequestCreate {
+  name: string
+  purpose: string
+  description: string
+  start_at: string
+  end_at: string
+  expected_attendance: number
+  venue_requirement: string
+  accessibility_requirement: string
+  equipment_requirement: string
+  layout_requirement: string
+  registration_requirement: string
 }
 
 /** One field the organiser has to fix before submission is accepted (AC2). */
@@ -29,15 +62,61 @@ export interface FieldProblem {
   reason: string
 }
 
-/** Thrown when the API answers 422: the request is not complete enough to submit. */
-export class SubmissionRejectedError extends Error {
+/** Thrown when the API answers 422 with field-level validation problems. */
+export class EventRequestValidationError extends Error {
   readonly problems: FieldProblem[]
 
   constructor(problems: FieldProblem[]) {
-    super('The request is not complete')
-    this.name = 'SubmissionRejectedError'
+    super('The request has validation errors')
+    this.name = 'EventRequestValidationError'
     this.problems = problems
   }
+}
+
+/** Kept distinct for the submit UI, which gives incomplete drafts a specific message. */
+export class SubmissionRejectedError extends EventRequestValidationError {
+  constructor(problems: FieldProblem[]) {
+    super(problems)
+    this.name = 'SubmissionRejectedError'
+  }
+}
+
+function parseValidationProblems(body: unknown): FieldProblem[] | null {
+  if (
+    !body ||
+    typeof body !== 'object' ||
+    !('detail' in body) ||
+    !Array.isArray(body.detail)
+  ) {
+    return null
+  }
+
+  const problems = body.detail.flatMap((problem: unknown): FieldProblem[] => {
+    if (
+      problem &&
+      typeof problem === 'object' &&
+      'field' in problem &&
+      'reason' in problem &&
+      typeof problem.field === 'string' &&
+      typeof problem.reason === 'string'
+    ) {
+      return [{ field: problem.field, reason: problem.reason }]
+    }
+    if (
+      problem &&
+      typeof problem === 'object' &&
+      'loc' in problem &&
+      Array.isArray(problem.loc) &&
+      typeof problem.loc.at(-1) === 'string' &&
+      'msg' in problem &&
+      typeof problem.msg === 'string'
+    ) {
+      return [{ field: problem.loc.at(-1) as string, reason: problem.msg }]
+    }
+    return []
+  })
+
+  return problems.length > 0 ? problems : null
 }
 
 function authHeaders(token: string): HeadersInit {
@@ -52,14 +131,33 @@ export async function listMyEventRequests(token: string): Promise<EventRequest[]
   return (await response.json()) as EventRequest[]
 }
 
+export async function createEventRequest(
+  token: string,
+  request: EventRequestCreate,
+): Promise<EventRequest> {
+  const response = await fetch('/api/event-requests', {
+    method: 'POST',
+    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  if (response.status === 422) {
+    const problems = parseValidationProblems(await response.json())
+    if (problems) throw new EventRequestValidationError(problems)
+  }
+  if (!response.ok) {
+    throw new Error(`Could not create event request (${response.status})`)
+  }
+  return (await response.json()) as EventRequest
+}
+
 export async function submitEventRequest(token: string, id: string): Promise<EventRequest> {
   const response = await fetch(`/api/event-requests/${id}/submit`, {
     method: 'POST',
     headers: authHeaders(token),
   })
   if (response.status === 422) {
-    const body = (await response.json()) as { detail: FieldProblem[] }
-    throw new SubmissionRejectedError(body.detail)
+    const problems = parseValidationProblems(await response.json())
+    if (problems) throw new SubmissionRejectedError(problems)
   }
   if (!response.ok) {
     throw new Error(`Submission failed (${response.status})`)

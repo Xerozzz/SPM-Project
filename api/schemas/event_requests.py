@@ -3,14 +3,48 @@
 import uuid
 from datetime import UTC, datetime
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, field_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    computed_field,
+    field_validator,
+)
 
-from domain.event_status import EventStatus
+from domain.event_status import EventAction, EventStatus, allowed_actions
+
+
+class EventRequestCreate(BaseModel):
+    """The complete information collected when an organiser creates an event request (SCRUM-28).
+
+    The separate submit endpoint is responsible for moving a created request to review.
+    """
+
+    name: str
+    purpose: str
+    description: str
+    start_at: AwareDatetime
+    end_at: AwareDatetime
+    expected_attendance: int
+    venue_requirement: str
+    accessibility_requirement: str
+    equipment_requirement: str
+    layout_requirement: str
+    registration_requirement: str
+
+    @field_validator("start_at", "end_at")
+    @classmethod
+    def _to_utc(cls, value: datetime) -> datetime:
+        return value.astimezone(UTC)
 
 
 class EventRequestUpdate(BaseModel):
     """Fields an organiser may change on a draft. All optional: a PATCH sends only what
     changed, and a draft is allowed to be incomplete until it is submitted."""
+
+    # extra="forbid": a field name the API does not know (a typo such as "descripton") is
+    # a 422, not a silent no-op that leaves the organiser thinking their edit was saved.
+    model_config = ConfigDict(extra="forbid")
 
     name: str | None = None
     purpose: str | None = None
@@ -58,6 +92,15 @@ class EventRequestRead(BaseModel):
     # SCRUM-34: who was auto-assigned on first submission, and when.
     coordinator_id: uuid.UUID | None
     assigned_at: datetime | None
+
+    @computed_field
+    def status_permits(self) -> list[EventAction]:
+        """SCRUM-35: what this request's status permits, sorted for a stable response.
+
+        Named for the status, not the caller: it does not know who is asking, so a reader
+        must not treat it as "what I may do". Authorisation is answered separately.
+        """
+        return sorted(allowed_actions(self.status))
 
 
 class FieldProblemRead(BaseModel):

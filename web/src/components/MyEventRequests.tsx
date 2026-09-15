@@ -16,6 +16,10 @@ import { useAuth } from '../auth/useAuth'
  * Submitting a complete draft shows confirmation (AC1); an incomplete one lists the fields
  * to fix (AC2); a submitted request shows it is locked (AC3). No business rules live here —
  * the API decides, this component only shows the outcome.
+ *
+ * SCRUM-35: what to offer comes from the request's `status_permits`, so the status machine
+ * stays the only place that knows what a status permits. Submit and edit are separate
+ * permissions, so the locked message keys off `edit`, not off the absence of `submit`.
  */
 export default function MyEventRequests() {
   const { token } = useAuth()
@@ -32,15 +36,17 @@ export default function MyEventRequests() {
     enabled: token !== null,
   })
 
+  // The mutation variable is the whole request, so the outcome message can name it
+  // without looking it up in the list again afterwards.
   const submit = useMutation({
-    mutationFn: (id: string) => submitEventRequest(token ?? '', id),
-    onSuccess: (request) => {
-      setOutcome({ kind: 'submitted', request })
+    mutationFn: (request: EventRequest) => submitEventRequest(token ?? '', request.id),
+    onSuccess: (submitted) => {
+      setOutcome({ kind: 'submitted', name: submitted.name })
       void queryClient.invalidateQueries({ queryKey })
     },
-    onError: (error, id) => {
+    onError: (error, request) => {
       if (error instanceof SubmissionRejectedError) {
-        setOutcome({ kind: 'incomplete', id, problems: error.problems })
+        setOutcome({ kind: 'incomplete', name: request.name, problems: error.problems })
       } else {
         setOutcome({ kind: 'failed', message: error.message })
       }
@@ -71,16 +77,17 @@ export default function MyEventRequests() {
                   <StatusLabel status={request.status} />
                 </p>
               </div>
-              {request.status === 'draft' ? (
+              {request.status_permits.includes('submit') && (
                 <button
                   type="button"
-                  onClick={() => submit.mutate(request.id)}
+                  onClick={() => submit.mutate(request)}
                   disabled={submit.isPending}
                   className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
                 >
                   Submit for review
                 </button>
-              ) : (
+              )}
+              {!request.status_permits.includes('edit') && (
                 <span className="text-sm text-slate-500">
                   Locked — ask your coordinator to request changes
                 </span>
@@ -90,33 +97,34 @@ export default function MyEventRequests() {
         </ul>
       )}
 
-      {outcome && <OutcomeMessage outcome={outcome} requests={requests.data ?? []} />}
+      {outcome && <OutcomeMessage outcome={outcome} />}
     </section>
   )
 }
 
 type Outcome =
-  | { kind: 'submitted'; request: EventRequest }
-  | { kind: 'incomplete'; id: string; problems: FieldProblem[] }
+  | { kind: 'submitted'; name: string | null }
+  | { kind: 'incomplete'; name: string | null; problems: FieldProblem[] }
   | { kind: 'failed'; message: string }
 
 function StatusLabel({ status }: { status: EventRequest['status'] }) {
-  return status === 'submitted' ? <>Submitted</> : <>Draft</>
+  if (status === 'submitted') return <>Submitted</>
+  return <>Draft</>
 }
 
-function OutcomeMessage({ outcome, requests }: { outcome: Outcome; requests: EventRequest[] }) {
+function OutcomeMessage({ outcome }: { outcome: Outcome }) {
   if (outcome.kind === 'submitted') {
     return (
       <p role="status" className="mt-4 rounded bg-green-50 p-3 text-sm text-green-800">
-        “{outcome.request.name}” has been submitted for review. Its status is now Submitted.
+        “{outcome.name ?? 'Your request'}” has been submitted for review. Its status is now
+        Submitted.
       </p>
     )
   }
   if (outcome.kind === 'incomplete') {
-    const name = requests.find((r) => r.id === outcome.id)?.name ?? 'This request'
     return (
       <div role="alert" className="mt-4 rounded bg-amber-50 p-3 text-sm text-amber-900">
-        <p>“{name}” cannot be submitted yet. Please correct:</p>
+        <p>“{outcome.name ?? 'This request'}” cannot be submitted yet. Please correct:</p>
         <ul className="mt-2 list-disc pl-5">
           {outcome.problems.map((problem) => (
             <li key={problem.field}>

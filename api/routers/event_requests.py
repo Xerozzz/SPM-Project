@@ -11,9 +11,15 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.dependencies import get_current_user, require_role
 from domain.coordinator_assignment import NoAvailableCoordinatorError
+from domain.event_request import EventRequestFields
 from domain.event_status import EventRequestLockedError, InvalidTransitionError
 from domain.roles import Role
-from schemas.event_requests import EventRequestRead, EventRequestUpdate, FieldProblemRead
+from schemas.event_requests import (
+    EventRequestCreate,
+    EventRequestRead,
+    EventRequestUpdate,
+    FieldProblemRead,
+)
 from services import event_requests as service
 
 router = APIRouter(prefix="/event-requests", tags=["event-requests"])
@@ -72,6 +78,17 @@ def list_mine(user: Organiser, db: Db) -> list[EventRequestRead]:
     """The signed-in organiser's own event requests."""
     rows = service.list_for_organiser(db, _organiser_id(user))
     return [EventRequestRead.model_validate(row) for row in rows]
+
+
+@router.post("", response_model=EventRequestRead, status_code=status.HTTP_201_CREATED)
+def create_event_request(body: EventRequestCreate, user: Organiser, db: Db) -> EventRequestRead:
+    """Create a complete event request without submitting it for review."""
+    fields = EventRequestFields(**body.model_dump())
+    try:
+        row = service.create(db, _organiser_id(user), fields, datetime.now(UTC))
+    except _REFUSALS as exc:
+        raise _http_error(exc) from exc
+    return EventRequestRead.model_validate(row)
 
 
 @router.get("/{request_id}", response_model=EventRequestRead)
