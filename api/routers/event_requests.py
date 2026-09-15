@@ -91,13 +91,37 @@ def create_event_request(body: EventRequestCreate, user: Organiser, db: Db) -> E
     return EventRequestRead.model_validate(row)
 
 
+@router.post("/drafts", response_model=EventRequestRead, status_code=status.HTTP_201_CREATED)
+def create_draft(body: EventRequestCreate, user: Organiser, db: Db) -> EventRequestRead:
+    """Save a new draft. Submission-only validation is not run here (SCRUM-29)."""
+    row = service.create_draft(db, _organiser_id(user), body.model_dump(exclude_unset=True))
+    return EventRequestRead.model_validate(row)
+
+
+@router.get("/calendar", response_model=list[EventRequestRead])
+def list_calendar(user: Organiser, db: Db) -> list[EventRequestRead]:
+    """Drafts visible in the signed-in organiser's organisation calendar."""
+    try:
+        rows = service.list_calendar_for_organiser(db, _organiser_id(user))
+    except _REFUSALS as exc:
+        raise _http_error(exc) from exc
+    return [EventRequestRead.model_validate(row) for row in rows]
+
+
 @router.get("/{request_id}", response_model=EventRequestRead)
 def read(request_id: uuid.UUID, user: AnyUser, db: Db) -> EventRequestRead:
-    """SCRUM-34: its organiser, or any Event Coordinator, may view a request and see
-    its coordinator assignment. Nobody else may."""
+    """Return a request visible through SCRUM-34 or SCRUM-29 access rules."""
+    roles = _roles(user)
     try:
-        row = service.get(db, request_id, _organiser_id(user), _roles(user))
-    except (service.EventRequestNotFoundError, service.NotAuthorisedError) as exc:
+        row = service.get(db, request_id, _organiser_id(user), roles)
+    except service.NotAuthorisedError as exc:
+        if Role.ORGANISER.value not in roles:
+            raise _http_error(exc) from exc
+        try:
+            row = service.get_for_organiser(db, request_id, _organiser_id(user))
+        except _REFUSALS as fallback_exc:
+            raise _http_error(fallback_exc) from fallback_exc
+    except service.EventRequestNotFoundError as exc:
         raise _http_error(exc) from exc
     return EventRequestRead.model_validate(row)
 

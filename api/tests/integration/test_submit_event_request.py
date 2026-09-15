@@ -18,6 +18,7 @@ from core.security import hash_password
 from domain.event_request import field_names
 from domain.event_status import EventStatus, InvalidTransitionError
 from models.event_request import EventRequest
+from models.organisation import Organisation
 from models.user import User
 from services import event_requests as service
 
@@ -411,10 +412,14 @@ def _committed_draft() -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
     connection. The coordinator exists so submission (SCRUM-34) has one to assign."""
     session = SessionLocal()
     try:
+        organisation = Organisation(name=f"Committed test organisation {uuid.uuid4()}")
+        session.add(organisation)
+        session.flush()
         organiser = User(
             email=f"{uuid.uuid4()}@example.com",
             password_hash=hash_password("password123"),
             roles=["organiser"],
+            organisation_id=organisation.id,
         )
         coordinator = User(
             email=f"{uuid.uuid4()}@example.com",
@@ -438,10 +443,20 @@ def _delete_committed(
         draft = session.get(EventRequest, draft_id)
         if draft is not None:
             session.delete(draft)
-        for user_id in (organiser_id, coordinator_id):
-            user = session.get(User, user_id)
-            if user is not None:
-                session.delete(user)
+            session.flush()
+        organiser = session.get(User, organiser_id)
+        organisation_id = organiser.organisation_id if organiser is not None else None
+        if organiser is not None:
+            session.delete(organiser)
+        coordinator = session.get(User, coordinator_id)
+        if coordinator is not None:
+            session.delete(coordinator)
+        if organiser is not None or coordinator is not None:
+            session.flush()
+        if organisation_id is not None:
+            organisation = session.get(Organisation, organisation_id)
+            if organisation is not None:
+                session.delete(organisation)
         session.commit()
     finally:
         session.close()

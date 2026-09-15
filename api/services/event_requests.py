@@ -22,6 +22,7 @@ from domain.event_request import (
 )
 from domain.roles import Role
 from models.event_request import EventRequest
+from models.user import User
 from repositories import event_requests as repo
 from repositories import users as users_repo
 
@@ -79,6 +80,39 @@ def create(
         raise IncompleteEventRequestError(problems)
     request = EventRequest(organiser_id=organiser_id, **fields.__dict__)
     return repo.save(db, repo.add(db, request))
+def list_calendar_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventRequest]:
+    """Drafts visible in this organiser's organisation calendar."""
+    organiser = _user_or_forbidden(db, organiser_id)
+    return repo.list_drafts_for_organisation(db, organiser.organisation_id)
+
+
+def get_for_organiser(db: Session, request_id: uuid.UUID, organiser_id: uuid.UUID) -> EventRequest:
+    """Return one request visible to this organiser.
+
+    Owners can read their own requests in any status. Other organisers in the same
+    organisation can read drafts only, for SCRUM-29's shared organisation calendar.
+    """
+    request = repo.get(db, request_id)
+    if request is None:
+        raise EventRequestNotFoundError
+    if request.organiser_id == organiser_id:
+        return request
+    viewer = _user_or_forbidden(db, organiser_id)
+    creator = _user_or_forbidden(db, request.organiser_id)
+    if request.status is event_status.EventStatus.DRAFT:
+        if creator.organisation_id == viewer.organisation_id:
+            return request
+    raise NotTheOrganiserError
+
+
+def create_draft(db: Session, organiser_id: uuid.UUID, fields: dict[str, object]) -> EventRequest:
+    """SCRUM-29: save a new incomplete draft for the current organiser.
+
+    Draft creation deliberately does not call `validate_for_submission`; completeness is
+    checked only when the organiser submits the request for review.
+    """
+    request = EventRequest(organiser_id=organiser_id, **fields)
+    return repo.save(db, request)
 
 
 def update_draft(
@@ -154,6 +188,13 @@ def _owned_by(
     if request.organiser_id != organiser_id:
         raise NotTheOrganiserError
     return request
+
+
+def _user_or_forbidden(db: Session, user_id: uuid.UUID) -> User:
+    user = users_repo.get(db, user_id)
+    if user is None:
+        raise NotTheOrganiserError
+    return user
 
 
 def _fields_of(request: EventRequest) -> EventRequestFields:
