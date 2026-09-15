@@ -35,9 +35,9 @@ def make_draft(db: Session, organiser: User, **overrides: object) -> EventReques
         "start_at": start,
         "end_at": start + timedelta(hours=4),
         "expected_attendance": 200,
-        "venue_requirement": "Auditorium, at least 200 seats",
+        "venue_requirement": "Auditorium-type venue",
         "accessibility_requirement": "Step-free access and hearing loop",
-        "equipment_requirement": "Projector, two microphones",
+        "equipment_requirement": "Projector-type requirement",
         "layout_requirement": "Theatre style",
         "registration_requirement": "Open registration, capped at 200",
     }
@@ -153,6 +153,32 @@ async def test_a_draft_field_can_be_cleared_with_null(
     assert response.json()["description"] is None
     db.refresh(draft)
     assert draft.description is None
+
+
+@pytest.mark.story("SCRUM-28")
+async def test_a_draft_cannot_be_updated_with_unknown_catalogue_requirements(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    organiser = make_user("organiser")
+    draft = make_draft(db, organiser)
+
+    async with make_client(organiser) as client:
+        response = await client.patch(
+            f"/api/event-requests/{draft.id}",
+            json={
+                "venue_requirement": "A room chosen by the organiser",
+                "equipment_requirement": "Any available projector",
+            },
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == [
+        {"field": "venue_requirement", "reason": "is not a catalogue option"},
+        {"field": "equipment_requirement", "reason": "is not a catalogue option"},
+    ]
+    db.refresh(draft)
+    assert draft.venue_requirement == "Auditorium-type venue"
+    assert draft.equipment_requirement == "Projector-type requirement"
 
 
 @pytest.mark.story("SCRUM-46")

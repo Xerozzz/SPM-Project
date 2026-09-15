@@ -3,9 +3,39 @@
 import uuid
 from datetime import UTC, datetime
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, computed_field, field_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    computed_field,
+    field_validator,
+)
 
 from domain.event_status import EventAction, EventStatus, allowed_actions
+
+
+class EventRequestCreate(BaseModel):
+    """The complete information collected when an organiser creates an event request (SCRUM-28).
+
+    The separate submit endpoint is responsible for moving a created request to review.
+    """
+
+    name: str
+    purpose: str
+    description: str
+    start_at: AwareDatetime
+    end_at: AwareDatetime
+    expected_attendance: int
+    venue_requirement: str
+    accessibility_requirement: str
+    equipment_requirement: str
+    layout_requirement: str
+    registration_requirement: str
+
+    @field_validator("start_at", "end_at")
+    @classmethod
+    def _to_utc(cls, value: datetime) -> datetime:
+        return value.astimezone(UTC)
 
 
 class EventRequestUpdate(BaseModel):

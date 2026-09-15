@@ -8,8 +8,6 @@ reviewer, a tester, or an instructor can read in ten seconds.
 Stories add transitions here as they land, each with its own tests:
 
     SCRUM-46  draft -> submitted
-    SCRUM-31  submitted -> approved | rejected        (review and decide)
-    SCRUM-30  submitted -> clarification_requested    (request clarification)
     SCRUM-35  allowed_actions: what a status permits
 """
 

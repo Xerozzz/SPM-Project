@@ -66,7 +66,7 @@ test('lists drafts with a submit button and submitted requests as locked', async
   expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Submit for review' })).toBeInTheDocument()
   expect(screen.getByText('Open Day')).toBeInTheDocument()
-  expect(screen.getByText(/Locked/)).toBeInTheDocument()
+  expect(screen.getAllByText(/Locked/)).toHaveLength(1)
 })
 
 test('submitting a complete draft shows confirmation and the new status', async () => {

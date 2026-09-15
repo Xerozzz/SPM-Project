@@ -7,6 +7,7 @@ router can map it to a status code without knowing any of the rules.
 
 import uuid
 from datetime import datetime
+from typing import cast
 
 from core.database import Session
 from domain import event_status
@@ -14,7 +15,8 @@ from domain.event_request import (
     EventRequestFields,
     FieldProblem,
     field_names,
-    validate_for_submission,
+    validate_catalogue_requirements,
+    validate_event_request,
 )
 from models.event_request import EventRequest
 from repositories import event_requests as repo
@@ -45,12 +47,30 @@ def list_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventReques
     return repo.list_for_organiser(db, organiser_id)
 
 
+def create(
+    db: Session, organiser_id: uuid.UUID, fields: EventRequestFields, now: datetime
+) -> EventRequest:
+    """Create a new request without submitting or allocating anything."""
+    problems = validate_event_request(fields, now)
+    if problems:
+        raise IncompleteEventRequestError(problems)
+    request = EventRequest(organiser_id=organiser_id, **fields.__dict__)
+    return repo.save(db, repo.add(db, request))
+
+
 def update_draft(
     db: Session, request_id: uuid.UUID, organiser_id: uuid.UUID, changes: dict[str, object]
 ) -> EventRequest:
     """AC3: apply field changes to a request, which must still be a draft."""
     request = _owned_by(db, request_id, organiser_id)
     event_status.ensure_editable(request.status)
+    catalogue_changes = EventRequestFields(
+        venue_requirement=cast(str | None, changes.get("venue_requirement")),
+        equipment_requirement=cast(str | None, changes.get("equipment_requirement")),
+    )
+    problems = validate_catalogue_requirements(catalogue_changes)
+    if problems:
+        raise IncompleteEventRequestError(problems)
     for name in field_names():
         if name in changes:
             setattr(request, name, changes[name])
@@ -64,7 +84,7 @@ def submit(
     fields. AC4 holds by construction — nothing here touches venues, equipment or
     registration, and no other code runs on submission."""
     request = _owned_by(db, request_id, organiser_id)
-    problems = validate_for_submission(_fields_of(request), now)
+    problems = validate_event_request(_fields_of(request), now)
     if problems:
         raise IncompleteEventRequestError(problems)
     # The only place status changes, and the value comes from the state machine

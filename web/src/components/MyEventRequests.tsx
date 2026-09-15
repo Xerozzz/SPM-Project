@@ -74,7 +74,7 @@ export default function MyEventRequests() {
               <div>
                 <p className="font-medium">{request.name ?? 'Untitled request'}</p>
                 <p className="text-sm text-slate-500">
-                  {request.status === 'submitted' ? 'Submitted' : 'Draft'}
+                  <StatusLabel status={request.status} />
                 </p>
               </div>
               {request.status_permits.includes('submit') && (
@@ -106,6 +106,11 @@ type Outcome =
   | { kind: 'submitted'; name: string | null }
   | { kind: 'incomplete'; name: string | null; problems: FieldProblem[] }
   | { kind: 'failed'; message: string }
+
+function StatusLabel({ status }: { status: EventRequest['status'] }) {
+  if (status === 'submitted') return <>Submitted</>
+  return <>Draft</>
+}
 
 function OutcomeMessage({ outcome }: { outcome: Outcome }) {
   if (outcome.kind === 'submitted') {
