@@ -104,6 +104,11 @@ class EventRequestRead(BaseModel):
     decided_at: datetime | None
     rejection_reason: str | None
 
+    @computed_field
+    def status_permits(self) -> list[EventAction]:
+        """What the status permits, sorted for a stable response (SCRUM-35)."""
+        return sorted(allowed_actions(self.status))
+
 
 class EventRequestRejection(BaseModel):
     """The reason required before a coordinator can reject a request."""

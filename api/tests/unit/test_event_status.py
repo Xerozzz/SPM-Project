@@ -75,8 +75,8 @@ def test_a_draft_may_be_edited_and_submitted() -> None:
 
 
 @pytest.mark.story("SCRUM-35")
-def test_a_submitted_request_permits_coordinator_decisions() -> None:
-    assert allowed_actions(EventStatus.SUBMITTED) == {EventAction.APPROVE, EventAction.REJECT}
+def test_a_submitted_request_permits_no_organiser_actions() -> None:
+    assert allowed_actions(EventStatus.SUBMITTED) == frozenset()
 
 
 @pytest.mark.story("SCRUM-35")
@@ -84,13 +84,15 @@ def test_every_transition_offers_its_action() -> None:
     # A transition added to the table whose action never reaches allowed_actions fails here,
     # so adding a move cannot silently leave the UI without its button.
     for (source, _), action in _ALLOWED_TRANSITIONS.items():
-        assert action in allowed_actions(source)
+        if action is not None:
+            assert action in allowed_actions(source)
 
 
 @pytest.mark.story("SCRUM-35")
 def test_every_action_except_edit_comes_from_a_transition() -> None:
     # EDIT is not a transition; every other action must be one, or it can never be offered.
-    assert set(_ALLOWED_TRANSITIONS.values()) == set(EventAction) - {EventAction.EDIT}
+    transition_actions = {action for action in _ALLOWED_TRANSITIONS.values() if action is not None}
+    assert transition_actions == set(EventAction) - {EventAction.EDIT}
 
 
 @pytest.mark.story("SCRUM-35")

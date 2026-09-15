@@ -15,7 +15,6 @@ import {
   updateDraft,
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
-import ClarificationThread from './ClarificationThread'
 
 /**
  * SCRUM-46: an organiser's event requests, each with a Submit action while it is a draft.

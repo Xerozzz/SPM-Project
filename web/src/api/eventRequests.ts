@@ -5,7 +5,7 @@
 export type EventStatus =
   'draft' | 'submitted' | 'approved' | 'rejected'
 
-export type EventAction = 'edit' | 'submit' | 'approve' | 'reject'
+export type EventAction = 'edit' | 'submit'
 
 export const VENUE_REQUIREMENTS = [
   'Auditorium-type venue',
