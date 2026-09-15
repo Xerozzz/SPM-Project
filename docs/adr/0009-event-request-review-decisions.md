@@ -2,7 +2,7 @@
 
 - **Status:** Proposed
 - **Date:** 2026-09-13
-- **Deciders:** ConnectSphere team
+- **Deciders:** Wei Lin
 - **Related stories:** SCRUM-31 (review and decide), SCRUM-35 (view status and allowed actions)
 
 ## Context
