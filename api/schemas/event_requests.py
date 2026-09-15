@@ -12,6 +12,10 @@ class EventRequestUpdate(BaseModel):
     """Fields an organiser may change on a draft. All optional: a PATCH sends only what
     changed, and a draft is allowed to be incomplete until it is submitted."""
 
+    # extra="forbid": a field name the API does not know (a typo such as "descripton") is
+    # a 422, not a silent no-op that leaves the organiser thinking their edit was saved.
+    model_config = ConfigDict(extra="forbid")
+
     name: str | None = None
     purpose: str | None = None
     description: str | None = None
