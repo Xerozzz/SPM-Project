@@ -38,6 +38,14 @@ const submitted = eventRequest({
   status_permits: [],
 })
 
+const rejected = eventRequest({
+  id: 'req-3',
+  status: 'rejected',
+  name: 'Rejected Open Day',
+  status_permits: ['edit', 'submit'],
+  rejection_reason: 'Please provide a more accessible venue.',
+})
+
 type Handler = (init?: RequestInit) => Response
 
 function json(body: unknown, status = 200) {
@@ -82,6 +90,15 @@ test('lists drafts with a submit button and submitted requests as locked', async
   expect(screen.getByRole('button', { name: 'Submit for review' })).toBeInTheDocument()
   expect(screen.getByText('Open Day')).toBeInTheDocument()
   expect(screen.getAllByText(/Locked/)).toHaveLength(1)
+})
+
+test('shows a rejection reason to the organiser', async () => {
+  renderSignedIn({ 'GET /api/event-requests': () => json([rejected]) })
+
+  expect(await screen.findByText('Rejected Open Day')).toBeInTheDocument()
+  expect(
+    screen.getByText('Rejection reason: Please provide a more accessible venue.'),
+  ).toBeInTheDocument()
 })
 
 test('incomplete form can be saved as a draft with confirmation and status', async () => {

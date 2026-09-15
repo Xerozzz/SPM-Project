@@ -158,6 +158,11 @@ export default function MyEventRequests() {
                   <p className="text-sm text-slate-500">
                     <StatusLabel status={request.status} />
                   </p>
+                  {request.status === 'rejected' && request.rejection_reason && (
+                    <p className="mt-1 text-sm text-red-700">
+                      Rejection reason: {request.rejection_reason}
+                    </p>
+                  )}
                 </div>
                 {request.status_permits.includes('edit') ? (
                   <div className="flex flex-wrap gap-2">
