@@ -53,6 +53,7 @@ class EventRequestLockedError(Exception):
         super().__init__(f"an event request in status {status} cannot be edited")
         self.status = status
 
+
 # The whole state machine, as data: each legal move and the action that performs it. A
 # transition that is not listed here does not exist, and an entry added here is offered by
 # allowed_actions without anything else changing.
@@ -60,12 +61,14 @@ _ALLOWED_TRANSITIONS: dict[tuple[EventStatus, EventStatus], EventAction] = {
     (EventStatus.DRAFT, EventStatus.SUBMITTED): EventAction.SUBMIT,
 }
 
+
 class EventRequestNotSubmittedError(Exception):
     """The request is still a draft, so downstream workflows must ignore it."""
 
     def __init__(self, status: EventStatus) -> None:
         super().__init__(f"an event request in status {status} is not submitted")
         self.status = status
+
 
 def transition(current: EventStatus, target: EventStatus) -> EventStatus:
     """Return `target` if moving there from `current` is allowed, else raise."""
@@ -97,6 +100,8 @@ def allowed_actions(status: EventStatus) -> frozenset[EventAction]:
     if is_editable(status):
         actions.add(EventAction.EDIT)
     return frozenset(actions)
+
+
 def is_downstream_available(status: EventStatus) -> bool:
     """Only submitted requests may enter assignment, review, booking, or registration."""
     return status is EventStatus.SUBMITTED

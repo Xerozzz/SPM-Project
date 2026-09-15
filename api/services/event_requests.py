@@ -80,6 +80,8 @@ def create(
         raise IncompleteEventRequestError(problems)
     request = EventRequest(organiser_id=organiser_id, **fields.__dict__)
     return repo.save(db, repo.add(db, request))
+
+
 def list_calendar_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventRequest]:
     """Drafts visible in this organiser's organisation calendar."""
     organiser = _user_or_forbidden(db, organiser_id)
@@ -99,9 +101,11 @@ def get_for_organiser(db: Session, request_id: uuid.UUID, organiser_id: uuid.UUI
         return request
     viewer = _user_or_forbidden(db, organiser_id)
     creator = _user_or_forbidden(db, request.organiser_id)
-    if request.status is event_status.EventStatus.DRAFT:
-        if creator.organisation_id == viewer.organisation_id:
-            return request
+    if (
+        request.status is event_status.EventStatus.DRAFT
+        and creator.organisation_id == viewer.organisation_id
+    ):
+        return request
     raise NotTheOrganiserError
 
 

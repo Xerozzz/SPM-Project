@@ -93,7 +93,9 @@ async def test_coordinator_cannot_create_a_draft(
     coordinator = make_user("coordinator")
 
     async with make_client(coordinator) as client:
-        response = await client.post("/api/event-requests/drafts", json={"name": "Coordinator draft"})
+        response = await client.post(
+            "/api/event-requests/drafts", json={"name": "Coordinator draft"}
+        )
 
     assert response.status_code == 403
 

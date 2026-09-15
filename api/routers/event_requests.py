@@ -16,6 +16,7 @@ from domain.event_status import EventRequestLockedError, InvalidTransitionError
 from domain.roles import Role
 from schemas.event_requests import (
     EventRequestCreate,
+    EventRequestDraftCreate,
     EventRequestRead,
     EventRequestUpdate,
     FieldProblemRead,
@@ -92,7 +93,7 @@ def create_event_request(body: EventRequestCreate, user: Organiser, db: Db) -> E
 
 
 @router.post("/drafts", response_model=EventRequestRead, status_code=status.HTTP_201_CREATED)
-def create_draft(body: EventRequestCreate, user: Organiser, db: Db) -> EventRequestRead:
+def create_draft(body: EventRequestDraftCreate, user: Organiser, db: Db) -> EventRequestRead:
     """Save a new draft. Submission-only validation is not run here (SCRUM-29)."""
     row = service.create_draft(db, _organiser_id(user), body.model_dump(exclude_unset=True))
     return EventRequestRead.model_validate(row)

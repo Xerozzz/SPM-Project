@@ -90,6 +90,8 @@ def test_every_action_except_edit_comes_from_a_transition() -> None:
 def test_actions_are_lowercase_strings_for_the_api() -> None:
     assert EventAction.SUBMIT.value == "submit"
     assert EventAction.EDIT.value == "edit"
+
+
 @pytest.mark.story("SCRUM-29")
 def test_drafts_are_not_available_to_downstream_workflows() -> None:
     assert not is_downstream_available(EventStatus.DRAFT)

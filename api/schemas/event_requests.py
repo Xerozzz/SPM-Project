@@ -68,7 +68,7 @@ class EventRequestUpdate(BaseModel):
         return None if value is None else value.astimezone(UTC)
 
 
-class EventRequestCreate(EventRequestUpdate):
+class EventRequestDraftCreate(EventRequestUpdate):
     """Fields an organiser may provide when first saving a draft.
 
     Same optional contract as an update: SCRUM-29 allows a draft to be incomplete until
