@@ -190,7 +190,7 @@ export async function createDraft(
   token: string,
   draft: EventRequestDraftInput,
 ): Promise<EventRequest> {
-  const response = await fetch('/api/event-requests', {
+  const response = await fetch('/api/event-requests/drafts', {
     method: 'POST',
     headers: jsonHeaders(token),
     body: JSON.stringify(draft),

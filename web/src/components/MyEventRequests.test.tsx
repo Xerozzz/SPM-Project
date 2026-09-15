@@ -99,7 +99,7 @@ test('incomplete form can be saved as a draft with confirmation and status', asy
   renderSignedIn({
     'GET /api/event-requests': () => json(listed),
     'GET /api/event-requests/calendar': () => json(listed),
-    'POST /api/event-requests': create,
+    'POST /api/event-requests/drafts': create,
   })
 
   fireEvent.click(await screen.findByRole('button', { name: 'New draft' }))

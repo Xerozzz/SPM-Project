@@ -23,7 +23,7 @@ async def test_organiser_can_create_an_incomplete_draft(
     organiser = make_user("organiser")
 
     async with make_client(organiser) as client:
-        response = await client.post("/api/event-requests", json={"name": "Hackathon draft"})
+        response = await client.post("/api/event-requests/drafts", json={"name": "Hackathon draft"})
 
     assert response.status_code == 201
     body = response.json()
@@ -47,7 +47,7 @@ async def test_missing_submission_fields_do_not_block_draft_save(
     organiser = make_user("organiser")
 
     async with make_client(organiser) as client:
-        response = await client.post("/api/event-requests", json={})
+        response = await client.post("/api/event-requests/drafts", json={})
 
     assert response.status_code == 201
     body = response.json()
@@ -73,7 +73,7 @@ async def test_draft_creation_retains_supplied_values(
     }
 
     async with make_client(organiser) as client:
-        response = await client.post("/api/event-requests", json=payload)
+        response = await client.post("/api/event-requests/drafts", json=payload)
 
     assert response.status_code == 201
     body = response.json()
@@ -93,7 +93,7 @@ async def test_coordinator_cannot_create_a_draft(
     coordinator = make_user("coordinator")
 
     async with make_client(coordinator) as client:
-        response = await client.post("/api/event-requests", json={"name": "Coordinator draft"})
+        response = await client.post("/api/event-requests/drafts", json={"name": "Coordinator draft"})
 
     assert response.status_code == 403
 
@@ -101,6 +101,6 @@ async def test_coordinator_cannot_create_a_draft(
 @pytest.mark.story("SCRUM-29")
 async def test_anonymous_user_cannot_create_a_draft(make_client: MakeClient) -> None:
     async with make_client(None) as client:
-        response = await client.post("/api/event-requests", json={"name": "Anonymous draft"})
+        response = await client.post("/api/event-requests/drafts", json={"name": "Anonymous draft"})
 
     assert response.status_code == 401

@@ -15,7 +15,7 @@ MakeClient = Callable[[User | None], httpx.AsyncClient]
 async def create_draft(client: httpx.AsyncClient) -> dict[str, object]:
     start = datetime.now(UTC) + timedelta(days=20)
     response = await client.post(
-        "/api/event-requests",
+        "/api/event-requests/drafts",
         json={
             "name": "Workshop draft",
             "purpose": "Hands-on learning",
@@ -30,7 +30,7 @@ async def create_draft(client: httpx.AsyncClient) -> dict[str, object]:
 async def create_complete_draft(client: httpx.AsyncClient) -> dict[str, object]:
     start = datetime.now(UTC) + timedelta(days=30)
     response = await client.post(
-        "/api/event-requests",
+        "/api/event-requests/drafts",
         json={
             "name": "Submitted workshop",
             "purpose": "Hands-on learning",
