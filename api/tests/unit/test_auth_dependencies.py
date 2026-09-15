@@ -58,6 +58,14 @@ def test_require_role_allows_matching_role() -> None:
 
 
 @pytest.mark.story("SCRUM-27")
+def test_require_role_accepts_any_one_of_several_allowed_roles() -> None:
+    token = security.create_access_token("user-id", ["venue_staff"])
+    user = get_current_user(_credentials(token))
+
+    assert require_role(Role.COORDINATOR, Role.VENUE_STAFF)(user) == user
+
+
+@pytest.mark.story("SCRUM-27")
 def test_require_role_forbids_missing_role() -> None:
     token = security.create_access_token("user-id", ["attendee"])
     user = get_current_user(_credentials(token))

@@ -32,15 +32,17 @@ export default function MyEventRequests() {
     enabled: token !== null,
   })
 
+  // The mutation variable is the whole request, so the outcome message can name it
+  // without looking it up in the list again afterwards.
   const submit = useMutation({
-    mutationFn: (id: string) => submitEventRequest(token ?? '', id),
-    onSuccess: (request) => {
-      setOutcome({ kind: 'submitted', request })
+    mutationFn: (request: EventRequest) => submitEventRequest(token ?? '', request.id),
+    onSuccess: (submitted) => {
+      setOutcome({ kind: 'submitted', name: submitted.name })
       void queryClient.invalidateQueries({ queryKey })
     },
-    onError: (error, id) => {
+    onError: (error, request) => {
       if (error instanceof SubmissionRejectedError) {
-        setOutcome({ kind: 'incomplete', id, problems: error.problems })
+        setOutcome({ kind: 'incomplete', name: request.name, problems: error.problems })
       } else {
         setOutcome({ kind: 'failed', message: error.message })
       }
@@ -68,13 +70,13 @@ export default function MyEventRequests() {
               <div>
                 <p className="font-medium">{request.name ?? 'Untitled request'}</p>
                 <p className="text-sm text-slate-500">
-                  <StatusLabel status={request.status} />
+                  {request.status === 'submitted' ? 'Submitted' : 'Draft'}
                 </p>
               </div>
               {request.status === 'draft' ? (
                 <button
                   type="button"
-                  onClick={() => submit.mutate(request.id)}
+                  onClick={() => submit.mutate(request)}
                   disabled={submit.isPending}
                   className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
                 >
@@ -90,33 +92,29 @@ export default function MyEventRequests() {
         </ul>
       )}
 
-      {outcome && <OutcomeMessage outcome={outcome} requests={requests.data ?? []} />}
+      {outcome && <OutcomeMessage outcome={outcome} />}
     </section>
   )
 }
 
 type Outcome =
-  | { kind: 'submitted'; request: EventRequest }
-  | { kind: 'incomplete'; id: string; problems: FieldProblem[] }
+  | { kind: 'submitted'; name: string | null }
+  | { kind: 'incomplete'; name: string | null; problems: FieldProblem[] }
   | { kind: 'failed'; message: string }
 
-function StatusLabel({ status }: { status: EventRequest['status'] }) {
-  return status === 'submitted' ? <>Submitted</> : <>Draft</>
-}
-
-function OutcomeMessage({ outcome, requests }: { outcome: Outcome; requests: EventRequest[] }) {
+function OutcomeMessage({ outcome }: { outcome: Outcome }) {
   if (outcome.kind === 'submitted') {
     return (
       <p role="status" className="mt-4 rounded bg-green-50 p-3 text-sm text-green-800">
-        “{outcome.request.name}” has been submitted for review. Its status is now Submitted.
+        “{outcome.name ?? 'Your request'}” has been submitted for review. Its status is now
+        Submitted.
       </p>
     )
   }
   if (outcome.kind === 'incomplete') {
-    const name = requests.find((r) => r.id === outcome.id)?.name ?? 'This request'
     return (
       <div role="alert" className="mt-4 rounded bg-amber-50 p-3 text-sm text-amber-900">
-        <p>“{name}” cannot be submitted yet. Please correct:</p>
+        <p>“{outcome.name ?? 'This request'}” cannot be submitted yet. Please correct:</p>
         <ul className="mt-2 list-disc pl-5">
           {outcome.problems.map((problem) => (
             <li key={problem.field}>

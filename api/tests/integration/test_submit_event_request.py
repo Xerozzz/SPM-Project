@@ -69,11 +69,14 @@ async def test_a_complete_draft_is_submitted_and_confirmed(
     body = response.json()
     assert body["id"] == str(draft.id)
     assert body["status"] == "submitted"
-    assert body["submitted_at"] is not None
 
     db.refresh(draft)
     assert draft.status is EventStatus.SUBMITTED
+    # submitted_at is the moment of submission, timezone-aware, and what the API returned.
     assert draft.submitted_at is not None
+    assert draft.submitted_at.tzinfo is not None
+    assert abs(datetime.now(UTC) - draft.submitted_at) < timedelta(seconds=30)
+    assert body["submitted_at"] == draft.submitted_at.isoformat().replace("+00:00", "Z")
 
 
 # --------------------------------------------------------------------------- AC2
@@ -132,6 +135,42 @@ async def test_a_draft_can_still_be_edited(
 
     assert response.status_code == 200
     assert response.json()["name"] == "Orientation Week"
+
+
+@pytest.mark.story("SCRUM-46")
+async def test_a_draft_field_can_be_cleared_with_null(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # A draft may be incomplete, so an explicit null is a real edit, not an omission:
+    # exclude_unset keeps it, exclude_none would have dropped it.
+    organiser = make_user("organiser")
+    draft = make_draft(db, organiser)
+
+    async with make_client(organiser) as client:
+        response = await client.patch(f"/api/event-requests/{draft.id}", json={"description": None})
+
+    assert response.status_code == 200
+    assert response.json()["description"] is None
+    db.refresh(draft)
+    assert draft.description is None
+
+
+@pytest.mark.story("SCRUM-46")
+async def test_an_unknown_field_is_rejected_not_ignored(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # A typo in a field name must not look like a successful save.
+    organiser = make_user("organiser")
+    draft = make_draft(db, organiser)
+
+    async with make_client(organiser) as client:
+        response = await client.patch(
+            f"/api/event-requests/{draft.id}", json={"descripton": "typo"}
+        )
+
+    assert response.status_code == 422
+    db.refresh(draft)
+    assert draft.description == "Half-day programme with talks and a campus tour."
 
 
 @pytest.mark.story("SCRUM-46")
@@ -305,6 +344,21 @@ async def test_an_organiser_lists_only_their_own_requests(
 
     assert response.status_code == 200
     assert [row["id"] for row in response.json()] == [str(own.id)]
+
+
+@pytest.mark.story("SCRUM-46")
+async def test_requests_are_listed_newest_first(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    organiser = make_user("organiser")
+    now = datetime.now(UTC)
+    older = make_draft(db, organiser, name="Older", created_at=now - timedelta(days=2))
+    newer = make_draft(db, organiser, name="Newer", created_at=now - timedelta(days=1))
+
+    async with make_client(organiser) as client:
+        response = await client.get("/api/event-requests")
+
+    assert [row["id"] for row in response.json()] == [str(newer.id), str(older.id)]
 
 
 @pytest.mark.story("SCRUM-46")
