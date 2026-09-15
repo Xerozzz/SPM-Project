@@ -22,9 +22,9 @@ def request_body(**overrides: object) -> dict[str, object]:
         "start_at": "2026-12-01T09:00:00+08:00",
         "end_at": "2026-12-01T13:00:00+08:00",
         "expected_attendance": 200,
-        "venue_requirement": "Auditorium for 200 people",
+        "venue_requirement": "Auditorium-type venue",
         "accessibility_requirement": "Step-free access and a hearing loop",
-        "equipment_requirement": "Projector and two microphones",
+        "equipment_requirement": "Projector-type requirement",
         "layout_requirement": "Theatre style",
         "registration_requirement": "Open registration, capped at 200",
     }
@@ -45,8 +45,8 @@ async def test_an_organiser_creates_a_complete_unsubmitted_event_request(
     body = response.json()
     assert body["status"] == "draft"
     assert body["submitted_at"] is None
-    assert body["venue_requirement"] == "Auditorium for 200 people"
-    assert body["equipment_requirement"] == "Projector and two microphones"
+    assert body["venue_requirement"] == "Auditorium-type venue"
+    assert body["equipment_requirement"] == "Projector-type requirement"
     # The timezone-aware input is normalised to UTC before it reaches storage.
     assert body["start_at"] == "2026-12-01T01:00:00Z"
 
@@ -73,6 +73,27 @@ async def test_missing_or_invalid_fields_are_identified_without_creating_a_draft
         "name",
         "expected_attendance",
         "end_at",
+    }
+    assert db.query(EventRequest).count() == 0
+
+
+@pytest.mark.story("SCRUM-28")
+async def test_unknown_catalogue_requirements_are_rejected_without_creating_a_draft(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    organiser = make_user("organiser")
+    invalid = request_body(
+        venue_requirement="A room chosen by the organiser",
+        equipment_requirement="Any available projector",
+    )
+
+    async with make_client(organiser) as client:
+        response = await client.post("/api/event-requests", json=invalid)
+
+    assert response.status_code == 422
+    assert {problem["field"] for problem in response.json()["detail"]} == {
+        "venue_requirement",
+        "equipment_requirement",
     }
     assert db.query(EventRequest).count() == 0
 

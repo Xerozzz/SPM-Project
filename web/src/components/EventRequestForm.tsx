@@ -3,8 +3,11 @@ import { type FormEvent, type ReactNode, useState } from 'react'
 
 import {
   createEventRequest,
+  EQUIPMENT_REQUIREMENTS,
+  EventRequestValidationError,
   type EventRequestCreate,
   FIELD_LABELS,
+  VENUE_REQUIREMENTS,
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
 import {
@@ -50,19 +53,6 @@ const textFields: Array<{
 // These are requirement categories from the initial ConnectSphere catalogue, not individual
 // rooms or equipment items. Selecting one describes a need for later review; it cannot allocate
 // a resource during submission.
-const venueRequirementOptions = [
-  'Auditorium-type venue',
-  'Lecture theatre-type venue',
-  'Seminar room-type venue',
-  'Outdoor event space',
-]
-const equipmentRequirementOptions = [
-  'Projector-type requirement',
-  'Microphone-type requirement',
-  'PA system-type requirement',
-  'Display screen-type requirement',
-]
-
 /**
  * SCRUM-28: collect a new event request. The venue and equipment fields describe needs; they
  * never choose catalogue items or reserve resources.
@@ -76,6 +66,16 @@ export default function EventRequestForm() {
 
   const createRequest = useMutation({
     mutationFn: (request: EventRequestCreate) => createEventRequest(token ?? '', request),
+    onError: (error) => {
+      if (error instanceof EventRequestValidationError) {
+        setErrors((current) => ({
+          ...current,
+          ...Object.fromEntries(
+            error.problems.map((problem) => [problem.field, problem.reason]),
+          ),
+        }))
+      }
+    },
     onSuccess: (request) => {
       setValues(initialValues)
       setErrors({})
@@ -139,7 +139,7 @@ export default function EventRequestForm() {
         ))}
         <CatalogueRequirementField
           name="venue_requirement"
-          options={venueRequirementOptions}
+          options={VENUE_REQUIREMENTS}
           placeholder="Select a venue"
           value={values.venue_requirement}
           error={errors.venue_requirement}
@@ -147,7 +147,7 @@ export default function EventRequestForm() {
         />
         <CatalogueRequirementField
           name="equipment_requirement"
-          options={equipmentRequirementOptions}
+          options={EQUIPMENT_REQUIREMENTS}
           placeholder="Select equipment"
           value={values.equipment_requirement}
           error={errors.equipment_requirement}
@@ -215,7 +215,7 @@ function CatalogueRequirementField({
   onChange,
 }: {
   name: 'venue_requirement' | 'equipment_requirement'
-  options: string[]
+  options: readonly string[]
   placeholder: string
   value: string
   error?: string

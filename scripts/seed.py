@@ -11,8 +11,6 @@ every start, so a fresh `docker compose up` is immediately usable.
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import text
-
 from core.database import Session, SessionLocal
 from core.security import hash_password
 from domain.roles import Role
@@ -50,9 +48,9 @@ def _sample_event_requests() -> list[tuple[uuid.UUID, dict[str, object]]]:
         "start_at": start,
         "end_at": start + timedelta(hours=4),
         "expected_attendance": 200,
-        "venue_requirement": "Auditorium seating at least 200",
+        "venue_requirement": "Auditorium-type venue",
         "accessibility_requirement": "Step-free access and a hearing loop",
-        "equipment_requirement": "Projector, two handheld microphones",
+        "equipment_requirement": "Projector-type requirement",
         "layout_requirement": "Theatre style",
         "registration_requirement": "Open registration, capped at 200",
     }
@@ -64,7 +62,7 @@ def _sample_event_requests() -> list[tuple[uuid.UUID, dict[str, object]]]:
         "start_at": start + timedelta(days=14),
         "end_at": None,
         "expected_attendance": None,
-        "venue_requirement": "Large open-plan space with power at every table",
+        "venue_requirement": "Outdoor event space",
         "accessibility_requirement": None,
         "equipment_requirement": None,
         "layout_requirement": None,
@@ -91,7 +89,6 @@ def _seed_event_requests(db: Session) -> None:
     organiser = users_repo.get_by_email(db, "organiser@example.com")
     if organiser is None:
         return
-    db.execute(text("UPDATE event_requests SET status = 'draft' WHERE status = 'approved'"))
     for sample_id, fields in _sample_event_requests():
         existing = event_requests_repo.get(db, sample_id)
         if existing is not None:

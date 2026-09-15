@@ -130,6 +130,36 @@ test('creates a complete event request without submitting it', async () => {
   expect(fetchMock).toHaveBeenCalledTimes(1)
 })
 
+test('shows server validation errors beside the relevant fields', async () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+    new Response(
+      JSON.stringify({ detail: [{ field: 'name', reason: 'must be unique' }] }),
+      { status: 422, headers: { 'Content-Type': 'application/json' } },
+    ),
+  )
+  renderForm()
+  fillValidForm()
+  fireEvent.click(screen.getByRole('button', { name: 'Create event request' }))
+
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+  expect(screen.getByLabelText('Name *').parentElement).toHaveTextContent('must be unique')
+})
+
+test('maps missing-field server errors beside the relevant fields', async () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+    new Response(
+      JSON.stringify({ detail: [{ loc: ['body', 'name'], msg: 'Field required' }] }),
+      { status: 422, headers: { 'Content-Type': 'application/json' } },
+    ),
+  )
+  renderForm()
+  fillValidForm()
+  fireEvent.click(screen.getByRole('button', { name: 'Create event request' }))
+
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+  expect(screen.getByLabelText('Name *').parentElement).toHaveTextContent('Field required')
+})
+
 test('does not create an incomplete form', () => {
   const fetchMock = vi.spyOn(globalThis, 'fetch')
   renderForm()

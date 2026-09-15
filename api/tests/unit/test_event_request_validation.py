@@ -8,9 +8,12 @@ import pytest
 
 from domain.event_request import (
     REQUIRED_TEXT_FIELDS,
+    EQUIPMENT_REQUIREMENTS,
     EventRequestFields,
     FieldProblem,
+    VENUE_REQUIREMENTS,
     field_names,
+    validate_catalogue_requirements,
     validate_event_request,
 )
 
@@ -25,9 +28,9 @@ def complete_request() -> EventRequestFields:
         start_at=NOW + timedelta(days=30),
         end_at=NOW + timedelta(days=30, hours=4),
         expected_attendance=200,
-        venue_requirement="Auditorium, at least 200 seats",
+        venue_requirement="Auditorium-type venue",
         accessibility_requirement="Step-free access and hearing loop",
-        equipment_requirement="Projector, two microphones",
+        equipment_requirement="Projector-type requirement",
         layout_requirement="Theatre style",
         registration_requirement="Open registration, capped at 200",
     )
@@ -138,6 +141,30 @@ def test_missing_attendance_is_required_not_invalid() -> None:
     assert validate_event_request(request, NOW) == [
         FieldProblem("expected_attendance", "is required")
     ]
+
+
+@pytest.mark.story("SCRUM-28")
+def test_catalogue_requirements_accept_the_temporary_options() -> None:
+    request = complete_request()
+
+    assert request.venue_requirement in VENUE_REQUIREMENTS
+    assert request.equipment_requirement in EQUIPMENT_REQUIREMENTS
+    assert validate_catalogue_requirements(request) == []
+
+
+@pytest.mark.story("SCRUM-28")
+def test_catalogue_requirements_reject_unknown_values_but_allow_empty_draft_fields() -> None:
+    invalid = replace(
+        EventRequestFields(),
+        venue_requirement="A room chosen by the organiser",
+        equipment_requirement="Any available projector",
+    )
+
+    assert validate_catalogue_requirements(invalid) == [
+        FieldProblem("venue_requirement", "is not a catalogue option"),
+        FieldProblem("equipment_requirement", "is not a catalogue option"),
+    ]
+    assert validate_catalogue_requirements(EventRequestFields()) == []
 
 
 @pytest.mark.story("SCRUM-46")
