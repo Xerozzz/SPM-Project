@@ -47,12 +47,12 @@ class EventRequestLockedError(Exception):
         self.status = status
 
 
-# The whole state machine, as data. A transition that is not listed here does not exist.
-_ALLOWED_TRANSITIONS: frozenset[tuple[EventStatus, EventStatus]] = frozenset(
-    {
-        (EventStatus.DRAFT, EventStatus.SUBMITTED),
-    }
-)
+# The whole state machine, as data: each legal move and the action that performs it. A
+# transition that is not listed here does not exist, and an entry added here is offered by
+# allowed_actions without anything else changing.
+_ALLOWED_TRANSITIONS: dict[tuple[EventStatus, EventStatus], EventAction] = {
+    (EventStatus.DRAFT, EventStatus.SUBMITTED): EventAction.SUBMIT,
+}
 
 
 def transition(current: EventStatus, target: EventStatus) -> EventStatus:
@@ -81,9 +81,7 @@ def ensure_editable(status: EventStatus) -> None:
 
 def allowed_actions(status: EventStatus) -> frozenset[EventAction]:
     """SCRUM-35: what may be done to a request in `status`, from the rules above."""
-    actions: set[EventAction] = set()
+    actions = {action for (source, _), action in _ALLOWED_TRANSITIONS.items() if source == status}
     if is_editable(status):
         actions.add(EventAction.EDIT)
-    if (status, EventStatus.SUBMITTED) in _ALLOWED_TRANSITIONS:
-        actions.add(EventAction.SUBMIT)
     return frozenset(actions)

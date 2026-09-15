@@ -3,6 +3,7 @@
 import pytest
 
 from domain.event_status import (
+    _ALLOWED_TRANSITIONS,
     EventAction,
     EventRequestLockedError,
     EventStatus,
@@ -69,11 +70,17 @@ def test_a_submitted_request_permits_nothing() -> None:
 
 
 @pytest.mark.story("SCRUM-35")
-def test_every_status_has_an_answer() -> None:
-    # No status may be missing from the table, or the UI would render no actions at all
-    # for it and the omission would go unnoticed.
-    for status in EventStatus:
-        assert isinstance(allowed_actions(status), frozenset)
+def test_every_transition_offers_its_action() -> None:
+    # A transition added to the table whose action never reaches allowed_actions fails here,
+    # so adding a move cannot silently leave the UI without its button.
+    for (source, _), action in _ALLOWED_TRANSITIONS.items():
+        assert action in allowed_actions(source)
+
+
+@pytest.mark.story("SCRUM-35")
+def test_every_action_except_edit_comes_from_a_transition() -> None:
+    # EDIT is not a transition; every other action must be one, or it can never be offered.
+    assert set(_ALLOWED_TRANSITIONS.values()) == set(EventAction) - {EventAction.EDIT}
 
 
 @pytest.mark.story("SCRUM-35")

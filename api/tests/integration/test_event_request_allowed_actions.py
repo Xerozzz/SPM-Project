@@ -34,6 +34,7 @@ async def test_a_submitted_request_is_listed_with_no_actions(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     organiser = make_user("organiser")
+    # Unreferenced, but submit assigns a coordinator round-robin and needs one to exist.
     make_user("coordinator")
     draft = make_draft(db, organiser)
 
@@ -51,6 +52,7 @@ async def test_submitting_a_draft_returns_its_new_actions(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     organiser = make_user("organiser")
+    # Unreferenced, but submit assigns a coordinator round-robin and needs one to exist.
     make_user("coordinator")
     draft = make_draft(db, organiser)
 
