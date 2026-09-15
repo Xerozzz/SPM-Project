@@ -3,9 +3,12 @@
 import pytest
 
 from domain.event_status import (
+    _ALLOWED_TRANSITIONS,
+    EventAction,
     EventRequestLockedError,
     EventStatus,
     InvalidTransitionError,
+    allowed_actions,
     ensure_editable,
     is_editable,
     submit,
@@ -54,3 +57,33 @@ def test_ensure_editable_passes_for_a_draft_and_raises_after_submission() -> Non
 def test_status_values_are_lowercase_strings_for_storage() -> None:
     assert EventStatus.SUBMITTED.value == "submitted"
     assert EventStatus("draft") is EventStatus.DRAFT
+
+
+@pytest.mark.story("SCRUM-35")
+def test_a_draft_may_be_edited_and_submitted() -> None:
+    assert allowed_actions(EventStatus.DRAFT) == {EventAction.EDIT, EventAction.SUBMIT}
+
+
+@pytest.mark.story("SCRUM-35")
+def test_a_submitted_request_permits_nothing() -> None:
+    assert allowed_actions(EventStatus.SUBMITTED) == frozenset()
+
+
+@pytest.mark.story("SCRUM-35")
+def test_every_transition_offers_its_action() -> None:
+    # A transition added to the table whose action never reaches allowed_actions fails here,
+    # so adding a move cannot silently leave the UI without its button.
+    for (source, _), action in _ALLOWED_TRANSITIONS.items():
+        assert action in allowed_actions(source)
+
+
+@pytest.mark.story("SCRUM-35")
+def test_every_action_except_edit_comes_from_a_transition() -> None:
+    # EDIT is not a transition; every other action must be one, or it can never be offered.
+    assert set(_ALLOWED_TRANSITIONS.values()) == set(EventAction) - {EventAction.EDIT}
+
+
+@pytest.mark.story("SCRUM-35")
+def test_actions_are_lowercase_strings_for_the_api() -> None:
+    assert EventAction.SUBMIT.value == "submit"
+    assert EventAction.EDIT.value == "edit"
