@@ -8,7 +8,6 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     computed_field,
-    ValidationInfo,
     field_validator,
 )
 
@@ -16,10 +15,9 @@ from domain.event_status import EventAction, EventStatus, allowed_actions
 
 
 class EventRequestCreate(BaseModel):
-    """The complete information collected when an organiser starts a new draft (SCRUM-28).
+    """The complete information collected when an organiser creates an event request (SCRUM-28).
 
-    A request created through this form is deliberately still a draft.  The separate submit
-    endpoint is the only operation that moves it to review.
+    The separate submit endpoint is responsible for moving a created request to review.
     """
 
     name: str
@@ -34,41 +32,10 @@ class EventRequestCreate(BaseModel):
     layout_requirement: str
     registration_requirement: str
 
-    @field_validator(
-        "name",
-        "purpose",
-        "description",
-        "venue_requirement",
-        "accessibility_requirement",
-        "equipment_requirement",
-        "layout_requirement",
-        "registration_requirement",
-    )
-    @classmethod
-    def _required_text(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("is required")
-        return value
-
     @field_validator("start_at", "end_at")
     @classmethod
     def _to_utc(cls, value: datetime) -> datetime:
         return value.astimezone(UTC)
-
-    @field_validator("expected_attendance")
-    @classmethod
-    def _positive_attendance(cls, value: int) -> int:
-        if value <= 0:
-            raise ValueError("must be a positive whole number")
-        return value
-
-    @field_validator("end_at")
-    @classmethod
-    def _end_after_start(cls, value: datetime, info: ValidationInfo) -> datetime:
-        start_at = info.data.get("start_at")
-        if isinstance(start_at, datetime) and value <= start_at:
-            raise ValueError("must be after start_at")
-        return value
 
 
 class EventRequestUpdate(BaseModel):
@@ -122,12 +89,6 @@ class EventRequestRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     submitted_at: datetime | None
-    decided_by_id: uuid.UUID | None
-    decided_at: datetime | None
-    rejection_reason: str | None
-    clarification_requested_by_id: uuid.UUID | None
-    clarification_requested_at: datetime | None
-    clarification_request: str | None
 
     @computed_field
     def status_permits(self) -> list[EventAction]:

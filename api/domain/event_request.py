@@ -28,7 +28,7 @@ REQUIRED_TEXT_FIELDS: tuple[str, ...] = (
 @dataclass(frozen=True)
 class EventRequestFields:
     """The submittable content of an event request. Everything is optional here because a
-    draft may be partially filled in; completeness is what `validate_for_submission` checks."""
+    draft may be partially filled in; completeness is what `validate_event_request` checks."""
 
     name: str | None = None
     purpose: str | None = None
@@ -60,8 +60,8 @@ def _is_aware(value: datetime) -> bool:
     return value.tzinfo is not None and value.tzinfo.utcoffset(value) is not None
 
 
-def validate_for_submission(request: EventRequestFields, now: datetime) -> list[FieldProblem]:
-    """Return every problem that blocks submission; an empty list means it may proceed."""
+def validate_event_request(request: EventRequestFields, now: datetime) -> list[FieldProblem]:
+    """Return every business-rule problem; an empty list means it is complete and valid."""
     problems: list[FieldProblem] = []
 
     for name in REQUIRED_TEXT_FIELDS:

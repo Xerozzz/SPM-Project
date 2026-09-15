@@ -64,10 +64,13 @@ def list_mine(user: Organiser, db: Db) -> list[EventRequestRead]:
 
 
 @router.post("", response_model=EventRequestRead, status_code=status.HTTP_201_CREATED)
-def create_draft(body: EventRequestCreate, user: Organiser, db: Db) -> EventRequestRead:
-    """Create a complete, unsubmitted draft from the organiser's event-request form."""
+def create_event_request(body: EventRequestCreate, user: Organiser, db: Db) -> EventRequestRead:
+    """Create a complete event request without submitting it for review."""
     fields = EventRequestFields(**body.model_dump())
-    row = service.create(db, _organiser_id(user), fields)
+    try:
+        row = service.create(db, _organiser_id(user), fields, datetime.now(UTC))
+    except _REFUSALS as exc:
+        raise _http_error(exc) from exc
     return EventRequestRead.model_validate(row)
 
 

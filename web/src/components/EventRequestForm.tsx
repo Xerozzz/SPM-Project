@@ -5,8 +5,6 @@ import {
   createEventRequest,
   type EventRequestCreate,
   FIELD_LABELS,
-  SubmissionRejectedError,
-  submitEventRequest,
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
 import {
@@ -66,8 +64,8 @@ const equipmentRequirementOptions = [
 ]
 
 /**
- * SCRUM-28: collect and submit a new event request. The venue and equipment fields describe
- * needs; they never choose catalogue items or reserve resources.
+ * SCRUM-28: collect a new event request. The venue and equipment fields describe needs; they
+ * never choose catalogue items or reserve resources.
  */
 export default function EventRequestForm() {
   const { token } = useAuth()
@@ -76,28 +74,13 @@ export default function EventRequestForm() {
   const [errors, setErrors] = useState<FieldErrors>({})
   const [outcome, setOutcome] = useState<string | null>(null)
 
-  const createAndSubmit = useMutation({
-    mutationFn: async (request: EventRequestCreate) => {
-      const draft = await createEventRequest(token ?? '', request)
-      return submitEventRequest(token ?? '', draft.id)
-    },
+  const createRequest = useMutation({
+    mutationFn: (request: EventRequestCreate) => createEventRequest(token ?? '', request),
     onSuccess: (request) => {
       setValues(initialValues)
       setErrors({})
       void queryClient.invalidateQueries({ queryKey: ['event-requests', 'mine', token] })
-      setOutcome(`“${request.name}” has been submitted for review.`)
-    },
-    onError: (error) => {
-      if (error instanceof SubmissionRejectedError) {
-        const serverErrors: FieldErrors = {}
-        for (const problem of error.problems) {
-          if (problem.field in FIELD_LABELS) {
-            serverErrors[problem.field as FieldName] = problem.reason
-          }
-        }
-        setErrors(serverErrors)
-        void queryClient.invalidateQueries({ queryKey: ['event-requests', 'mine', token] })
-      }
+      setOutcome(`“${request.name}” has been created.`)
     },
   })
 
@@ -122,19 +105,19 @@ export default function EventRequestForm() {
     }
   }
 
-  function submitForReview(event: FormEvent<HTMLFormElement>) {
+  function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const request = requestBody()
-    if (request) createAndSubmit.mutate(request)
+    if (request) createRequest.mutate(request)
   }
 
   return (
     <section className="mt-6 rounded-lg border border-slate-200 p-4">
       <h2 className="font-medium">New event request</h2>
       <p className="mt-1 text-sm text-slate-500">
-        Fields marked * are required before a request can be submitted.
+        Fields marked * are required to create a request.
       </p>
-      <form className="mt-4 space-y-4" noValidate onSubmit={submitForReview}>
+      <form className="mt-4 space-y-4" noValidate onSubmit={create}>
         {textFields.map(({ name, multiline }) => (
           <Field key={name} name={name} error={errors[name]}>
             {multiline ? (
@@ -201,9 +184,9 @@ export default function EventRequestForm() {
             className="w-full rounded border border-slate-300 p-2"
           />
         </Field>
-        {createAndSubmit.isError && !(createAndSubmit.error instanceof SubmissionRejectedError) && (
+        {createRequest.isError && (
           <p role="alert" className="text-sm text-red-600">
-            {createAndSubmit.error.message}. Your entered details are still available to edit.
+            {createRequest.error.message}. Your entered details are still available to edit.
           </p>
         )}
         {outcome && (
@@ -213,10 +196,10 @@ export default function EventRequestForm() {
         )}
         <button
           type="submit"
-          disabled={createAndSubmit.isPending}
+          disabled={createRequest.isPending}
           className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
         >
-          Submit for review
+          Create event request
         </button>
       </form>
     </section>

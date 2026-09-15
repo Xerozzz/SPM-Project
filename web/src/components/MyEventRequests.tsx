@@ -109,9 +109,6 @@ type Outcome =
 
 function StatusLabel({ status }: { status: EventRequest['status'] }) {
   if (status === 'submitted') return <>Submitted</>
-  if (status === 'approved') return <>Approved</>
-  if (status === 'rejected') return <>Rejected</>
-  if (status === 'clarification_requested') return <>Clarification requested</>
   return <>Draft</>
 }
 

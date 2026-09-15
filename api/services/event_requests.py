@@ -14,7 +14,7 @@ from domain.event_request import (
     EventRequestFields,
     FieldProblem,
     field_names,
-    validate_for_submission,
+    validate_event_request,
 )
 from models.event_request import EventRequest
 from repositories import event_requests as repo
@@ -45,8 +45,13 @@ def list_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventReques
     return repo.list_for_organiser(db, organiser_id)
 
 
-def create(db: Session, organiser_id: uuid.UUID, fields: EventRequestFields) -> EventRequest:
-    """Create a new request as a draft; creating it never submits or allocates anything."""
+def create(
+    db: Session, organiser_id: uuid.UUID, fields: EventRequestFields, now: datetime
+) -> EventRequest:
+    """Create a new request without submitting or allocating anything."""
+    problems = validate_event_request(fields, now)
+    if problems:
+        raise IncompleteEventRequestError(problems)
     request = EventRequest(organiser_id=organiser_id, **fields.__dict__)
     return repo.save(db, repo.add(db, request))
 
@@ -70,7 +75,7 @@ def submit(
     fields. AC4 holds by construction — nothing here touches venues, equipment or
     registration, and no other code runs on submission."""
     request = _owned_by(db, request_id, organiser_id)
-    problems = validate_for_submission(_fields_of(request), now)
+    problems = validate_event_request(_fields_of(request), now)
     if problems:
         raise IncompleteEventRequestError(problems)
     # The only place status changes, and the value comes from the state machine

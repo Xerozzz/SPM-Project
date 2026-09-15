@@ -1,4 +1,4 @@
-"""SCRUM-28: organisers create a complete event request as an unsubmitted draft."""
+"""SCRUM-28: organisers create a complete event request without submitting it."""
 
 from collections.abc import Callable
 
@@ -33,7 +33,7 @@ def request_body(**overrides: object) -> dict[str, object]:
 
 
 @pytest.mark.story("SCRUM-28")
-async def test_an_organiser_creates_a_complete_unsubmitted_draft(
+async def test_an_organiser_creates_a_complete_unsubmitted_event_request(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     organiser = make_user("organiser")
@@ -69,9 +69,11 @@ async def test_missing_or_invalid_fields_are_identified_without_creating_a_draft
 
     assert response.status_code == 422
     details = response.json()["detail"]
-    assert any(problem["loc"][-1] == "name" for problem in details)
-    assert any(problem["loc"][-1] == "expected_attendance" for problem in details)
-    assert any(problem["loc"][-1] == "end_at" for problem in details)
+    assert {problem["field"] for problem in details} == {
+        "name",
+        "expected_attendance",
+        "end_at",
+    }
     assert db.query(EventRequest).count() == 0
 
 

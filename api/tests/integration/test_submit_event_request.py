@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from core.database import SessionLocal
@@ -359,6 +360,27 @@ async def test_requests_are_listed_newest_first(
         response = await client.get("/api/event-requests")
 
     assert [row["id"] for row in response.json()] == [str(newer.id), str(older.id)]
+
+
+@pytest.mark.story("SCRUM-46")
+async def test_legacy_approved_statuses_are_normalised_before_listing(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    organiser = make_user("organiser")
+    draft = make_draft(db, organiser)
+    db.execute(
+        text("UPDATE event_requests SET status = 'approved' WHERE id = :id"),
+        {"id": draft.id},
+    )
+    db.flush()
+
+    async with make_client(organiser) as client:
+        response = await client.get("/api/event-requests")
+
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()] == [str(draft.id)]
+    db.refresh(draft)
+    assert draft.status is EventStatus.DRAFT
 
 
 @pytest.mark.story("SCRUM-46")

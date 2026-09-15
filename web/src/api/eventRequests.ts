@@ -2,8 +2,7 @@
  * Event request API calls for organisers (SCRUM-46). Mirrors api/schemas/event_requests.py.
  */
 
-export type EventStatus =
-  'draft' | 'submitted' | 'approved' | 'rejected' | 'clarification_requested'
+export type EventStatus = 'draft' | 'submitted'
 
 export type EventAction = 'edit' | 'submit'
 
@@ -26,15 +25,9 @@ export interface EventRequest {
   submitted_at: string | null
   /** What the status allows, regardless of who is asking (SCRUM-35). Not an authorisation. */
   status_permits: EventAction[]
-  decided_by_id: string | null
-  decided_at: string | null
-  rejection_reason: string | null
-  clarification_requested_by_id: string | null
-  clarification_requested_at: string | null
-  clarification_request: string | null
 }
 
-/** The fields required to start a new draft request (SCRUM-28). */
+/** The fields required to create an event request (SCRUM-28). */
 export interface EventRequestCreate {
   name: string
   purpose: string

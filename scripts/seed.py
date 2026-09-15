@@ -89,6 +89,7 @@ def _seed_event_requests(db: Session) -> None:
     organiser = users_repo.get_by_email(db, "organiser@example.com")
     if organiser is None:
         return
+    db.execute("UPDATE event_requests SET status = 'draft' WHERE status = 'approved'")
     for sample_id, fields in _sample_event_requests():
         existing = event_requests_repo.get(db, sample_id)
         if existing is not None:
