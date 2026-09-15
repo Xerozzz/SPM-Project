@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 import httpx
 import pytest
@@ -10,6 +11,13 @@ from models.user import User
 
 MakeUser = Callable[..., User]
 MakeClient = Callable[[User | None], httpx.AsyncClient]
+
+
+def json_dict(response: httpx.Response) -> dict[str, object]:
+    body: object = response.json()
+    assert isinstance(body, dict)
+    assert all(isinstance(key, str) for key in body)
+    return cast(dict[str, object], body)
 
 
 async def create_draft(client: httpx.AsyncClient) -> dict[str, object]:
@@ -24,7 +32,7 @@ async def create_draft(client: httpx.AsyncClient) -> dict[str, object]:
         },
     )
     assert response.status_code == 201
-    return response.json()
+    return json_dict(response)
 
 
 async def create_complete_draft(client: httpx.AsyncClient) -> dict[str, object]:
@@ -46,7 +54,7 @@ async def create_complete_draft(client: httpx.AsyncClient) -> dict[str, object]:
         },
     )
     assert response.status_code == 201
-    return response.json()
+    return json_dict(response)
 
 
 @pytest.mark.story("SCRUM-29")
