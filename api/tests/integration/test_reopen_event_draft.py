@@ -1,12 +1,16 @@
 """SCRUM-29: the creating organiser can find, reopen, and keep editing a draft."""
 
+import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
 import httpx
 import pytest
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
 
+from core.dependencies import EventAccess, require_event_access
 from models.user import User
 
 MakeUser = Callable[..., User]
@@ -18,6 +22,10 @@ def json_dict(response: httpx.Response) -> dict[str, object]:
     assert isinstance(body, dict)
     assert all(isinstance(key, str) for key in body)
     return cast(dict[str, object], body)
+
+
+def claims_for(user: User) -> dict[str, object]:
+    return {"sub": str(user.id), "roles": list(user.roles)}
 
 
 async def create_draft(client: httpx.AsyncClient) -> dict[str, object]:
@@ -97,6 +105,25 @@ async def test_creator_can_continue_editing_with_existing_draft_edit_flow(
     assert edit.json()["description"] == "Updated after reopening"
     assert reopened.status_code == 200
     assert reopened.json()["description"] == "Updated after reopening"
+
+
+@pytest.mark.story("SCRUM-29")
+async def test_shared_event_access_allows_same_org_view_but_not_edit(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    creator = make_user("organiser")
+    colleague = make_user("organiser", organisation_id=creator.organisation_id)
+
+    async with make_client(creator) as creator_client:
+        draft = await create_draft(creator_client)
+
+    request_id = uuid.UUID(str(draft["id"]))
+    viewed = require_event_access(EventAccess.VIEW)(request_id, claims_for(colleague), db)
+
+    assert viewed.id == request_id
+    with pytest.raises(HTTPException) as exc:
+        require_event_access(EventAccess.EDIT)(request_id, claims_for(colleague), db)
+    assert exc.value.status_code == 403
 
 
 @pytest.mark.story("SCRUM-29")
@@ -221,6 +248,26 @@ async def test_coordinator_cannot_view_a_draft(
         response = await coordinator_client.get(f"/api/event-requests/{draft['id']}")
 
     assert response.status_code == 403
+
+
+@pytest.mark.story("SCRUM-29")
+async def test_coordinator_can_view_a_submitted_request(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    creator = make_user("organiser")
+    coordinator = make_user("coordinator")
+
+    async with make_client(creator) as creator_client:
+        draft = await create_complete_draft(creator_client)
+        submitted = await creator_client.post(f"/api/event-requests/{draft['id']}/submit")
+
+    async with make_client(coordinator) as coordinator_client:
+        response = await coordinator_client.get(f"/api/event-requests/{draft['id']}")
+
+    assert submitted.status_code == 200
+    assert response.status_code == 200
+    assert response.json()["id"] == draft["id"]
+    assert response.json()["status"] == "submitted"
 
 
 @pytest.mark.story("SCRUM-29")

@@ -88,27 +88,6 @@ def list_visible_drafts_for_organiser(db: Session, organiser_id: uuid.UUID) -> l
     return repo.list_drafts_for_organisation(db, organiser.organisation_id)
 
 
-def get_for_organiser(db: Session, request_id: uuid.UUID, organiser_id: uuid.UUID) -> EventRequest:
-    """Return one request visible to this organiser.
-
-    Owners can read their own requests in any status. Other organisers in the same
-    organisation can read drafts only, for SCRUM-29's shared organisation draft view.
-    """
-    request = repo.get(db, request_id)
-    if request is None:
-        raise EventRequestNotFoundError
-    if request.organiser_id == organiser_id:
-        return request
-    viewer = _user_or_forbidden(db, organiser_id)
-    creator = _user_or_forbidden(db, request.organiser_id)
-    if (
-        request.status is event_status.EventStatus.DRAFT
-        and creator.organisation_id == viewer.organisation_id
-    ):
-        return request
-    raise NotTheOrganiserError
-
-
 def create_draft(db: Session, organiser_id: uuid.UUID, fields: dict[str, object]) -> EventRequest:
     """SCRUM-29: save a new incomplete draft for the current organiser.
 

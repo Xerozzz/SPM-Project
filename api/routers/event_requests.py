@@ -9,11 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from core.database import get_db
-from core.dependencies import get_current_user, require_role
+from core.dependencies import EventAccess, require_event_access, require_role
 from domain.coordinator_assignment import NoAvailableCoordinatorError
 from domain.event_request import EventRequestFields
 from domain.event_status import EventRequestLockedError, InvalidTransitionError
 from domain.roles import Role
+from models.event_request import EventRequest
 from schemas.event_requests import (
     EventRequestCreate,
     EventRequestDraftCreate,
@@ -26,7 +27,8 @@ from services import event_requests as service
 router = APIRouter(prefix="/event-requests", tags=["event-requests"])
 
 Organiser = Annotated[dict[str, object], Depends(require_role(Role.ORGANISER))]
-AnyUser = Annotated[dict[str, object], Depends(get_current_user)]
+ViewableEventRequest = Annotated[EventRequest, Depends(require_event_access(EventAccess.VIEW))]
+EditableEventRequest = Annotated[EventRequest, Depends(require_event_access(EventAccess.EDIT))]
 Db = Annotated[Session, Depends(get_db)]
 
 # Everything the service or the status machine can refuse with, in one tuple so each route
@@ -42,12 +44,6 @@ _REFUSALS = (
 def _organiser_id(user: dict[str, object]) -> uuid.UUID:
     """The JWT subject is the user's id (see core/security.py)."""
     return uuid.UUID(str(user["sub"]))
-
-
-def _roles(user: dict[str, object]) -> list[str]:
-    """Role claims from the decoded JWT, defensively typed like `require_role`."""
-    roles = user.get("roles", [])
-    return [str(role) for role in roles] if isinstance(roles, list) else []
 
 
 def _http_error(exc: Exception) -> HTTPException:
@@ -110,31 +106,19 @@ def list_drafts(user: Organiser, db: Db) -> list[EventRequestRead]:
 
 
 @router.get("/{request_id}", response_model=EventRequestRead)
-def read(request_id: uuid.UUID, user: AnyUser, db: Db) -> EventRequestRead:
-    """Return a request visible through SCRUM-34 or SCRUM-29 access rules."""
-    roles = _roles(user)
-    try:
-        row = service.get(db, request_id, _organiser_id(user), roles)
-    except service.NotAuthorisedError as exc:
-        if Role.ORGANISER.value not in roles:
-            raise _http_error(exc) from exc
-        try:
-            row = service.get_for_organiser(db, request_id, _organiser_id(user))
-        except _REFUSALS as fallback_exc:
-            raise _http_error(fallback_exc) from fallback_exc
-    except service.EventRequestNotFoundError as exc:
-        raise _http_error(exc) from exc
-    return EventRequestRead.model_validate(row)
+def get_event_request(request: ViewableEventRequest) -> EventRequestRead:
+    """Return an event request visible to the signed-in user."""
+    return EventRequestRead.model_validate(request)
 
 
 @router.patch("/{request_id}", response_model=EventRequestRead)
 def update_draft(
-    request_id: uuid.UUID, body: EventRequestUpdate, user: Organiser, db: Db
+    request: EditableEventRequest, body: EventRequestUpdate, db: Db
 ) -> EventRequestRead:
     """Edit a draft. Refused with 409 once the request has been submitted (AC3)."""
     try:
         changes = body.model_dump(exclude_unset=True)
-        row = service.update_draft(db, request_id, _organiser_id(user), changes)
+        row = service.update_draft(db, request.id, request.organiser_id, changes)
     except _REFUSALS as exc:
         raise _http_error(exc) from exc
     return EventRequestRead.model_validate(row)

@@ -28,6 +28,12 @@ We will not duplicate organisation state on `event_requests` for SCRUM-29. The p
 current user-organisation transfer workflow, so deriving the organisation through the creator is
 the smallest explainable model.
 
+Event-request VIEW and EDIT access is centralised in `require_event_access(...)`, not repeated
+inside routers. For drafts, the creator organiser can view and edit, same-organisation organisers
+can view only, outside-organisation organisers cannot view, and event coordinators cannot view
+before submission. Once a request is submitted, event coordinators may view it through the same
+shared dependency.
+
 Draft expiry is deliberately not modelled. There is no expiry timestamp, scheduled cleanup, or
 retention state in this story.
 
