@@ -170,10 +170,10 @@ export async function createEventRequest(
   return (await response.json()) as EventRequest
 }
 
-export async function listCalendarEventRequests(token: string): Promise<EventRequest[]> {
-  const response = await fetch('/api/event-requests/calendar', { headers: authHeaders(token) })
+export async function listDraftEventRequests(token: string): Promise<EventRequest[]> {
+  const response = await fetch('/api/event-requests/drafts', { headers: authHeaders(token) })
   if (!response.ok) {
-    throw new Error(`/api/event-requests/calendar responded ${response.status}`)
+    throw new Error(`/api/event-requests/drafts responded ${response.status}`)
   }
   return (await response.json()) as EventRequest[]
 }

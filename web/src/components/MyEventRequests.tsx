@@ -8,7 +8,7 @@ import {
   FIELD_LABELS,
   type FieldProblem,
   getEventRequest,
-  listCalendarEventRequests,
+  listDraftEventRequests,
   listMyEventRequests,
   submitEventRequest,
   SubmissionRejectedError,
@@ -38,15 +38,15 @@ export default function MyEventRequests() {
   // sign-in as someone else on the same tab could briefly show the previous user's data
   // from the cache.
   const queryKey = ['event-requests', 'mine', token]
-  const calendarQueryKey = ['event-requests', 'calendar', token]
+  const draftsQueryKey = ['event-requests', 'drafts', token]
   const requests = useQuery({
     queryKey,
     queryFn: () => listMyEventRequests(token ?? ''),
     enabled: token !== null,
   })
-  const calendarRequests = useQuery({
-    queryKey: calendarQueryKey,
-    queryFn: () => listCalendarEventRequests(token ?? ''),
+  const visibleDrafts = useQuery({
+    queryKey: draftsQueryKey,
+    queryFn: () => listDraftEventRequests(token ?? ''),
     enabled: token !== null,
   })
 
@@ -69,7 +69,7 @@ export default function MyEventRequests() {
           : current,
       )
       void queryClient.invalidateQueries({ queryKey })
-      void queryClient.invalidateQueries({ queryKey: calendarQueryKey })
+      void queryClient.invalidateQueries({ queryKey: draftsQueryKey })
     },
     onError: (error, request) => {
       if (error instanceof SubmissionRejectedError) {
@@ -112,7 +112,7 @@ export default function MyEventRequests() {
         values: toForm(request),
       })
       void queryClient.invalidateQueries({ queryKey })
-      void queryClient.invalidateQueries({ queryKey: calendarQueryKey })
+      void queryClient.invalidateQueries({ queryKey: draftsQueryKey })
     },
     onError: (error) => {
       setOutcome({ kind: 'failed', message: error.message })
@@ -207,19 +207,19 @@ export default function MyEventRequests() {
       )}
 
       <section className="rounded-lg border border-slate-200 p-4">
-        <h2 className="font-medium">Organisation draft calendar</h2>
-        {calendarRequests.isPending && <p className="mt-2 text-sm">Loading...</p>}
-        {calendarRequests.isError && (
+        <h2 className="font-medium">Organisation drafts</h2>
+        {visibleDrafts.isPending && <p className="mt-2 text-sm">Loading...</p>}
+        {visibleDrafts.isError && (
           <p className="mt-2 text-sm text-red-600" role="alert">
-            Could not load organisation drafts: {calendarRequests.error.message}
+            Could not load organisation drafts: {visibleDrafts.error.message}
           </p>
         )}
-        {calendarRequests.data && calendarRequests.data.length === 0 && (
+        {visibleDrafts.data && visibleDrafts.data.length === 0 && (
           <p className="mt-2 text-sm text-slate-500">No organisation drafts are visible.</p>
         )}
-        {calendarRequests.data && calendarRequests.data.length > 0 && (
+        {visibleDrafts.data && visibleDrafts.data.length > 0 && (
           <ul className="mt-3 divide-y divide-slate-200">
-            {calendarRequests.data.map((request) => (
+            {visibleDrafts.data.map((request) => (
               <li
                 key={request.id}
                 className="flex flex-wrap items-center justify-between gap-4 py-3"

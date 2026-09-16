@@ -99,11 +99,11 @@ def create_draft(body: EventRequestDraftCreate, user: Organiser, db: Db) -> Even
     return EventRequestRead.model_validate(row)
 
 
-@router.get("/calendar", response_model=list[EventRequestRead])
-def list_calendar(user: Organiser, db: Db) -> list[EventRequestRead]:
-    """Drafts visible in the signed-in organiser's organisation calendar."""
+@router.get("/drafts", response_model=list[EventRequestRead])
+def list_drafts(user: Organiser, db: Db) -> list[EventRequestRead]:
+    """Drafts visible to the signed-in organiser."""
     try:
-        rows = service.list_calendar_for_organiser(db, _organiser_id(user))
+        rows = service.list_visible_drafts_for_organiser(db, _organiser_id(user))
     except _REFUSALS as exc:
         raise _http_error(exc) from exc
     return [EventRequestRead.model_validate(row) for row in rows]

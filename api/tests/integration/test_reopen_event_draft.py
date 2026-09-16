@@ -111,13 +111,13 @@ async def test_same_organisation_organiser_can_view_the_creators_draft(
 
     async with make_client(colleague) as colleague_client:
         response = await colleague_client.get(f"/api/event-requests/{draft['id']}")
-        calendar = await colleague_client.get("/api/event-requests/calendar")
+        drafts = await colleague_client.get("/api/event-requests/drafts")
 
     assert response.status_code == 200
     assert response.json()["id"] == draft["id"]
     assert response.json()["status"] == "draft"
-    assert calendar.status_code == 200
-    assert [row["id"] for row in calendar.json()] == [draft["id"]]
+    assert drafts.status_code == 200
+    assert [row["id"] for row in drafts.json()] == [draft["id"]]
 
 
 @pytest.mark.story("SCRUM-29")
@@ -156,7 +156,7 @@ async def test_outside_organisation_organiser_cannot_view_the_creators_draft(
 
 
 @pytest.mark.story("SCRUM-29")
-async def test_outside_organisation_organiser_has_no_calendar_draft_rows(
+async def test_outside_organisation_organiser_has_no_visible_draft_rows(
     make_user: MakeUser, make_client: MakeClient
 ) -> None:
     creator = make_user("organiser")
@@ -166,10 +166,10 @@ async def test_outside_organisation_organiser_has_no_calendar_draft_rows(
         await create_draft(creator_client)
 
     async with make_client(outsider) as outsider_client:
-        calendar = await outsider_client.get("/api/event-requests/calendar")
+        drafts = await outsider_client.get("/api/event-requests/drafts")
 
-    assert calendar.status_code == 200
-    assert calendar.json() == []
+    assert drafts.status_code == 200
+    assert drafts.json() == []
 
 
 @pytest.mark.story("SCRUM-29")
@@ -192,7 +192,7 @@ async def test_outside_organisation_organiser_cannot_edit_the_creators_draft(
 
 
 @pytest.mark.story("SCRUM-29")
-async def test_coordinator_cannot_access_the_draft_calendar(
+async def test_coordinator_cannot_access_visible_drafts(
     make_user: MakeUser, make_client: MakeClient
 ) -> None:
     creator = make_user("organiser")
@@ -202,7 +202,7 @@ async def test_coordinator_cannot_access_the_draft_calendar(
         await create_draft(creator_client)
 
     async with make_client(coordinator) as coordinator_client:
-        response = await coordinator_client.get("/api/event-requests/calendar")
+        response = await coordinator_client.get("/api/event-requests/drafts")
 
     assert response.status_code == 403
 

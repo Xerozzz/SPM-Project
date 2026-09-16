@@ -62,14 +62,6 @@ _ALLOWED_TRANSITIONS: dict[tuple[EventStatus, EventStatus], EventAction] = {
 }
 
 
-class EventRequestNotSubmittedError(Exception):
-    """The request is still a draft, so downstream workflows must ignore it."""
-
-    def __init__(self, status: EventStatus) -> None:
-        super().__init__(f"an event request in status {status} is not submitted")
-        self.status = status
-
-
 def transition(current: EventStatus, target: EventStatus) -> EventStatus:
     """Return `target` if moving there from `current` is allowed, else raise."""
     if (current, target) not in _ALLOWED_TRANSITIONS:
@@ -100,14 +92,3 @@ def allowed_actions(status: EventStatus) -> frozenset[EventAction]:
     if is_editable(status):
         actions.add(EventAction.EDIT)
     return frozenset(actions)
-
-
-def is_downstream_available(status: EventStatus) -> bool:
-    """Only submitted requests may enter assignment, review, booking, or registration."""
-    return status is EventStatus.SUBMITTED
-
-
-def ensure_downstream_available(status: EventStatus) -> None:
-    """Raise unless downstream workflows may act on this request."""
-    if not is_downstream_available(status):
-        raise EventRequestNotSubmittedError(status)

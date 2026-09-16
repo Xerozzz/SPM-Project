@@ -1,7 +1,7 @@
 """add organisation membership for draft visibility
 
 SCRUM-29: draft visibility is scoped to the client organisation. Users belong to an
-organisation; draft calendar visibility is derived from the creating organiser.
+organisation; shared draft visibility is derived from the creating organiser.
 
 Revision ID: 0004
 Revises: 0003

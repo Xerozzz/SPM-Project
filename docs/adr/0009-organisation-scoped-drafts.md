@@ -8,7 +8,7 @@
 ## Context
 
 SCRUM-29 says a draft belongs to the organiser who created it, but other organisers in the
-same client organisation may see it in their organisation calendar. Organisers outside that
+same client organisation may see it in the shared drafts view. Organisers outside that
 organisation and event coordinators must not see the draft before it is submitted.
 
 The existing event request table already has `organiser_id`, which proves ownership. It can

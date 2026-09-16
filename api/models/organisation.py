@@ -11,7 +11,7 @@ from core.database import Base
 
 
 class Organisation(Base):
-    """A client organisation whose organisers may see each other's draft calendar entries."""
+    """A client organisation whose organisers may see each other's draft requests."""
 
     __tablename__ = "organisations"
 

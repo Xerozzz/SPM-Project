@@ -69,7 +69,7 @@ function renderSignedIn(handlers: Record<string, Handler>) {
 }
 
 function defaultHandler(key: string): Handler | null {
-  if (key === 'GET /api/event-requests/calendar') return () => json([])
+  if (key === 'GET /api/event-requests/drafts') return () => json([])
   return null
 }
 
@@ -98,7 +98,7 @@ test('incomplete form can be saved as a draft with confirmation and status', asy
 
   renderSignedIn({
     'GET /api/event-requests': () => json(listed),
-    'GET /api/event-requests/calendar': () => json(listed),
+    'GET /api/event-requests/drafts': () => json(listed),
     'POST /api/event-requests/drafts': create,
   })
 
@@ -123,7 +123,7 @@ test('reopened draft shows persisted values and can be edited', async () => {
 
   renderSignedIn({
     'GET /api/event-requests': () => json(listed),
-    'GET /api/event-requests/calendar': () => json(listed),
+    'GET /api/event-requests/drafts': () => json(listed),
     'GET /api/event-requests/req-1': () => json(draft),
     'PATCH /api/event-requests/req-1': update,
   })
@@ -148,7 +148,7 @@ test('reopened draft shows persisted values and can be edited', async () => {
 test('submitting an incomplete draft names the fields to correct', async () => {
   renderSignedIn({
     'GET /api/event-requests': () => json([draft]),
-    'GET /api/event-requests/calendar': () => json([draft]),
+    'GET /api/event-requests/drafts': () => json([draft]),
     'GET /api/event-requests/req-1': () => json(draft),
     'POST /api/event-requests/req-1/submit': () =>
       json(
@@ -177,7 +177,7 @@ test('submitting a complete draft shows confirmation and the new status', async 
   let listed = [draft]
   renderSignedIn({
     'GET /api/event-requests': () => json(listed),
-    'GET /api/event-requests/calendar': () => json(listed),
+    'GET /api/event-requests/drafts': () => json(listed),
     'POST /api/event-requests/req-1/submit': () => {
       listed = [
         { ...draft, status: 'submitted', submitted_at: '2026-09-12T09:00:00Z', status_permits: [] },
@@ -198,7 +198,7 @@ test('same-organisation non-owner draft is visible without edit controls', async
   const shared = eventRequest({ id: 'req-shared', name: 'Shared Planning', status: 'draft' })
   renderSignedIn({
     'GET /api/event-requests': () => json([]),
-    'GET /api/event-requests/calendar': () => json([shared]),
+    'GET /api/event-requests/drafts': () => json([shared]),
   })
 
   expect(await screen.findByText('Shared Planning')).toBeInTheDocument()

@@ -6,13 +6,10 @@ from domain.event_status import (
     _ALLOWED_TRANSITIONS,
     EventAction,
     EventRequestLockedError,
-    EventRequestNotSubmittedError,
     EventStatus,
     InvalidTransitionError,
     allowed_actions,
-    ensure_downstream_available,
     ensure_editable,
-    is_downstream_available,
     is_editable,
     submit,
     transition,
@@ -90,20 +87,3 @@ def test_every_action_except_edit_comes_from_a_transition() -> None:
 def test_actions_are_lowercase_strings_for_the_api() -> None:
     assert EventAction.SUBMIT.value == "submit"
     assert EventAction.EDIT.value == "edit"
-
-
-@pytest.mark.story("SCRUM-29")
-def test_drafts_are_not_available_to_downstream_workflows() -> None:
-    assert not is_downstream_available(EventStatus.DRAFT)
-
-    with pytest.raises(EventRequestNotSubmittedError) as exc:
-        ensure_downstream_available(EventStatus.DRAFT)
-
-    assert exc.value.status is EventStatus.DRAFT
-
-
-@pytest.mark.story("SCRUM-29")
-def test_submitted_requests_are_available_to_downstream_workflows() -> None:
-    assert is_downstream_available(EventStatus.SUBMITTED)
-
-    ensure_downstream_available(EventStatus.SUBMITTED)
