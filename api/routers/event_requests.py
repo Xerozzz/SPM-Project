@@ -113,12 +113,12 @@ def get_event_request(request: ViewableEventRequest) -> EventRequestRead:
 
 @router.patch("/{request_id}", response_model=EventRequestRead)
 def update_draft(
-    request: EditableEventRequest, body: EventRequestUpdate, db: Db
+    request: EditableEventRequest, body: EventRequestUpdate, user: Organiser, db: Db
 ) -> EventRequestRead:
     """Edit a draft. Refused with 409 once the request has been submitted (AC3)."""
     try:
         changes = body.model_dump(exclude_unset=True)
-        row = service.update_draft(db, request.id, request.organiser_id, changes)
+        row = service.update_draft(db, request.id, _organiser_id(user), changes)
     except _REFUSALS as exc:
         raise _http_error(exc) from exc
     return EventRequestRead.model_validate(row)

@@ -148,6 +148,26 @@ async def test_same_organisation_organiser_can_view_the_creators_draft(
 
 
 @pytest.mark.story("SCRUM-29")
+async def test_same_organisation_organiser_can_view_after_submission(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    creator = make_user("organiser")
+    colleague = make_user("organiser", organisation_id=creator.organisation_id)
+
+    async with make_client(creator) as creator_client:
+        draft = await create_complete_draft(creator_client)
+        submitted = await creator_client.post(f"/api/event-requests/{draft['id']}/submit")
+
+    async with make_client(colleague) as colleague_client:
+        response = await colleague_client.get(f"/api/event-requests/{draft['id']}")
+
+    assert submitted.status_code == 200
+    assert response.status_code == 200
+    assert response.json()["id"] == draft["id"]
+    assert response.json()["status"] == "submitted"
+
+
+@pytest.mark.story("SCRUM-29")
 async def test_same_organisation_organiser_cannot_edit_the_creators_draft(
     make_user: MakeUser, make_client: MakeClient
 ) -> None:

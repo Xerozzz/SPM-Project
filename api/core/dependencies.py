@@ -89,11 +89,12 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
         if Role.ORGANISER.value in roles and request.organiser_id == viewer_id:
             return request
 
+        if Role.ORGANISER.value in roles and _same_organisation(
+            db, viewer_id, request.organiser_id
+        ):
+            return request
+
         if request.status is EventStatus.DRAFT:
-            if Role.ORGANISER.value in roles and _same_organisation(
-                db, viewer_id, request.organiser_id
-            ):
-                return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
         if Role.COORDINATOR.value in roles:
