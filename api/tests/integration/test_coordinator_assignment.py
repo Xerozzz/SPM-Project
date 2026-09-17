@@ -52,7 +52,7 @@ def _approved(db: Session, organiser: User, coordinator: User, start_at: datetim
     to prove this status does NOT count as a round-robin conflict (clarification row 91:
     approved means Planning; only a later CONFIRMED status blocks)."""
     request = make_draft(db, organiser, start_at=start_at, end_at=start_at + timedelta(hours=1))
-    request.status = "approved"
+    request.status = "approved"  # type: ignore[assignment]  # deliberate: SCRUM-31's status, not yet in EventStatus
     request.coordinator_id = coordinator.id
     db.flush()
     return request
