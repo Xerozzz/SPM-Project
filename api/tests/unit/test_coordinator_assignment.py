@@ -61,6 +61,14 @@ def test_org_day_bounds_covers_the_whole_calendar_day_and_nothing_else() -> None
 
 
 @pytest.mark.story("SCRUM-34")
+def test_org_day_bounds_uses_singapore_time_not_utc() -> None:
+    moment = datetime(2026, 6, 30, 16, 30, tzinfo=UTC)
+    start, end = org_day_bounds(moment)
+    assert start == datetime(2026, 6, 30, 16, 0, tzinfo=UTC)
+    assert end == datetime(2026, 7, 1, 16, 0, tzinfo=UTC)
+
+
+@pytest.mark.story("SCRUM-34")
 def test_org_day_bounds_converts_a_non_utc_moment_to_its_sgt_calendar_date() -> None:
     # 23:30 in UTC+2 on 3 Nov is 21:30 UTC on 3 Nov, which is 05:30 SGT on 4 Nov —
     # a different calendar day in Singapore even though it's still 3 Nov in UTC+2.

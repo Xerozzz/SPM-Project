@@ -65,7 +65,7 @@ outright.
 
 - Reassignment (moving an already-assigned request to a different coordinator) and
   accept/decline are explicitly out of scope for SCRUM-34 and are not implemented here.
-- The ticket's "Confirmed event" is this codebase's `EventStatus.APPROVED`, added to
+- The ticket's "Confirmed event" is this codebase's `EventStatus.CONFIRMED`, added to
   `domain/event_status.py` as a vocabulary member only — no transition into it exists yet.
   That transition is SCRUM-31's ("review and decide"), per ADR-0006's invitation for each
   story to extend the shared status file. Until SCRUM-31 ships, the conflict rule is exercised

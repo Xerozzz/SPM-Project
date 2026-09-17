@@ -1,8 +1,9 @@
 """SCRUM-34: on first submission, an event request is auto-assigned exactly one active
-Event Coordinator by round-robin, skipping anyone already APPROVED that UTC date (the
-ticket's "Confirmed"). Resubmission never retriggers assignment — in practice this can
-only be observed as a 409, since the status machine (SCRUM-46) refuses a second submit
-outright. Reassignment and accept/decline are separate, out-of-scope workflows.
+Event Coordinator by round-robin, skipping anyone already CONFIRMED for that Singapore
+calendar date (the ticket's "Confirmed"). Resubmission never retriggers assignment — in
+practice this can only be observed as a 409, since the status machine (SCRUM-46) refuses
+a second submit outright. Reassignment and accept/decline are separate, out-of-scope
+workflows.
 """
 
 import uuid
@@ -11,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy.orm import Session
 
-from domain.coordinator_assignment import NoAvailableCoordinatorError, org_day_bounds
+from domain.coordinator_assignment import NoAvailableCoordinatorError
 from domain.event_status import EventStatus, InvalidTransitionError
 from models.event_request import EventRequest
 from models.user import User
@@ -27,7 +28,7 @@ def _confirmed(
     start_at: datetime,
     assigned_at: datetime | None = None,
 ) -> EventRequest:
-    """An APPROVED event request, arranged directly for the test — the review/approval
+    """A CONFIRMED event request, arranged directly for the test — the review/approval
     workflow (SCRUM-31) that would normally produce one is a separate, not-yet-built
     story. Built from `make_draft` so it satisfies the same content rules, then moved
     past the status machine by hand (test setup, not a code path any user can reach).
@@ -40,6 +41,19 @@ def _confirmed(
     request.status = EventStatus.CONFIRMED
     request.coordinator_id = coordinator.id
     request.assigned_at = assigned_at if assigned_at is not None else start_at - timedelta(days=1)
+    db.flush()
+    return request
+
+
+def _approved(db: Session, organiser: User, coordinator: User, start_at: datetime) -> EventRequest:
+    """An event in Planning (SCRUM-31's "approved", not yet declared in EventStatus —
+    see event_status.py). Written as the raw string, since the column has no CHECK
+    constraint (ADR-0003) and SCRUM-31 hasn't landed the enum member yet. Exists only
+    to prove this status does NOT count as a round-robin conflict (clarification row 91:
+    approved means Planning; only a later CONFIRMED status blocks)."""
+    request = make_draft(db, organiser, start_at=start_at, end_at=start_at + timedelta(hours=1))
+    request.status = "approved"
+    request.coordinator_id = coordinator.id
     db.flush()
     return request
 
@@ -163,7 +177,7 @@ def test_coordinator_approved_late_that_day_is_skipped_for_the_same_day(
 
 
 @pytest.mark.story("SCRUM-34")
-def test_approved_event_the_day_before_does_not_block_assignment(
+def test_confirmed_event_the_day_before_does_not_block_assignment(
     db: Session, make_user: MakeUser
 ) -> None:
     organiser = make_user("organiser")
@@ -181,7 +195,7 @@ def test_approved_event_the_day_before_does_not_block_assignment(
 
 
 @pytest.mark.story("SCRUM-34")
-def test_conflict_when_every_active_coordinator_already_has_an_approved_event_that_day(
+def test_conflict_when_every_active_coordinator_already_has_a_confirmed_event_that_day(
     db: Session, make_user: MakeUser
 ) -> None:
     organiser = make_user("organiser")
@@ -195,6 +209,23 @@ def test_conflict_when_every_active_coordinator_already_has_an_approved_event_th
 
 
 @pytest.mark.story("SCRUM-34")
+def test_approved_event_same_day_does_not_block_assignment(
+    db: Session, make_user: MakeUser
+) -> None:
+    """Locks in the APPROVED/CONFIRMED distinction (clarification row 91): approved
+    means "in Planning", not yet confirmed, so it must not count as a conflict."""
+    organiser = make_user("organiser")
+    coord = make_user("coordinator")
+    _approved(db, organiser, coord, datetime(2026, 6, 10, 6, 0, tzinfo=UTC))
+    now = datetime(2026, 1, 2, tzinfo=UTC)
+    draft = make_draft(db, organiser, start_at=datetime(2026, 6, 10, 8, 0, tzinfo=UTC))
+
+    result = service.submit(db, draft.id, organiser.id, now)
+
+    assert result.coordinator_id == coord.id
+
+
+@pytest.mark.story("SCRUM-34")
 async def test_submit_endpoint_returns_409_when_no_coordinator_is_available(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -202,7 +233,7 @@ async def test_submit_endpoint_returns_409_when_no_coordinator_is_available(
     coord = make_user("coordinator")
     # Real wall-clock time: this goes through the HTTP endpoint, which stamps `now`
     # itself, so the date has to be safely in the future regardless of when this runs.
-    clash_start = datetime(2027, 6, 1, 10, 0, tzinfo=UTC)
+    clash_start = datetime.now(UTC) + timedelta(days=365)
     _confirmed(db, organiser, coord, clash_start)
     draft = make_draft(
         db,
@@ -317,11 +348,3 @@ def test_overnight_confirmed_event_blocks_the_later_day(db: Session, make_user: 
     )
     unavailable = coordinator_ids_confirmed_on(db, datetime(2026, 7, 1, 12, 0, tzinfo=UTC))
     assert coordinator.id in unavailable
-
-
-@pytest.mark.story("SCRUM-34")
-def test_org_day_bounds_uses_singapore_time_not_utc() -> None:
-    moment = datetime(2026, 6, 30, 16, 30, tzinfo=UTC)
-    start, end = org_day_bounds(moment)
-    assert start == datetime(2026, 6, 30, 16, 0, tzinfo=UTC)
-    assert end == datetime(2026, 7, 1, 16, 0, tzinfo=UTC)
