@@ -40,6 +40,7 @@ async def test_coordinator_can_create_clarification_with_audit_fields(
     organiser = make_user("organiser")
     coordinator = make_user("coordinator")
     request = await submitted_request(db, organiser, make_client)
+    assert request.coordinator_id == coordinator.id
 
     async with make_client(coordinator) as client:
         response = await request_clarification(
@@ -70,6 +71,26 @@ async def test_coordinator_review_list_contains_submitted_requests_not_drafts(
 
     assert response.status_code == 200
     assert [row["id"] for row in response.json()] == [str(submitted.id)]
+
+
+@pytest.mark.story("SCRUM-30")
+async def test_unassigned_coordinator_can_view_but_cannot_request_clarification(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    organiser = make_user("organiser")
+    now = datetime.now(UTC)
+    assigned = make_user("coordinator", created_at=now - timedelta(minutes=1))
+    unassigned = make_user("coordinator", created_at=now)
+    request = await submitted_request(db, organiser, make_client)
+    assert request.coordinator_id == assigned.id
+
+    async with make_client(unassigned) as client:
+        view = await client.get(f"/api/event-requests/{request.id}")
+        clarification = await request_clarification(client, request)
+
+    assert view.status_code == 200
+    assert view.json()["id"] == str(request.id)
+    assert clarification.status_code == 403
 
 
 @pytest.mark.story("SCRUM-30")
@@ -119,6 +140,7 @@ async def test_blank_organiser_response_is_rejected(
     message: str, db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     organiser = make_user("organiser")
+    make_user("coordinator")
     request = await submitted_request(db, organiser, make_client)
 
     async with make_client(organiser) as client:
@@ -136,6 +158,7 @@ async def test_unrelated_organiser_cannot_view_or_contribute_to_clarification_hi
 ) -> None:
     organiser = make_user("organiser")
     unrelated = make_user("organiser")
+    make_user("coordinator")
     request = await submitted_request(db, organiser, make_client)
 
     async with make_client(unrelated) as client:
@@ -190,6 +213,7 @@ async def test_organiser_still_cannot_edit_submitted_request(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     organiser = make_user("organiser")
+    make_user("coordinator")
     request = await submitted_request(db, organiser, make_client)
 
     async with make_client(organiser) as client:

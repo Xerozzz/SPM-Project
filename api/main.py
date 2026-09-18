@@ -47,8 +47,8 @@ def create_app() -> FastAPI:
 
     # Feature routers are registered here, one line each, as stories land:
     app.include_router(auth.router, prefix="/api")
-    app.include_router(event_requests.router, prefix="/api")
     app.include_router(event_clarifications.router, prefix="/api")
+    app.include_router(event_requests.router, prefix="/api")
 
     return app
 

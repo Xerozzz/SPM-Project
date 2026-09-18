@@ -71,10 +71,8 @@ def require_role(*allowed: Role) -> Callable[[dict[str, object]], dict[str, obje
 def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]:
     """Authorize one participant's access to an event-review clarification thread.
 
-    Coordinator assignment is not present on this branch. Until it lands, coordinators
-    may review any submitted request; drafts remain private to their organiser. Once
-    assignment is merged, clarification creation must be restricted to the assigned
-    coordinator. Other coordinators may retain read-only visibility.
+    Any coordinator may view a submitted request for planning, but only its assigned
+    coordinator may request clarification. Drafts remain private to their organiser.
     """
 
     def check(
@@ -92,10 +90,11 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
         user_id = _user_id(user)
         is_owner = Role.ORGANISER.value in roles and request.organiser_id == user_id
         is_coordinator = Role.COORDINATOR.value in roles
+        is_assigned_coordinator = is_coordinator and request.coordinator_id == user_id
         is_submitted = request.status is EventStatus.SUBMITTED
 
         if permission is EventAccess.REQUEST_CLARIFICATION:
-            allowed = is_coordinator and is_submitted
+            allowed = is_assigned_coordinator and is_submitted
         elif permission is EventAccess.RESPOND_TO_CLARIFICATION:
             allowed = is_owner and is_submitted
         else:
