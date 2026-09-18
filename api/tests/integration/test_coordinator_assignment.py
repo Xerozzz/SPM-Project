@@ -45,17 +45,23 @@ def _confirmed(
     return request
 
 
-def _approved(db: Session, organiser: User, coordinator: User, start_at: datetime) -> EventRequest:
-    """An event in Planning (SCRUM-31's "approved", not yet declared in EventStatus —
-    see event_status.py). Written as the raw string, since the column has no CHECK
-    constraint (ADR-0003) and SCRUM-31 hasn't landed the enum member yet. Exists only
-    to prove this status does NOT count as a round-robin conflict (clarification row 91:
-    approved means Planning; only a later CONFIRMED status blocks)."""
+def _in_status(
+    db: Session, organiser: User, coordinator: User, start_at: datetime, status: EventStatus
+) -> EventRequest:
+    """An event request in `status`, with a coordinator, arranged directly for the test.
+    Exists to prove that only CONFIRMED counts as a round-robin conflict."""
     request = make_draft(db, organiser, start_at=start_at, end_at=start_at + timedelta(hours=1))
-    request.status = "approved"  # type: ignore[assignment]  # deliberate: SCRUM-31's status, not yet in EventStatus
+    request.status = status
     request.coordinator_id = coordinator.id
+    request.assigned_at = start_at - timedelta(days=1)
     db.flush()
     return request
+
+
+# Every status that must NOT block assignment. Derived from the enum rather than listed, so
+# when SCRUM-31 adds APPROVED (clarification row 91: approved means Planning, not confirmed)
+# it is covered here automatically.
+_NOT_CONFIRMED = [status for status in EventStatus if status is not EventStatus.CONFIRMED]
 
 
 # ------------------------------------------------------------------ normal case
@@ -160,20 +166,20 @@ def test_assignment_is_visible_to_the_organiser_and_to_any_coordinator(
 
 
 @pytest.mark.story("SCRUM-34")
-def test_coordinator_approved_late_that_day_is_skipped_for_the_same_day(
+def test_confirmed_event_in_the_last_minute_of_the_day_still_blocks_that_day(
     db: Session, make_user: MakeUser
 ) -> None:
+    # Both times are on 10 June in Singapore: the confirmed event at 23:59 SGT (15:59 UTC),
+    # the new request at 00:00:01 SGT (9 June 16:00:01 UTC). One coordinator, so the only
+    # way this passes is the conflict rule, not rotation order.
     organiser = make_user("organiser")
-    base = datetime(2026, 1, 1, tzinfo=UTC)
-    busy = make_user("coordinator", created_at=base)
-    free = make_user("coordinator", created_at=base + timedelta(minutes=1))
-    _confirmed(db, organiser, busy, datetime(2026, 6, 10, 23, 59, tzinfo=UTC))
+    busy = make_user("coordinator")
+    _confirmed(db, organiser, busy, datetime(2026, 6, 10, 15, 59, tzinfo=UTC))
     now = datetime(2026, 1, 2, tzinfo=UTC)
-    draft = make_draft(db, organiser, start_at=datetime(2026, 6, 10, 0, 0, 1, tzinfo=UTC))
+    draft = make_draft(db, organiser, start_at=datetime(2026, 6, 9, 16, 0, 1, tzinfo=UTC))
 
-    result = service.submit(db, draft.id, organiser.id, now)
-
-    assert result.coordinator_id == free.id
+    with pytest.raises(NoAvailableCoordinatorError):
+        service.submit(db, draft.id, organiser.id, now)
 
 
 @pytest.mark.story("SCRUM-34")
@@ -209,14 +215,16 @@ def test_conflict_when_every_active_coordinator_already_has_a_confirmed_event_th
 
 
 @pytest.mark.story("SCRUM-34")
-def test_approved_event_same_day_does_not_block_assignment(
-    db: Session, make_user: MakeUser
+@pytest.mark.parametrize("status", _NOT_CONFIRMED, ids=[s.value for s in _NOT_CONFIRMED])
+def test_only_a_confirmed_event_blocks_assignment(
+    db: Session, make_user: MakeUser, status: EventStatus
 ) -> None:
-    """Locks in the APPROVED/CONFIRMED distinction (clarification row 91): approved
-    means "in Planning", not yet confirmed, so it must not count as a conflict."""
+    """The conflict rule is CONFIRMED only. A same-day event in any other status leaves
+    its coordinator available, so widening the repository filter (`!= DRAFT`,
+    `.in_([...])`) fails here."""
     organiser = make_user("organiser")
     coord = make_user("coordinator")
-    _approved(db, organiser, coord, datetime(2026, 6, 10, 6, 0, tzinfo=UTC))
+    _in_status(db, organiser, coord, datetime(2026, 6, 10, 6, 0, tzinfo=UTC), status)
     now = datetime(2026, 1, 2, tzinfo=UTC)
     draft = make_draft(db, organiser, start_at=datetime(2026, 6, 10, 8, 0, tzinfo=UTC))
 
@@ -343,7 +351,9 @@ def test_overnight_confirmed_event_blocks_the_later_day(db: Session, make_user: 
         db,
         organiser,
         coordinator,
-        start_at=datetime(2026, 6, 30, 22, 0, tzinfo=UTC),
+        # 23:30 SGT on 30 June to 00:30 SGT on 1 July: starts before 1 July's window opens
+        # (30 June 16:00 UTC) and ends inside it. A start_at-only filter would miss this.
+        start_at=datetime(2026, 6, 30, 15, 30, tzinfo=UTC),
         assigned_at=datetime(2026, 6, 1, tzinfo=UTC),
     )
     unavailable = coordinator_ids_confirmed_on(db, datetime(2026, 7, 1, 12, 0, tzinfo=UTC))
