@@ -153,6 +153,7 @@ async def test_same_organisation_organiser_can_view_after_submission(
 ) -> None:
     creator = make_user("organiser")
     colleague = make_user("organiser", organisation_id=creator.organisation_id)
+    make_user("coordinator")
 
     async with make_client(creator) as creator_client:
         draft = await create_complete_draft(creator_client)
@@ -295,6 +296,7 @@ async def test_submitted_requests_remain_visible_to_their_creator(
     make_user: MakeUser, make_client: MakeClient
 ) -> None:
     creator = make_user("organiser")
+    make_user("coordinator")
 
     async with make_client(creator) as client:
         draft = await create_complete_draft(client)

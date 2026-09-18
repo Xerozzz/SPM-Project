@@ -425,6 +425,7 @@ def _committed_draft() -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
             email=f"{uuid.uuid4()}@example.com",
             password_hash=hash_password("password123"),
             roles=["coordinator"],
+            organisation_id=organisation.id,
         )
         session.add_all([organiser, coordinator])
         session.flush()

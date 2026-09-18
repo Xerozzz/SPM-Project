@@ -3,8 +3,8 @@
 SCRUM-29: draft visibility is scoped to the client organisation. Users belong to an
 organisation; shared draft visibility is derived from the creating organiser.
 
-Revision ID: 0004
-Revises: 0003
+Revision ID: 0005
+Revises: 0004
 Create Date: 2026-09-14
 """
 
@@ -17,8 +17,8 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision: str = "0004"
-down_revision: str | None = "0003"
+revision: str = "0005"
+down_revision: str | None = "0004"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
