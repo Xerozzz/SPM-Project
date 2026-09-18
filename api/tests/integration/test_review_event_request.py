@@ -90,7 +90,6 @@ async def test_only_a_coordinator_can_review_or_decide(
 
 
 @pytest.mark.story("SCRUM-31")
-@pytest.mark.story("SCRUM-31")
 async def test_non_assigned_coordinator_can_view_but_cannot_decide_a_request(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
