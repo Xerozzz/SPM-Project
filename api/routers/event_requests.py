@@ -30,6 +30,7 @@ router = APIRouter(prefix="/event-requests", tags=["event-requests"])
 Organiser = Annotated[dict[str, object], Depends(require_role(Role.ORGANISER))]
 ViewableEventRequest = Annotated[EventRequest, Depends(require_event_access(EventAccess.VIEW))]
 EditableEventRequest = Annotated[EventRequest, Depends(require_event_access(EventAccess.EDIT))]
+DecidableEventRequest = Annotated[EventRequest, Depends(require_event_access(EventAccess.DECIDE))]
 Coordinator = Annotated[dict[str, object], Depends(require_role(Role.COORDINATOR))]
 Db = Annotated[Session, Depends(get_db)]
 
@@ -57,7 +58,7 @@ def _http_error(exc: Exception) -> HTTPException:
     """The single mapping from refusals to status codes, shared by every route here."""
     if isinstance(exc, service.EventRequestNotFoundError):
         return HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found")
-    if isinstance(exc, service.NotTheOrganiserError):
+    if isinstance(exc, service.NotTheOrganiserError | service.NotAuthorisedError):
         return HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
     if isinstance(exc, service.IncompleteEventRequestError):
         problems = [FieldProblemRead(field=p.field, reason=p.reason) for p in exc.problems]
@@ -142,10 +143,10 @@ def submit(request_id: uuid.UUID, user: Organiser, db: Db) -> EventRequestRead:
 
 
 @router.post("/{request_id}/approve", response_model=EventRequestRead)
-def approve(request_id: uuid.UUID, user: Coordinator, db: Db) -> EventRequestRead:
+def approve(event: DecidableEventRequest, user: Coordinator, db: Db) -> EventRequestRead:
     """Approve one submitted request; planning remains a separate later action."""
     try:
-        row = service.approve(db, request_id, _coordinator_id(user), datetime.now(UTC))
+        row = service.approve(db, event.id, _coordinator_id(user), datetime.now(UTC))
     except _REFUSALS as exc:
         raise _http_error(exc) from exc
     return EventRequestRead.model_validate(row)
@@ -153,11 +154,11 @@ def approve(request_id: uuid.UUID, user: Coordinator, db: Db) -> EventRequestRea
 
 @router.post("/{request_id}/reject", response_model=EventRequestRead)
 def reject(
-    request_id: uuid.UUID, body: EventRequestRejection, user: Coordinator, db: Db
+    event: DecidableEventRequest, body: EventRequestRejection, user: Coordinator, db: Db
 ) -> EventRequestRead:
     """Reject one submitted request with the reason validated by the request schema."""
     try:
-        row = service.reject(db, request_id, _coordinator_id(user), body.reason, datetime.now(UTC))
+        row = service.reject(db, event.id, _coordinator_id(user), body.reason, datetime.now(UTC))
     except _REFUSALS as exc:
         raise _http_error(exc) from exc
     return EventRequestRead.model_validate(row)

@@ -38,6 +38,10 @@ class NotTheOrganiserError(EventRequestError):
     """The request exists but belongs to a different organiser."""
 
 
+class NotAuthorisedError(EventRequestError):
+    """The actor does not hold the request-specific permission."""
+
+
 class IncompleteEventRequestError(EventRequestError):
     """AC2: the request cannot be submitted until these fields are fixed."""
 
@@ -134,7 +138,7 @@ def approve(
     db: Session, request_id: uuid.UUID, coordinator_id: uuid.UUID, now: datetime
 ) -> EventRequest:
     """Record an approval. This deliberately allocates no venue, equipment or registration."""
-    request = _for_decision(db, request_id)
+    request = _for_decision(db, request_id, coordinator_id)
     request.status = event_status.approve(request.status)
     request.decided_by_id = coordinator_id
     request.decided_at = now
@@ -146,7 +150,7 @@ def reject(
     db: Session, request_id: uuid.UUID, coordinator_id: uuid.UUID, reason: str, now: datetime
 ) -> EventRequest:
     """Record a rejection and its mandatory coordinator-supplied reason."""
-    request = _for_decision(db, request_id)
+    request = _for_decision(db, request_id, coordinator_id)
     request.status = event_status.reject(request.status)
     request.decided_by_id = coordinator_id
     request.decided_at = now
@@ -189,11 +193,15 @@ def _user_or_forbidden(db: Session, user_id: uuid.UUID) -> User:
     return user
 
 
-def _for_decision(db: Session, request_id: uuid.UUID) -> EventRequest:
+def _for_decision(
+    db: Session, request_id: uuid.UUID, coordinator_id: uuid.UUID
+) -> EventRequest:
     """Lock a request before applying a coordinator decision."""
     request = repo.get_for_update(db, request_id)
     if request is None:
         raise EventRequestNotFoundError
+    if request.coordinator_id != coordinator_id:
+        raise NotAuthorisedError
     return request
 
 
