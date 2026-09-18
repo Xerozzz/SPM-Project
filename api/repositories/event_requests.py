@@ -37,6 +37,16 @@ def list_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventReques
     return list(db.scalars(statement))
 
 
+def list_submitted(db: Session) -> list[EventRequest]:
+    """Submitted requests available for coordinator review, oldest first."""
+    statement = (
+        select(EventRequest)
+        .where(EventRequest.status == EventStatus.SUBMITTED)
+        .order_by(EventRequest.submitted_at.asc(), EventRequest.id.asc())
+    )
+    return list(db.scalars(statement))
+
+
 def add(db: Session, request: EventRequest) -> EventRequest:
     """Stage a new request in the current transaction (no commit)."""
     db.add(request)

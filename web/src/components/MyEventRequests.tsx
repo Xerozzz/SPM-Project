@@ -10,6 +10,7 @@ import {
   SubmissionRejectedError,
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
+import ClarificationThread from './ClarificationThread'
 
 /**
  * SCRUM-46: an organiser's event requests, each with a Submit action while it is a draft.
@@ -70,27 +71,32 @@ export default function MyEventRequests() {
       {requests.data && requests.data.length > 0 && (
         <ul className="mt-3 divide-y divide-slate-200">
           {requests.data.map((request) => (
-            <li key={request.id} className="flex items-center justify-between gap-4 py-3">
-              <div>
-                <p className="font-medium">{request.name ?? 'Untitled request'}</p>
-                <p className="text-sm text-slate-500">
-                  <StatusLabel status={request.status} />
-                </p>
+            <li key={request.id} className="py-3">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="font-medium">{request.name ?? 'Untitled request'}</p>
+                  <p className="text-sm text-slate-500">
+                    <StatusLabel status={request.status} />
+                  </p>
+                </div>
+                {request.status_permits.includes('submit') && (
+                  <button
+                    type="button"
+                    onClick={() => submit.mutate(request)}
+                    disabled={submit.isPending}
+                    className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+                  >
+                    Submit for review
+                  </button>
+                )}
+                {!request.status_permits.includes('edit') && (
+                  <span className="text-sm text-slate-500">
+                    Locked — ask your coordinator to request changes
+                  </span>
+                )}
               </div>
-              {request.status_permits.includes('submit') && (
-                <button
-                  type="button"
-                  onClick={() => submit.mutate(request)}
-                  disabled={submit.isPending}
-                  className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-                >
-                  Submit for review
-                </button>
-              )}
-              {!request.status_permits.includes('edit') && (
-                <span className="text-sm text-slate-500">
-                  Locked — ask your coordinator to request changes
-                </span>
+              {request.status === 'submitted' && (
+                <ClarificationThread eventRequestId={request.id} mode="organiser" />
               )}
             </li>
           ))}

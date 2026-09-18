@@ -47,6 +47,9 @@ function renderSignedIn(handlers: Record<string, () => Response>) {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const key = `${init?.method ?? 'GET'} ${String(input)}`
     const handler = handlers[key]
+    if (!handler && key.match(/^GET \/api\/event-requests\/[^/]+\/clarifications$/)) {
+      return json([])
+    }
     if (!handler) throw new Error(`unexpected request ${key}`)
     return handler()
   })
