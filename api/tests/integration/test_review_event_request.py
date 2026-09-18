@@ -87,3 +87,25 @@ async def test_only_a_coordinator_can_review_or_decide(
     organiser = make_user("organiser")
     async with make_client(organiser) as client:
         assert (await client.get("/api/event-requests/review")).status_code == 403
+
+
+@pytest.mark.story("SCRUM-31")
+async def test_coordinator_only_sees_requests_assigned_to_them(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    organiser = make_user("organiser")
+    assigned_coordinator = make_user("coordinator")
+    other_coordinator = make_user("coordinator")
+    request = make_draft(db, organiser)
+
+    async with make_client(organiser) as organiser_client:
+        await _submit(organiser_client, request.id)
+    async with make_client(assigned_coordinator) as assigned_client:
+        assigned_queue = await assigned_client.get("/api/event-requests/review")
+    async with make_client(other_coordinator) as other_client:
+        other_queue = await other_client.get("/api/event-requests/review")
+
+    assert assigned_queue.status_code == 200
+    assert [item["id"] for item in assigned_queue.json()] == [str(request.id)]
+    assert other_queue.status_code == 200
+    assert other_queue.json() == []
