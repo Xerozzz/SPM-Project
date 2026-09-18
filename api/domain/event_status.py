@@ -8,7 +8,15 @@ reviewer, a tester, or an instructor can read in ten seconds.
 Stories add transitions here as they land, each with its own tests:
 
     SCRUM-46  draft -> submitted
+    SCRUM-31  submitted -> approved | rejected        (review and decide)
+    SCRUM-30  submitted -> clarification_requested    (request clarification)
     SCRUM-35  allowed_actions: what a status permits
+
+SCRUM-34 pre-declares the `CONFIRMED` value below, ahead of any story landing the
+transition into it: coordinator assignment needs to ask "does this coordinator already
+have a confirmed event that date", and that question has to name a real status. The
+transition into CONFIRMED itself — and who is allowed to make it — stays a later
+story's to add.
 """
 
 from enum import StrEnum
@@ -19,6 +27,7 @@ class EventStatus(StrEnum):
 
     DRAFT = "draft"
     SUBMITTED = "submitted"
+    CONFIRMED = "confirmed"
 
 
 class EventAction(StrEnum):
