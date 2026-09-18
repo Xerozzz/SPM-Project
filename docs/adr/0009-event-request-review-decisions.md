@@ -2,7 +2,7 @@
 
 - **Status:** Proposed
 - **Date:** 2026-09-13
-- **Deciders:** Wei Lin
+- **Deciders:** Whole Team
 - **Related stories:** SCRUM-31 (review and decide), SCRUM-35 (view status and allowed actions)
 
 ## Context
@@ -40,4 +40,4 @@ We will store `decided_by_id`, `decided_at`, and `rejection_reason` as nullable 
 
 ## Notes
 
-- Migration: `api/alembic/versions/0004_add_event_request_review_decision.py`.
+- Migration: `api/alembic/versions/0005_add_event_request_review_decision.py`.
