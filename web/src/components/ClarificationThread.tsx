@@ -57,7 +57,17 @@ export default function ClarificationThread({ eventRequestId, mode }: Props) {
       {history.data && history.data.length > 0 && (
         <ol className="mt-2 space-y-2">
           {history.data.map((entry) => (
-            <li key={entry.id} className="border-l-2 border-slate-300 pl-3 text-sm">
+            <li
+              key={entry.id}
+              className={
+                entry.kind === 'request'
+                  ? 'border-l-2 border-amber-400 pl-3 text-sm'
+                  : 'border-l-2 border-slate-300 pl-3 text-sm'
+              }
+            >
+              <p className="text-xs font-medium text-slate-600">
+                {entry.kind === 'request' ? 'Coordinator asked' : 'Organiser replied'}
+              </p>
               <p>{entry.message}</p>
               <time className="text-xs text-slate-500" dateTime={entry.created_at}>
                 {new Date(entry.created_at).toLocaleString()}

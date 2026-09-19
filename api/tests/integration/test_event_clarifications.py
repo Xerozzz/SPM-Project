@@ -51,6 +51,7 @@ async def test_coordinator_can_create_clarification_with_audit_fields(
     body = response.json()
     assert body["event_request_id"] == str(request.id)
     assert body["author_id"] == str(coordinator.id)
+    assert body["kind"] == "request"
     assert body["message"] == "Which room layout is needed?"
     created_at = datetime.fromisoformat(body["created_at"].replace("Z", "+00:00"))
     assert created_at.tzinfo is not None
@@ -131,7 +132,34 @@ async def test_organiser_can_view_clarification_and_respond(
     assert [entry["message"] for entry in history.json()] == ["Which room layout is needed?"]
     assert response.status_code == 201
     assert response.json()["author_id"] == str(organiser.id)
+    assert response.json()["kind"] == "response"
     assert response.json()["message"] == "Please use classroom layout."
+
+
+@pytest.mark.story("SCRUM-30")
+async def test_kind_comes_from_the_endpoint_not_the_author(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # One person holding both roles (clarification sheet row 7) creates a request and
+    # is round-robin assigned to it. Their question and their answer have the same
+    # author_id, so only `kind` tells the two apart.
+    both = make_user("organiser", "coordinator")
+    request = await submitted_request(db, both, make_client)
+    assert request.coordinator_id == both.id
+
+    async with make_client(both) as client:
+        asked = await request_clarification(client, request, "Is the date fixed?")
+        answered = await client.post(
+            f"/api/event-requests/{request.id}/clarifications/responses",
+            json={"message": "Yes, fixed."},
+        )
+        history = await client.get(f"/api/event-requests/{request.id}/clarifications")
+
+    assert asked.status_code == 201 and answered.status_code == 201
+    assert [(e["kind"], e["message"]) for e in history.json()] == [
+        ("request", "Is the date fixed?"),
+        ("response", "Yes, fixed."),
+    ]
 
 
 @pytest.mark.story("SCRUM-30")

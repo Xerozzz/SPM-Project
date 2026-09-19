@@ -111,7 +111,6 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
-
         if is_owner:
             return request
 

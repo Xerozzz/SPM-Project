@@ -1,9 +1,13 @@
 import type { EventRequest } from './eventRequests'
 
+export type ClarificationKind = 'request' | 'response'
+
 export interface EventClarification {
   id: string
   event_request_id: string
   author_id: string
+  /** Which side wrote it. Set by the API from the endpoint used, never inferred. */
+  kind: ClarificationKind
   message: string
   created_at: string
 }

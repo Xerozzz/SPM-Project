@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.dependencies import EventAccess, get_current_user, require_event_access, require_role
+from domain.event_clarification import ClarificationKind
 from domain.roles import Role
 from models.event_request import EventRequest
 from schemas.event_clarifications import EventClarificationCreate, EventClarificationRead
@@ -20,9 +21,7 @@ router = APIRouter(prefix="/event-requests", tags=["event-clarifications"])
 
 AuthenticatedUser = Annotated[dict[str, object], Depends(get_current_user)]
 Coordinator = Annotated[dict[str, object], Depends(require_role(Role.COORDINATOR))]
-ViewableEvent = Annotated[
-    EventRequest, Depends(require_event_access(EventAccess.VIEW))
-]
+ViewableEvent = Annotated[EventRequest, Depends(require_event_access(EventAccess.VIEW))]
 ClarifiableEvent = Annotated[
     EventRequest, Depends(require_event_access(EventAccess.REQUEST_CLARIFICATION))
 ]
@@ -63,7 +62,7 @@ def request_clarification(
 ) -> EventClarificationRead:
     """Record a coordinator's clarification request without changing event status."""
     row = clarification_service.create_message(
-        db, event.id, _user_id(user), body.message, datetime.now(UTC)
+        db, event.id, _user_id(user), ClarificationKind.REQUEST, body.message, datetime.now(UTC)
     )
     return EventClarificationRead.model_validate(row)
 
@@ -81,6 +80,6 @@ def respond_to_clarification(
 ) -> EventClarificationRead:
     """Record the creating organiser's response without unlocking the submitted event."""
     row = clarification_service.create_message(
-        db, event.id, _user_id(user), body.message, datetime.now(UTC)
+        db, event.id, _user_id(user), ClarificationKind.RESPONSE, body.message, datetime.now(UTC)
     )
     return EventClarificationRead.model_validate(row)

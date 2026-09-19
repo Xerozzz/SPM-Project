@@ -17,11 +17,12 @@ function json(body: unknown, status = 200) {
   })
 }
 
-function clarification(id: string, message: string) {
+function clarification(id: string, message: string, kind: 'request' | 'response' = 'request') {
   return {
     id,
     event_request_id: 'req-1',
     author_id: 'user-1',
+    kind,
     message,
     created_at: '2026-09-17T09:00:00Z',
   }
@@ -74,13 +75,19 @@ test('organiser sees persisted history and responds through the response endpoin
   let responseUrl = ''
   renderThread('organiser', async (input, init) => {
     if ((init?.method ?? 'GET') === 'GET') {
-      return json([clarification('msg-1', 'Which layout should we use?')])
+      return json([
+        clarification('msg-1', 'Which layout should we use?'),
+        clarification('msg-0', 'Earlier answer', 'response'),
+      ])
     }
     responseUrl = String(input)
-    return json(clarification('msg-2', 'Use classroom layout'), 201)
+    return json(clarification('msg-2', 'Use classroom layout', 'response'), 201)
   })
 
   expect(await screen.findByText('Which layout should we use?')).toBeInTheDocument()
+  // Each side of the exchange is labelled from `kind`, not guessed from the author.
+  expect(screen.getByText('Coordinator asked')).toBeInTheDocument()
+  expect(screen.getByText('Organiser replied')).toBeInTheDocument()
   const send = screen.getByRole('button', { name: 'Send response' })
   expect(send).toBeDisabled()
   fireEvent.change(screen.getByLabelText('Response'), { target: { value: '   ' } })

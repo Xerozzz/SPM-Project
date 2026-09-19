@@ -27,6 +27,13 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("event_request_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("author_id", postgresql.UUID(as_uuid=True), nullable=False),
+        # "request" (coordinator asks) or "response" (organiser answers). A plain
+        # VARCHAR holding domain.event_clarification.ClarificationKind, like status.
+        sa.Column(
+            "kind",
+            sa.Enum("request", "response", name="clarificationkind", native_enum=False, length=20),
+            nullable=False,
+        ),
         sa.Column("message", sa.Text(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["author_id"], ["users.id"]),

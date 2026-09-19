@@ -5,6 +5,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from domain.event_clarification import ClarificationKind
+
 
 class EventClarificationCreate(BaseModel):
     """Free text supplied by a coordinator or organiser."""
@@ -28,5 +30,6 @@ class EventClarificationRead(BaseModel):
     id: uuid.UUID
     event_request_id: uuid.UUID
     author_id: uuid.UUID
+    kind: ClarificationKind
     message: str
     created_at: datetime
