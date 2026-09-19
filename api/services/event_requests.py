@@ -20,7 +20,6 @@ from domain.event_request import (
     validate_catalogue_requirements,
     validate_event_request,
 )
-from domain.roles import Role
 from models.event_request import EventRequest
 from models.user import User
 from repositories import event_requests as repo
@@ -39,10 +38,6 @@ class NotTheOrganiserError(EventRequestError):
     """The request exists but belongs to a different organiser."""
 
 
-class NotAuthorisedError(EventRequestError):
-    """SCRUM-34: neither the owning organiser nor a coordinator may view this request."""
-
-
 class IncompleteEventRequestError(EventRequestError):
     """AC2: the request cannot be submitted until these fields are fixed."""
 
@@ -54,21 +49,6 @@ class IncompleteEventRequestError(EventRequestError):
 def list_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventRequest]:
     """The organiser's own requests, newest first."""
     return repo.list_for_organiser(db, organiser_id)
-
-
-def get(
-    db: Session, request_id: uuid.UUID, actor_id: uuid.UUID, actor_roles: list[str]
-) -> EventRequest:
-    """SCRUM-34: its organiser, or any Event Coordinator, may view a request — including
-    its coordinator assignment. Nobody else may, and nobody but the organiser may edit it
-    (see routers/event_requests.py: the edit and submit routes stay organiser-only)."""
-    request = repo.get(db, request_id)
-    if request is None:
-        raise EventRequestNotFoundError
-    is_owner = request.organiser_id == actor_id
-    if not (is_owner or Role.COORDINATOR.value in actor_roles):
-        raise NotAuthorisedError
-    return request
 
 
 def create(

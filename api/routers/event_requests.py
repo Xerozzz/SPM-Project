@@ -50,7 +50,7 @@ def _http_error(exc: Exception) -> HTTPException:
     """The single mapping from refusals to status codes, shared by every route here."""
     if isinstance(exc, service.EventRequestNotFoundError):
         return HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found")
-    if isinstance(exc, service.NotTheOrganiserError | service.NotAuthorisedError):
+    if isinstance(exc, service.NotTheOrganiserError):
         return HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
     if isinstance(exc, service.IncompleteEventRequestError):
         problems = [FieldProblemRead(field=p.field, reason=p.reason) for p in exc.problems]
