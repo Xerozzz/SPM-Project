@@ -100,15 +100,27 @@ class EventRequestRead(BaseModel):
     # SCRUM-34: who was auto-assigned on first submission, and when.
     coordinator_id: uuid.UUID | None
     assigned_at: datetime | None
+    decided_by_id: uuid.UUID | None
+    decided_at: datetime | None
+    rejection_reason: str | None
 
     @computed_field
     def status_permits(self) -> list[EventAction]:
-        """SCRUM-35: what this request's status permits, sorted for a stable response.
-
-        Named for the status, not the caller: it does not know who is asking, so a reader
-        must not treat it as "what I may do". Authorisation is answered separately.
-        """
+        """What the status permits, sorted for a stable response (SCRUM-35)."""
         return sorted(allowed_actions(self.status))
+
+
+class EventRequestRejection(BaseModel):
+    """The reason required before a coordinator can reject a request."""
+
+    reason: str
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_is_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("is required")
+        return value
 
 
 class FieldProblemRead(BaseModel):

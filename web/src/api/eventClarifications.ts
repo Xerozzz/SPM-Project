@@ -1,5 +1,3 @@
-import type { EventRequest } from './eventRequests'
-
 export type ClarificationKind = 'request' | 'response'
 
 export interface EventClarification {
@@ -19,14 +17,6 @@ function authHeaders(token: string): HeadersInit {
 async function readClarification(response: Response): Promise<EventClarification> {
   if (!response.ok) throw new Error(`Clarification request failed (${response.status})`)
   return (await response.json()) as EventClarification
-}
-
-export async function listReviewableEventRequests(token: string): Promise<EventRequest[]> {
-  const response = await fetch('/api/event-requests/reviewable', {
-    headers: authHeaders(token),
-  })
-  if (!response.ok) throw new Error(`Could not load event reviews (${response.status})`)
-  return (await response.json()) as EventRequest[]
 }
 
 export async function listClarifications(

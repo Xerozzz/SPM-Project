@@ -9,8 +9,10 @@ from domain.event_status import (
     EventStatus,
     InvalidTransitionError,
     allowed_actions,
+    approve,
     ensure_editable,
     is_editable,
+    reject,
     submit,
     transition,
 )
@@ -19,6 +21,13 @@ from domain.event_status import (
 @pytest.mark.story("SCRUM-46")
 def test_a_draft_can_be_submitted() -> None:
     assert submit(EventStatus.DRAFT) is EventStatus.SUBMITTED
+
+
+@pytest.mark.story("SCRUM-31")
+def test_a_submitted_request_can_be_approved_or_rejected_then_resubmitted() -> None:
+    assert approve(EventStatus.SUBMITTED) is EventStatus.APPROVED
+    assert reject(EventStatus.SUBMITTED) is EventStatus.REJECTED
+    assert submit(EventStatus.REJECTED) is EventStatus.SUBMITTED
 
 
 @pytest.mark.story("SCRUM-46")
@@ -40,6 +49,7 @@ def test_unlisted_transitions_are_rejected() -> None:
 @pytest.mark.story("SCRUM-46")
 def test_only_a_draft_is_editable() -> None:
     assert is_editable(EventStatus.DRAFT)
+    assert is_editable(EventStatus.REJECTED)
     assert not is_editable(EventStatus.SUBMITTED)
 
 
@@ -65,8 +75,8 @@ def test_a_draft_may_be_edited_and_submitted() -> None:
 
 
 @pytest.mark.story("SCRUM-35")
-def test_a_submitted_request_permits_nothing() -> None:
-    assert allowed_actions(EventStatus.SUBMITTED) == frozenset()
+def test_a_submitted_request_permits_coordinator_decisions() -> None:
+    assert allowed_actions(EventStatus.SUBMITTED) == {EventAction.APPROVE, EventAction.REJECT}
 
 
 @pytest.mark.story("SCRUM-35")
@@ -87,3 +97,5 @@ def test_every_action_except_edit_comes_from_a_transition() -> None:
 def test_actions_are_lowercase_strings_for_the_api() -> None:
     assert EventAction.SUBMIT.value == "submit"
     assert EventAction.EDIT.value == "edit"
+    assert EventAction.APPROVE.value == "approve"
+    assert EventAction.REJECT.value == "reject"

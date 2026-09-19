@@ -15,7 +15,6 @@ import {
   updateDraft,
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
-import ClarificationThread from './ClarificationThread'
 
 /**
  * SCRUM-46: an organiser's event requests, each with a Submit action while it is a draft.
@@ -159,6 +158,11 @@ export default function MyEventRequests() {
                   <p className="text-sm text-slate-500">
                     <StatusLabel status={request.status} />
                   </p>
+                  {request.status === 'rejected' && request.rejection_reason && (
+                    <p className="mt-1 text-sm text-red-700">
+                      Rejection reason: {request.rejection_reason}
+                    </p>
+                  )}
                 </div>
                 {request.status_permits.includes('edit') ? (
                   <div className="flex flex-wrap gap-2">
@@ -186,11 +190,6 @@ export default function MyEventRequests() {
                   <span className="text-sm text-slate-500">
                     Locked - ask your coordinator to request changes
                   </span>
-                )}
-                {request.status === 'submitted' && (
-                  <div className="basis-full">
-                    <ClarificationThread eventRequestId={request.id} mode="organiser" />
-                  </div>
                 )}
               </li>
             ))}
@@ -281,7 +280,10 @@ interface DraftFormValues {
 type SubmitTarget = Pick<EventRequest, 'id' | 'name'>
 
 function StatusLabel({ status }: { status: EventRequest['status'] }) {
-  return status === 'submitted' ? <>Submitted</> : <>Draft</>
+  if (status === 'submitted') return <>Submitted</>
+  if (status === 'approved') return <>Approved</>
+  if (status === 'rejected') return <>Rejected</>
+  return <>Draft</>
 }
 
 function OutcomeMessage({ outcome }: { outcome: Outcome }) {

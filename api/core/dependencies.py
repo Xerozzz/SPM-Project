@@ -32,6 +32,7 @@ class EventAccess(StrEnum):
 
     VIEW = "view"
     EDIT = "edit"
+    DECIDE = "decide"
     REQUEST_CLARIFICATION = "request_clarification"
     RESPOND_TO_CLARIFICATION = "respond_to_clarification"
 
@@ -108,6 +109,12 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
 
         if permission is EventAccess.RESPOND_TO_CLARIFICATION:
             if is_owner and request.status is EventStatus.SUBMITTED:
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        if permission is EventAccess.DECIDE:
+            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+            if is_assigned and request.status is EventStatus.SUBMITTED:
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
