@@ -1,5 +1,5 @@
 /**
- * Event request API calls for organisers (SCRUM-46). Mirrors api/schemas/event_requests.py.
+ * Event request API calls for organisers. Mirrors api/schemas/event_requests.py.
  */
 
 export type EventStatus = 'draft' | 'submitted'
@@ -55,6 +55,22 @@ export interface EventRequestCreate {
   layout_requirement: string
   registration_requirement: string
 }
+export type EventRequestDraftInput = Partial<
+  Pick<
+    EventRequest,
+    | 'name'
+    | 'purpose'
+    | 'description'
+    | 'start_at'
+    | 'end_at'
+    | 'expected_attendance'
+    | 'venue_requirement'
+    | 'accessibility_requirement'
+    | 'equipment_requirement'
+    | 'layout_requirement'
+    | 'registration_requirement'
+  >
+>
 
 /** One field the organiser has to fix before submission is accepted (AC2). */
 export interface FieldProblem {
@@ -123,6 +139,10 @@ function authHeaders(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}` }
 }
 
+function jsonHeaders(token: string): HeadersInit {
+  return { ...authHeaders(token), 'Content-Type': 'application/json' }
+}
+
 export async function listMyEventRequests(token: string): Promise<EventRequest[]> {
   const response = await fetch('/api/event-requests', { headers: authHeaders(token) })
   if (!response.ok) {
@@ -137,7 +157,7 @@ export async function createEventRequest(
 ): Promise<EventRequest> {
   const response = await fetch('/api/event-requests', {
     method: 'POST',
-    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+    headers: jsonHeaders(token),
     body: JSON.stringify(request),
   })
   if (response.status === 422) {
@@ -146,6 +166,53 @@ export async function createEventRequest(
   }
   if (!response.ok) {
     throw new Error(`Could not create event request (${response.status})`)
+  }
+  return (await response.json()) as EventRequest
+}
+
+export async function listDraftEventRequests(token: string): Promise<EventRequest[]> {
+  const response = await fetch('/api/event-requests/drafts', { headers: authHeaders(token) })
+  if (!response.ok) {
+    throw new Error(`/api/event-requests/drafts responded ${response.status}`)
+  }
+  return (await response.json()) as EventRequest[]
+}
+
+export async function getEventRequest(token: string, id: string): Promise<EventRequest> {
+  const response = await fetch(`/api/event-requests/${id}`, { headers: authHeaders(token) })
+  if (!response.ok) {
+    throw new Error(`Could not load event request (${response.status})`)
+  }
+  return (await response.json()) as EventRequest
+}
+
+export async function createDraft(
+  token: string,
+  draft: EventRequestDraftInput,
+): Promise<EventRequest> {
+  const response = await fetch('/api/event-requests/drafts', {
+    method: 'POST',
+    headers: jsonHeaders(token),
+    body: JSON.stringify(draft),
+  })
+  if (!response.ok) {
+    throw new Error(`Draft save failed (${response.status})`)
+  }
+  return (await response.json()) as EventRequest
+}
+
+export async function updateDraft(
+  token: string,
+  id: string,
+  draft: EventRequestDraftInput,
+): Promise<EventRequest> {
+  const response = await fetch(`/api/event-requests/${id}`, {
+    method: 'PATCH',
+    headers: jsonHeaders(token),
+    body: JSON.stringify(draft),
+  })
+  if (!response.ok) {
+    throw new Error(`Draft save failed (${response.status})`)
   }
   return (await response.json()) as EventRequest
 }

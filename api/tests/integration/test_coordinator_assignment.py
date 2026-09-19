@@ -145,8 +145,8 @@ def test_submit_never_reassigns_a_request_that_already_has_a_coordinator(
 
 
 @pytest.mark.story("SCRUM-34")
-def test_assignment_is_visible_to_the_organiser_and_to_any_coordinator(
-    db: Session, make_user: MakeUser
+async def test_assignment_is_visible_to_the_organiser_and_to_any_coordinator(
+    db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     organiser = make_user("organiser")
     coord_a = make_user("coordinator")
@@ -155,14 +155,15 @@ def test_assignment_is_visible_to_the_organiser_and_to_any_coordinator(
     draft = make_draft(db, organiser, start_at=datetime(2026, 8, 1, 9, 0, tzinfo=UTC))
     submitted = service.submit(db, draft.id, organiser.id, now)
 
-    seen_by_owner = service.get(db, submitted.id, organiser.id, ["organiser"])
-    seen_by_other_coordinator = service.get(db, submitted.id, other_coordinator.id, ["coordinator"])
+    async with make_client(organiser) as owner_client:
+        seen_by_owner = await owner_client.get(f"/api/event-requests/{submitted.id}")
+    async with make_client(other_coordinator) as coordinator_client:
+        seen_by_other = await coordinator_client.get(f"/api/event-requests/{submitted.id}")
 
-    assert seen_by_owner.coordinator_id == coord_a.id
-    assert seen_by_other_coordinator.coordinator_id == coord_a.id
-
-
-# ---------------------------------------------------------------- boundary case
+    assert seen_by_owner.status_code == 200
+    assert seen_by_owner.json()["coordinator_id"] == str(coord_a.id)
+    assert seen_by_other.status_code == 200
+    assert seen_by_other.json()["coordinator_id"] == str(coord_a.id)
 
 
 @pytest.mark.story("SCRUM-34")
@@ -261,16 +262,20 @@ async def test_submit_endpoint_returns_409_when_no_coordinator_is_available(
 
 
 @pytest.mark.story("SCRUM-34")
-def test_get_is_forbidden_to_an_unrelated_organiser(db: Session, make_user: MakeUser) -> None:
+async def test_read_endpoint_is_forbidden_to_an_organiser_from_another_organisation(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
     owner = make_user("organiser")
-    other = make_user("organiser")
+    other = make_user("organiser")  # make_user gives each user its own organisation
     make_user("coordinator")
     now = datetime(2026, 1, 2, tzinfo=UTC)
     draft = make_draft(db, owner, start_at=datetime(2026, 8, 2, 9, 0, tzinfo=UTC))
     submitted = service.submit(db, draft.id, owner.id, now)
 
-    with pytest.raises(service.NotAuthorisedError):
-        service.get(db, submitted.id, other.id, ["organiser"])
+    async with make_client(other) as client:
+        response = await client.get(f"/api/event-requests/{submitted.id}")
+
+    assert response.status_code == 403
 
 
 @pytest.mark.story("SCRUM-34")
@@ -284,11 +289,14 @@ async def test_read_endpoint_returns_404_for_an_unknown_request(
 
 
 @pytest.mark.story("SCRUM-34")
-def test_get_raises_not_found_for_an_unknown_request(db: Session, make_user: MakeUser) -> None:
-    organiser = make_user("organiser")
+async def test_read_endpoint_returns_404_for_an_unknown_request_to_a_coordinator_too(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # Not-found is decided before any role rule, so a coordinator sees the same 404.
+    async with make_client(make_user("coordinator")) as client:
+        response = await client.get(f"/api/event-requests/{uuid.uuid4()}")
 
-    with pytest.raises(service.EventRequestNotFoundError):
-        service.get(db, uuid.uuid4(), organiser.id, ["organiser"])
+    assert response.status_code == 404
 
 
 @pytest.mark.story("SCRUM-34")

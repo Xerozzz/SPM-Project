@@ -36,6 +36,7 @@ from core.config import get_settings
 from core.database import engine, get_db
 from core.security import create_access_token, hash_password
 from domain.roles import Role
+from models.organisation import Organisation
 from models.user import User
 
 
@@ -96,7 +97,8 @@ def make_user(db: Session) -> Callable[..., User]:
     """Create a signed-up user with the given roles, e.g. make_user("organiser").
 
     `is_active` and `created_at` exist for SCRUM-34: round-robin assignment only
-    considers active coordinators, in account-creation order.
+    considers active coordinators, in account-creation order. `organisation_id` supports
+    SCRUM-29's organisation-scoped draft visibility.
     """
 
     def _make(
@@ -104,7 +106,12 @@ def make_user(db: Session) -> Callable[..., User]:
         email: str | None = None,
         is_active: bool = True,
         created_at: datetime | None = None,
+        organisation_id: uuid.UUID | None = None,
     ) -> User:
+        org_id = organisation_id or uuid.uuid4()
+        if db.get(Organisation, org_id) is None:
+            db.add(Organisation(id=org_id, name=f"Test organisation {org_id}"))
+            db.flush()
         user = User(
             email=email or f"{uuid.uuid4()}@example.com",
             password_hash=hash_password("password123"),
@@ -112,6 +119,7 @@ def make_user(db: Session) -> Callable[..., User]:
             roles=[Role(role).value for role in roles],
             is_active=is_active,
             created_at=created_at or datetime.now(UTC),
+            organisation_id=org_id,
         )
         db.add(user)
         db.flush()

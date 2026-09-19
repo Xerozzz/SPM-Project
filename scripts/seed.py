@@ -15,20 +15,27 @@ from core.database import Session, SessionLocal
 from core.security import hash_password
 from domain.roles import Role
 from models.event_request import EventRequest
+from models.organisation import Organisation
 from models.user import User
 from repositories import event_requests as event_requests_repo
 from repositories import users as users_repo
 
-_SEED_USERS: list[tuple[str, str, list[Role]]] = [
-    ("organiser@example.com", "password123", [Role.ORGANISER]),
-    ("coordinator@example.com", "password123", [Role.COORDINATOR]),
+_PRIMARY_ORG_ID = uuid.UUID("00000000-0000-4000-8000-000000000010")
+
+_SEED_ORGANISATIONS: tuple[tuple[uuid.UUID, str], ...] = (
+    (_PRIMARY_ORG_ID, "Default Client Organisation"),
+)
+
+_SEED_USERS: list[tuple[str, str, list[Role], uuid.UUID]] = [
+    ("organiser@example.com", "password123", [Role.ORGANISER], _PRIMARY_ORG_ID),
+    ("coordinator@example.com", "password123", [Role.COORDINATOR], _PRIMARY_ORG_ID),
     # A second active coordinator, so a fresh `docker compose up` can demonstrate
     # round-robin assignment (SCRUM-34) rather than always assigning the same one.
-    ("coordinator2@example.com", "password123", [Role.COORDINATOR]),
-    ("venue-staff@example.com", "password123", [Role.VENUE_STAFF]),
-    ("tech-support@example.com", "password123", [Role.TECH_SUPPORT]),
-    ("attendee@example.com", "password123", [Role.ATTENDEE]),
-    ("multi-role@example.com", "password123", [Role.ORGANISER, Role.COORDINATOR]),
+    ("coordinator2@example.com", "password123", [Role.COORDINATOR], _PRIMARY_ORG_ID),
+    ("venue-staff@example.com", "password123", [Role.VENUE_STAFF], _PRIMARY_ORG_ID),
+    ("tech-support@example.com", "password123", [Role.TECH_SUPPORT], _PRIMARY_ORG_ID),
+    ("attendee@example.com", "password123", [Role.ATTENDEE], _PRIMARY_ORG_ID),
+    ("multi-role@example.com", "password123", [Role.ORGANISER, Role.COORDINATOR], _PRIMARY_ORG_ID),
 ]
 
 
@@ -74,15 +81,23 @@ def _sample_event_requests() -> list[tuple[uuid.UUID, dict[str, object]]]:
     return [(_SAMPLE_IDS[0], orientation_day), (_SAMPLE_IDS[1], hackathon)]
 
 
+def _seed_organisations(db: Session) -> None:
+    """Insert the client organisations used by local seed accounts."""
+    for org_id, name in _SEED_ORGANISATIONS:
+        if db.get(Organisation, org_id) is None:
+            db.add(Organisation(id=org_id, name=name))
+
+
 def _seed_users(db: Session) -> None:
     """Insert missing seed users; never touch existing rows."""
-    for email, password, roles in _SEED_USERS:
+    for email, password, roles, organisation_id in _SEED_USERS:
         if users_repo.get_by_email(db, email) is None:
             db.add(
                 User(
                     email=email,
                     password_hash=hash_password(password),
                     roles=[role.value for role in roles],
+                    organisation_id=organisation_id,
                 )
             )
 
@@ -97,12 +112,21 @@ def _seed_event_requests(db: Session) -> None:
         if existing is not None:
             event_requests_repo.delete(db, existing)
             db.flush()
-        event_requests_repo.add(db, EventRequest(id=sample_id, organiser_id=organiser.id, **fields))
+        event_requests_repo.add(
+            db,
+            EventRequest(
+                id=sample_id,
+                organiser_id=organiser.id,
+                **fields,
+            ),
+        )
 
 
 def main() -> None:
     db = SessionLocal()
     try:
+        _seed_organisations(db)
+        db.flush()
         _seed_users(db)
         db.flush()
         _seed_event_requests(db)
