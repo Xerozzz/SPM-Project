@@ -84,15 +84,13 @@ def test_every_transition_offers_its_action() -> None:
     # A transition added to the table whose action never reaches allowed_actions fails here,
     # so adding a move cannot silently leave the UI without its button.
     for (source, _), action in _ALLOWED_TRANSITIONS.items():
-        if action is not None:
-            assert action in allowed_actions(source)
+        assert action in allowed_actions(source)
 
 
 @pytest.mark.story("SCRUM-35")
 def test_every_action_except_edit_comes_from_a_transition() -> None:
     # EDIT is not a transition; every other action must be one, or it can never be offered.
-    transition_actions = {action for action in _ALLOWED_TRANSITIONS.values() if action is not None}
-    assert transition_actions == set(EventAction) - {EventAction.EDIT}
+    assert set(_ALLOWED_TRANSITIONS.values()) == set(EventAction) - {EventAction.EDIT}
 
 
 @pytest.mark.story("SCRUM-35")
