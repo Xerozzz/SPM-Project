@@ -1,4 +1,4 @@
-# ADR-0009: Retain event clarification as a message history
+# ADR-0010: Retain event clarification as a message history
 
 - **Status:** Proposed
 - **Date:** 2026-09-17

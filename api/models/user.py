@@ -3,7 +3,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -23,6 +23,9 @@ class User(Base):
     roles: Mapped[list[str]] = mapped_column(ARRAY(String(50)), nullable=False, default=list)
     # SCRUM-34: only an active Event Coordinator is eligible for round-robin assignment.
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organisations.id"), nullable=False, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )

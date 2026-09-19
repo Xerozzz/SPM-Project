@@ -21,7 +21,7 @@ router = APIRouter(prefix="/event-requests", tags=["event-clarifications"])
 AuthenticatedUser = Annotated[dict[str, object], Depends(get_current_user)]
 Coordinator = Annotated[dict[str, object], Depends(require_role(Role.COORDINATOR))]
 ViewableEvent = Annotated[
-    EventRequest, Depends(require_event_access(EventAccess.VIEW_CLARIFICATIONS))
+    EventRequest, Depends(require_event_access(EventAccess.VIEW))
 ]
 ClarifiableEvent = Annotated[
     EventRequest, Depends(require_event_access(EventAccess.REQUEST_CLARIFICATION))

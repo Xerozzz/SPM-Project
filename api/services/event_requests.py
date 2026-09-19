@@ -20,8 +20,8 @@ from domain.event_request import (
     validate_catalogue_requirements,
     validate_event_request,
 )
-from domain.roles import Role
 from models.event_request import EventRequest
+from models.user import User
 from repositories import event_requests as repo
 from repositories import users as users_repo
 
@@ -38,10 +38,6 @@ class NotTheOrganiserError(EventRequestError):
     """The request exists but belongs to a different organiser."""
 
 
-class NotAuthorisedError(EventRequestError):
-    """SCRUM-34: neither the owning organiser nor a coordinator may view this request."""
-
-
 class IncompleteEventRequestError(EventRequestError):
     """AC2: the request cannot be submitted until these fields are fixed."""
 
@@ -53,21 +49,6 @@ class IncompleteEventRequestError(EventRequestError):
 def list_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventRequest]:
     """The organiser's own requests, newest first."""
     return repo.list_for_organiser(db, organiser_id)
-
-
-def get(
-    db: Session, request_id: uuid.UUID, actor_id: uuid.UUID, actor_roles: list[str]
-) -> EventRequest:
-    """SCRUM-34: its organiser, or any Event Coordinator, may view a request — including
-    its coordinator assignment. Nobody else may, and nobody but the organiser may edit it
-    (see routers/event_requests.py: the edit and submit routes stay organiser-only)."""
-    request = repo.get(db, request_id)
-    if request is None:
-        raise EventRequestNotFoundError
-    is_owner = request.organiser_id == actor_id
-    if not (is_owner or Role.COORDINATOR.value in actor_roles):
-        raise NotAuthorisedError
-    return request
 
 
 def list_for_review(db: Session) -> list[EventRequest]:
@@ -84,6 +65,22 @@ def create(
         raise IncompleteEventRequestError(problems)
     request = EventRequest(organiser_id=organiser_id, **fields.__dict__)
     return repo.save(db, repo.add(db, request))
+
+
+def list_visible_drafts_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventRequest]:
+    """Drafts visible to this organiser through their organisation membership."""
+    organiser = _user_or_forbidden(db, organiser_id)
+    return repo.list_drafts_for_organisation(db, organiser.organisation_id)
+
+
+def create_draft(db: Session, organiser_id: uuid.UUID, fields: dict[str, object]) -> EventRequest:
+    """SCRUM-29: save a new incomplete draft for the current organiser.
+
+    Draft creation deliberately does not call `validate_for_submission`; completeness is
+    checked only when the organiser submits the request for review.
+    """
+    request = EventRequest(organiser_id=organiser_id, **fields)
+    return repo.save(db, request)
 
 
 def update_draft(
@@ -159,6 +156,13 @@ def _owned_by(
     if request.organiser_id != organiser_id:
         raise NotTheOrganiserError
     return request
+
+
+def _user_or_forbidden(db: Session, user_id: uuid.UUID) -> User:
+    user = users_repo.get(db, user_id)
+    if user is None:
+        raise NotTheOrganiserError
+    return user
 
 
 def _fields_of(request: EventRequest) -> EventRequestFields:

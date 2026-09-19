@@ -9,13 +9,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from core.database import get_db
-from core.dependencies import get_current_user, require_role
+from core.dependencies import EventAccess, require_event_access, require_role
 from domain.coordinator_assignment import NoAvailableCoordinatorError
 from domain.event_request import EventRequestFields
 from domain.event_status import EventRequestLockedError, InvalidTransitionError
 from domain.roles import Role
+from models.event_request import EventRequest
 from schemas.event_requests import (
     EventRequestCreate,
+    EventRequestDraftCreate,
     EventRequestRead,
     EventRequestUpdate,
     FieldProblemRead,
@@ -25,7 +27,8 @@ from services import event_requests as service
 router = APIRouter(prefix="/event-requests", tags=["event-requests"])
 
 Organiser = Annotated[dict[str, object], Depends(require_role(Role.ORGANISER))]
-AnyUser = Annotated[dict[str, object], Depends(get_current_user)]
+ViewableEventRequest = Annotated[EventRequest, Depends(require_event_access(EventAccess.VIEW))]
+EditableEventRequest = Annotated[EventRequest, Depends(require_event_access(EventAccess.EDIT))]
 Db = Annotated[Session, Depends(get_db)]
 
 # Everything the service or the status machine can refuse with, in one tuple so each route
@@ -43,17 +46,11 @@ def _organiser_id(user: dict[str, object]) -> uuid.UUID:
     return uuid.UUID(str(user["sub"]))
 
 
-def _roles(user: dict[str, object]) -> list[str]:
-    """Role claims from the decoded JWT, defensively typed like `require_role`."""
-    roles = user.get("roles", [])
-    return [str(role) for role in roles] if isinstance(roles, list) else []
-
-
 def _http_error(exc: Exception) -> HTTPException:
     """The single mapping from refusals to status codes, shared by every route here."""
     if isinstance(exc, service.EventRequestNotFoundError):
         return HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found")
-    if isinstance(exc, service.NotTheOrganiserError | service.NotAuthorisedError):
+    if isinstance(exc, service.NotTheOrganiserError):
         return HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
     if isinstance(exc, service.IncompleteEventRequestError):
         problems = [FieldProblemRead(field=p.field, reason=p.reason) for p in exc.problems]
@@ -91,25 +88,37 @@ def create_event_request(body: EventRequestCreate, user: Organiser, db: Db) -> E
     return EventRequestRead.model_validate(row)
 
 
-@router.get("/{request_id}", response_model=EventRequestRead)
-def read(request_id: uuid.UUID, user: AnyUser, db: Db) -> EventRequestRead:
-    """SCRUM-34: its organiser, or any Event Coordinator, may view a request and see
-    its coordinator assignment. Nobody else may."""
-    try:
-        row = service.get(db, request_id, _organiser_id(user), _roles(user))
-    except (service.EventRequestNotFoundError, service.NotAuthorisedError) as exc:
-        raise _http_error(exc) from exc
+@router.post("/drafts", response_model=EventRequestRead, status_code=status.HTTP_201_CREATED)
+def create_draft(body: EventRequestDraftCreate, user: Organiser, db: Db) -> EventRequestRead:
+    """Save a new draft. Submission-only validation is not run here (SCRUM-29)."""
+    row = service.create_draft(db, _organiser_id(user), body.model_dump(exclude_unset=True))
     return EventRequestRead.model_validate(row)
+
+
+@router.get("/drafts", response_model=list[EventRequestRead])
+def list_drafts(user: Organiser, db: Db) -> list[EventRequestRead]:
+    """Drafts visible to the signed-in organiser."""
+    try:
+        rows = service.list_visible_drafts_for_organiser(db, _organiser_id(user))
+    except _REFUSALS as exc:
+        raise _http_error(exc) from exc
+    return [EventRequestRead.model_validate(row) for row in rows]
+
+
+@router.get("/{request_id}", response_model=EventRequestRead)
+def get_event_request(request: ViewableEventRequest) -> EventRequestRead:
+    """Return an event request visible to the signed-in user."""
+    return EventRequestRead.model_validate(request)
 
 
 @router.patch("/{request_id}", response_model=EventRequestRead)
 def update_draft(
-    request_id: uuid.UUID, body: EventRequestUpdate, user: Organiser, db: Db
+    request: EditableEventRequest, body: EventRequestUpdate, user: Organiser, db: Db
 ) -> EventRequestRead:
     """Edit a draft. Refused with 409 once the request has been submitted (AC3)."""
     try:
         changes = body.model_dump(exclude_unset=True)
-        row = service.update_draft(db, request_id, _organiser_id(user), changes)
+        row = service.update_draft(db, request.id, _organiser_id(user), changes)
     except _REFUSALS as exc:
         raise _http_error(exc) from exc
     return EventRequestRead.model_validate(row)

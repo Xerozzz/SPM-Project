@@ -16,14 +16,22 @@ from domain.event_status import EventStatus
 from domain.roles import Role
 from models.event_request import EventRequest
 from repositories import event_requests as event_request_repo
+from repositories import users as users_repo
 
 _bearer = HTTPBearer(auto_error=False)
 
 
 class EventAccess(StrEnum):
-    """The event-request access modes routes may ask for."""
+    """The event-request access modes routes may ask for.
 
-    VIEW_CLARIFICATIONS = "view_clarifications"
+    VIEW and EDIT cover the request itself (SCRUM-29). The two clarification modes
+    (SCRUM-30) are narrower: only the assigned coordinator may ask, only the owning
+    organiser may answer, and both only while the request is under review. Reading the
+    clarification history uses VIEW, so whoever may see the request may see its thread.
+    """
+
+    VIEW = "view"
+    EDIT = "edit"
     REQUEST_CLARIFICATION = "request_clarification"
     RESPOND_TO_CLARIFICATION = "respond_to_clarification"
 
@@ -53,15 +61,7 @@ def require_role(*allowed: Role) -> Callable[[dict[str, object]], dict[str, obje
     def check(
         user: Annotated[dict[str, object], Depends(get_current_user)],
     ) -> dict[str, object]:
-        # Only string elements count as roles. The claim is ours and signed, but a malformed
-        # one (say, `roles: [{}]`) must still be a 403, not a TypeError from set arithmetic.
-        claimed = user.get("roles")
-        granted = (
-            {role for role in claimed if isinstance(role, str)}
-            if isinstance(claimed, list)
-            else set()
-        )
-        if not allowed_values & granted:
+        if not allowed_values & _granted_roles(user):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         return user
 
@@ -69,10 +69,12 @@ def require_role(*allowed: Role) -> Callable[[dict[str, object]], dict[str, obje
 
 
 def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]:
-    """Authorize one participant's access to an event-review clarification thread.
+    """Dependency factory for one event request: view it, edit it, or take part in its
+    clarification exchange.
 
-    Any coordinator may view a submitted request for planning, but only its assigned
-    coordinator may request clarification. Drafts remain private to their organiser.
+    Draft visibility is deliberately narrower than submitted visibility: coordinators may
+    see submitted requests, but not drafts before submission. Organisers in the same
+    organisation may see each other's requests in any status.
     """
 
     def check(
@@ -87,27 +89,51 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
             )
 
         roles = _granted_roles(user)
-        user_id = _user_id(user)
-        is_owner = Role.ORGANISER.value in roles and request.organiser_id == user_id
-        is_coordinator = Role.COORDINATOR.value in roles
-        is_assigned_coordinator = is_coordinator and request.coordinator_id == user_id
-        is_submitted = request.status is EventStatus.SUBMITTED
+        viewer_id = _user_id(user)
 
-        if permission is EventAccess.REQUEST_CLARIFICATION:
-            allowed = is_assigned_coordinator and is_submitted
-        elif permission is EventAccess.RESPOND_TO_CLARIFICATION:
-            allowed = is_owner and is_submitted
-        else:
-            allowed = is_owner or (is_coordinator and is_submitted)
+        is_owner = Role.ORGANISER.value in roles and request.organiser_id == viewer_id
 
-        if not allowed:
+        if permission is EventAccess.EDIT:
+            if is_owner:
+                return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
-        return request
+
+        # Clarification is part of review (clarification sheet row 101), so both sides of
+        # the exchange are pinned to SUBMITTED. Reading the history is not: it uses VIEW.
+        if permission is EventAccess.REQUEST_CLARIFICATION:
+            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+            if is_assigned and request.status is EventStatus.SUBMITTED:
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        if permission is EventAccess.RESPOND_TO_CLARIFICATION:
+            if is_owner and request.status is EventStatus.SUBMITTED:
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+
+        if is_owner:
+            return request
+
+        if Role.ORGANISER.value in roles and _same_organisation(
+            db, viewer_id, request.organiser_id
+        ):
+            return request
+
+        if request.status is EventStatus.DRAFT:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        if Role.COORDINATOR.value in roles:
+            return request
+
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
     return check
 
 
 def _granted_roles(user: dict[str, object]) -> set[str]:
+    # Only string elements count as roles. The claim is ours and signed, but a malformed
+    # one (say, `roles: [{}]`) must still be a 403, not a TypeError from set arithmetic.
     claimed = user.get("roles")
     return (
         {role for role in claimed if isinstance(role, str)} if isinstance(claimed, list) else set()
@@ -119,3 +145,13 @@ def _user_id(user: dict[str, object]) -> uuid.UUID:
         return uuid.UUID(str(user["sub"]))
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
+
+
+def _same_organisation(db: Session, viewer_id: uuid.UUID, organiser_id: uuid.UUID) -> bool:
+    viewer = users_repo.get(db, viewer_id)
+    organiser = users_repo.get(db, organiser_id)
+    return (
+        viewer is not None
+        and organiser is not None
+        and viewer.organisation_id == organiser.organisation_id
+    )

@@ -1,10 +1,17 @@
 """User lookups. The only layer that queries the users table (ADR-0003)."""
 
+import uuid
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from domain.roles import Role
 from models.user import User
+
+
+def get(db: Session, user_id: uuid.UUID) -> User | None:
+    """Return the user with this id, or None."""
+    return db.get(User, user_id)
 
 
 def get_by_email(db: Session, email: str) -> User | None:

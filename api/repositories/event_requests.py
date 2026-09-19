@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from domain.coordinator_assignment import org_day_bounds
 from domain.event_status import EventStatus
 from models.event_request import EventRequest
+from models.user import User
 
 
 def get(db: Session, request_id: uuid.UUID) -> EventRequest | None:
@@ -43,6 +44,20 @@ def list_submitted(db: Session) -> list[EventRequest]:
         select(EventRequest)
         .where(EventRequest.status == EventStatus.SUBMITTED)
         .order_by(EventRequest.submitted_at.asc(), EventRequest.id.asc())
+    )
+    return list(db.scalars(statement))
+
+
+def list_drafts_for_organisation(db: Session, organisation_id: uuid.UUID) -> list[EventRequest]:
+    """Drafts created by organisers in this organisation, newest first."""
+    statement = (
+        select(EventRequest)
+        .join(User, EventRequest.organiser_id == User.id)
+        .where(
+            User.organisation_id == organisation_id,
+            EventRequest.status == EventStatus.DRAFT,
+        )
+        .order_by(EventRequest.created_at.desc())
     )
     return list(db.scalars(statement))
 

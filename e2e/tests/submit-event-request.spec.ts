@@ -2,13 +2,8 @@ import { expect, type Page, test } from '@playwright/test'
 
 // SCRUM-46: an organiser submits an event request through the UI.
 //
-// Relies on the dev seed (scripts/seed.py), which the api container runs on every start:
-// organiser@example.com owns "Orientation Day" (complete) and "Hackathon (draft)"
-// (incomplete), both recreated in Draft. The first test genuinely submits the request, so
-// it can only pass once per seed: re-running locally needs `make seed` first, and retries
-// are off for this file so a failure is reported as itself rather than as "already
-// submitted". Once SCRUM-28 adds POST /api/event-requests, this should create its own
-// draft instead of consuming shared seed data.
+// The complete-submit case creates its own draft so it can be rerun without depending on
+// mutable seed state. The incomplete case uses the seeded "Hackathon (draft)" row.
 test.describe.configure({ retries: 0 })
 
 async function signInAsOrganiser(page: Page) {
@@ -20,23 +15,47 @@ async function signInAsOrganiser(page: Page) {
 }
 
 function row(page: Page, name: string) {
-  return page.getByRole('listitem').filter({ hasText: name })
+  const ownRequests = page
+    .getByRole('heading', { name: 'My event requests' })
+    .locator('xpath=../following-sibling::ul[1]')
+  return ownRequests.getByRole('listitem').filter({ hasText: name })
+}
+
+async function createCompleteDraft(page: Page, name: string) {
+  await page.getByLabel('Name *').fill(name)
+  await page.getByLabel('Purpose *').fill('Welcome new students')
+  await page.getByLabel('Description *').fill('Campus orientation activities')
+  await page.getByLabel('Start date and time *').fill('2030-12-01T09:00')
+  await page.getByLabel('End date and time *').fill('2030-12-01T13:00')
+  await page.getByLabel('Expected attendance *').fill('200')
+  await page.getByLabel('Venue requirement *').selectOption('Auditorium-type venue')
+  await page.getByLabel('Accessibility requirement *').fill('Step-free access')
+  await page.getByLabel('Equipment requirement *').selectOption('Projector-type requirement')
+  await page.getByLabel('Layout requirement *').fill('Theatre style')
+  await page.getByLabel('Registration requirement *').fill('Open registration')
+  await page.getByRole('button', { name: 'Create event request' }).click()
+
+  await expect(page.getByRole('status').filter({ hasText: 'has been created' })).toContainText(
+    `“${name}” has been created.`,
+  )
 }
 
 test('a complete draft is submitted and confirmed (AC1), then locked (AC3)', async ({ page }) => {
+  const name = `E2E submit ${Date.now()}`
   await signInAsOrganiser(page)
+  await createCompleteDraft(page, name)
 
-  await expect(row(page, 'Orientation Day')).toContainText('Draft')
-  await row(page, 'Orientation Day').getByRole('button', { name: 'Submit for review' }).click()
+  await expect(row(page, name)).toContainText('Draft')
+  await row(page, name).getByRole('button', { name: 'Submit for review' }).click()
 
   // Home also has a role="status" line for API health, so pick ours by its text.
   await expect(page.getByRole('status').filter({ hasText: 'submitted for review' })).toContainText(
-    '“Orientation Day” has been submitted for review. Its status is now Submitted.',
+    `“${name}” has been submitted for review. Its status is now Submitted.`,
   )
-  await expect(row(page, 'Orientation Day')).toContainText('Submitted')
-  await expect(row(page, 'Orientation Day')).toContainText('Locked')
+  await expect(row(page, name)).toContainText('Submitted')
+  await expect(row(page, name)).toContainText('Locked')
   await expect(
-    row(page, 'Orientation Day').getByRole('button', {
+    row(page, name).getByRole('button', {
       name: 'Submit for review',
     }),
   ).toHaveCount(0)
