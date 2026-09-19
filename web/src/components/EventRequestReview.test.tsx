@@ -19,6 +19,7 @@ const submitted = {
   equipment_requirement: 'Projector',
   layout_requirement: 'Theatre',
   registration_requirement: 'Open registration',
+  status_permits: ['approve', 'reject'],
 }
 
 afterEach(() => {
@@ -37,7 +38,8 @@ test('coordinator reviews a submitted request and approves it', async () => {
   )
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const key = `${init?.method ?? 'GET'} ${String(input)}`
-    if (key === 'GET /api/event-requests/review') return json([submitted])
+    if (key === 'GET /api/event-requests/reviewable') return json([submitted])
+    if (key === 'GET /api/event-requests/req-1/clarifications') return json([])
     if (key === 'POST /api/event-requests/req-1/approve') {
       return json({ ...submitted, status: 'approved' })
     }

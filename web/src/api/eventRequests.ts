@@ -5,7 +5,7 @@
 export type EventStatus =
   'draft' | 'submitted' | 'approved' | 'rejected'
 
-export type EventAction = 'edit' | 'submit'
+export type EventAction = 'edit' | 'submit' | 'approve' | 'reject'
 
 export const VENUE_REQUIREMENTS = [
   'Auditorium-type venue',
@@ -156,7 +156,7 @@ export async function listMyEventRequests(token: string): Promise<EventRequest[]
 }
 
 export async function listRequestsForReview(token: string): Promise<EventRequest[]> {
-  const response = await fetch('/api/event-requests/review', { headers: authHeaders(token) })
+  const response = await fetch('/api/event-requests/reviewable', { headers: authHeaders(token) })
   if (!response.ok) throw new Error(`Could not load submitted requests (${response.status})`)
   return (await response.json()) as EventRequest[]
 }

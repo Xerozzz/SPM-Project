@@ -24,7 +24,7 @@ async def test_coordinator_sees_submitted_request_information_and_approves_it(
     async with make_client(organiser) as client:
         await _submit(client, request.id)
     async with make_client(coordinator) as client:
-        review = await client.get("/api/event-requests/review")
+        review = await client.get("/api/event-requests/reviewable")
         approval = await client.post(f"/api/event-requests/{request.id}/approve")
 
     assert review.status_code == 200
@@ -86,7 +86,7 @@ async def test_only_a_coordinator_can_review_or_decide(
 ) -> None:
     organiser = make_user("organiser")
     async with make_client(organiser) as client:
-        assert (await client.get("/api/event-requests/review")).status_code == 403
+        assert (await client.get("/api/event-requests/reviewable")).status_code == 403
 
 
 @pytest.mark.story("SCRUM-31")

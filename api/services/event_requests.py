@@ -193,9 +193,7 @@ def _user_or_forbidden(db: Session, user_id: uuid.UUID) -> User:
     return user
 
 
-def _for_decision(
-    db: Session, request_id: uuid.UUID, coordinator_id: uuid.UUID
-) -> EventRequest:
+def _for_decision(db: Session, request_id: uuid.UUID, coordinator_id: uuid.UUID) -> EventRequest:
     """Lock a request before applying a coordinator decision."""
     request = repo.get_for_update(db, request_id)
     if request is None:

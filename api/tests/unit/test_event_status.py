@@ -75,8 +75,8 @@ def test_a_draft_may_be_edited_and_submitted() -> None:
 
 
 @pytest.mark.story("SCRUM-35")
-def test_a_submitted_request_permits_no_organiser_actions() -> None:
-    assert allowed_actions(EventStatus.SUBMITTED) == frozenset()
+def test_a_submitted_request_permits_coordinator_decisions() -> None:
+    assert allowed_actions(EventStatus.SUBMITTED) == {EventAction.APPROVE, EventAction.REJECT}
 
 
 @pytest.mark.story("SCRUM-35")
@@ -99,3 +99,5 @@ def test_every_action_except_edit_comes_from_a_transition() -> None:
 def test_actions_are_lowercase_strings_for_the_api() -> None:
     assert EventAction.SUBMIT.value == "submit"
     assert EventAction.EDIT.value == "edit"
+    assert EventAction.APPROVE.value == "approve"
+    assert EventAction.REJECT.value == "reject"

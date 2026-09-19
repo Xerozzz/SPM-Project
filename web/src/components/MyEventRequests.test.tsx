@@ -260,6 +260,9 @@ function eventRequest(overrides: Partial<EventRequest>): EventRequest {
     created_at: '2026-09-12T08:00:00Z',
     updated_at: '2026-09-12T08:00:00Z',
     submitted_at: null,
+    decided_by_id: null,
+    decided_at: null,
+    rejection_reason: null,
     ...overrides,
     status_permits: overrides.status_permits ?? ['edit', 'submit'],
   }

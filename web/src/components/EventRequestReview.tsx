@@ -9,6 +9,7 @@ import {
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
 import { hasReviewNote } from '../validation/eventRequestReview'
+import ClarificationThread from './ClarificationThread'
 
 /** SCRUM-31: coordinator review is a decision only; it does not start planning work. */
 export default function EventRequestReview() {
@@ -16,7 +17,7 @@ export default function EventRequestReview() {
   const client = useQueryClient()
   const [reason, setReason] = useState<Record<string, string>>({})
   const [outcome, setOutcome] = useState<string | null>(null)
-  const queryKey = ['event-requests', 'review', token]
+  const queryKey = ['event-requests', 'reviewable', token]
   const requests = useQuery({
     queryKey,
     queryFn: () => listRequestsForReview(token ?? ''),
@@ -137,23 +138,28 @@ function ReviewCard({
         className="mt-1 w-full rounded border border-slate-300 p-2 text-sm"
       />
       <div className="mt-3 flex gap-2">
-        <button
-          type="button"
-          onClick={onApprove}
-          disabled={pending}
-          className="rounded bg-green-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-        >
-          Approve
-        </button>
-        <button
-          type="button"
-          onClick={onReject}
-          disabled={pending || !hasReviewNote(reason)}
-          className="rounded bg-red-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-        >
-          Reject
-        </button>
+        {request.status_permits.includes('approve') && (
+          <button
+            type="button"
+            onClick={onApprove}
+            disabled={pending}
+            className="rounded bg-green-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+          >
+            Approve
+          </button>
+        )}
+        {request.status_permits.includes('reject') && (
+          <button
+            type="button"
+            onClick={onReject}
+            disabled={pending || !hasReviewNote(reason)}
+            className="rounded bg-red-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+          >
+            Reject
+          </button>
+        )}
       </div>
+      <ClarificationThread eventRequestId={request.id} mode="coordinator" />
     </article>
   )
 }

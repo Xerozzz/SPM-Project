@@ -21,6 +21,7 @@ someone else made two weeks ago.
 | [0008](0008-coordinator-round-robin-assignment.md) | Derive round-robin coordinator assignment from assignment history | Accepted |
 | [0009](0009-organisation-scoped-drafts.md) | Derive draft visibility from organiser organisation membership | Proposed |
 | [0010](0010-event-clarification-history.md) | Retain event clarification as a message history | Proposed |
+| [0011](0011-event-request-review-decisions.md) | Store the current event-request review decision on the request | Proposed |
 
 ## When to write one
 

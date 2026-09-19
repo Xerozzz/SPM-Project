@@ -37,6 +37,8 @@ class EventAction(StrEnum):
 
     EDIT = "edit"
     SUBMIT = "submit"
+    APPROVE = "approve"
+    REJECT = "reject"
 
 
 class InvalidTransitionError(Exception):
@@ -59,10 +61,10 @@ class EventRequestLockedError(Exception):
 # The whole state machine, as data: each legal move and the action that performs it. A
 # transition that is not listed here does not exist, and an entry added here is offered by
 # allowed_actions without anything else changing.
-_ALLOWED_TRANSITIONS: dict[tuple[EventStatus, EventStatus], EventAction | None] = {
+_ALLOWED_TRANSITIONS: dict[tuple[EventStatus, EventStatus], EventAction] = {
     (EventStatus.DRAFT, EventStatus.SUBMITTED): EventAction.SUBMIT,
-    (EventStatus.SUBMITTED, EventStatus.APPROVED): None,
-    (EventStatus.SUBMITTED, EventStatus.REJECTED): None,
+    (EventStatus.SUBMITTED, EventStatus.APPROVED): EventAction.APPROVE,
+    (EventStatus.SUBMITTED, EventStatus.REJECTED): EventAction.REJECT,
     (EventStatus.REJECTED, EventStatus.SUBMITTED): EventAction.SUBMIT,
 }
 
@@ -103,11 +105,7 @@ def ensure_editable(status: EventStatus) -> None:
 
 def allowed_actions(status: EventStatus) -> frozenset[EventAction]:
     """SCRUM-35: what may be done to a request in `status`, from the rules above."""
-    actions = {
-        action
-        for (source, _), action in _ALLOWED_TRANSITIONS.items()
-        if source == status and action is not None
-    }
+    actions = {action for (source, _), action in _ALLOWED_TRANSITIONS.items() if source == status}
     if is_editable(status):
         actions.add(EventAction.EDIT)
     return frozenset(actions)

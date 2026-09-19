@@ -1,4 +1,4 @@
-# ADR-0009: Store the current event-request review decision on the request
+# ADR-0011: Store the current event-request review decision on the request
 
 - **Status:** Proposed
 - **Date:** 2026-09-13
@@ -40,4 +40,4 @@ We will store `decided_by_id`, `decided_at`, and `rejection_reason` as nullable 
 
 ## Notes
 
-- Migration: `api/alembic/versions/0005_add_event_request_review_decision.py`.
+- Migration: `api/alembic/versions/0007_add_event_request_review_decision.py`.
