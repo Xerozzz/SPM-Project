@@ -30,7 +30,7 @@ async def test_a_draft_is_listed_with_edit_and_submit(
 
 
 @pytest.mark.story("SCRUM-35")
-async def test_a_submitted_request_is_listed_with_no_actions(
+async def test_a_submitted_request_is_listed_with_coordinator_decisions(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     organiser = make_user("organiser")
@@ -44,7 +44,7 @@ async def test_a_submitted_request_is_listed_with_no_actions(
 
     assert submit_response.status_code == 200
     assert response.status_code == 200
-    assert response.json()[0]["status_permits"] == []
+    assert response.json()[0]["status_permits"] == ["approve", "reject"]
 
 
 @pytest.mark.story("SCRUM-35")
@@ -60,4 +60,4 @@ async def test_submitting_a_draft_returns_its_new_actions(
         response = await client.post(f"/api/event-requests/{draft.id}/submit")
 
     assert response.status_code == 200
-    assert response.json()["status_permits"] == []
+    assert response.json()["status_permits"] == ["approve", "reject"]
