@@ -38,6 +38,16 @@ def list_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventReques
     return list(db.scalars(statement))
 
 
+def list_submitted(db: Session) -> list[EventRequest]:
+    """Submitted requests available for coordinator review, oldest first."""
+    statement = (
+        select(EventRequest)
+        .where(EventRequest.status == EventStatus.SUBMITTED)
+        .order_by(EventRequest.submitted_at.asc(), EventRequest.id.asc())
+    )
+    return list(db.scalars(statement))
+
+
 def list_drafts_for_organisation(db: Session, organisation_id: uuid.UUID) -> list[EventRequest]:
     """Drafts created by organisers in this organisation, newest first."""
     statement = (

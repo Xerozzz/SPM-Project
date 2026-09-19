@@ -70,6 +70,8 @@ function renderSignedIn(handlers: Record<string, Handler>) {
 
 function defaultHandler(key: string): Handler | null {
   if (key === 'GET /api/event-requests/drafts') return () => json([])
+  // Submitted requests render their clarification thread, which loads on mount.
+  if (/^GET \/api\/event-requests\/[^/]+\/clarifications$/.test(key)) return () => json([])
   return null
 }
 

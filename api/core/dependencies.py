@@ -22,10 +22,18 @@ _bearer = HTTPBearer(auto_error=False)
 
 
 class EventAccess(StrEnum):
-    """The event-request access modes routes may ask for."""
+    """The event-request access modes routes may ask for.
+
+    VIEW and EDIT cover the request itself (SCRUM-29). The two clarification modes
+    (SCRUM-30) are narrower: only the assigned coordinator may ask, only the owning
+    organiser may answer, and both only while the request is under review. Reading the
+    clarification history uses VIEW, so whoever may see the request may see its thread.
+    """
 
     VIEW = "view"
     EDIT = "edit"
+    REQUEST_CLARIFICATION = "request_clarification"
+    RESPOND_TO_CLARIFICATION = "respond_to_clarification"
 
 
 def get_current_user(
@@ -61,10 +69,12 @@ def require_role(*allowed: Role) -> Callable[[dict[str, object]], dict[str, obje
 
 
 def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]:
-    """Dependency factory for reading or editing one event request.
+    """Dependency factory for one event request: view it, edit it, or take part in its
+    clarification exchange.
 
-    Draft visibility is deliberately narrower than submitted visibility:
-    coordinators may see submitted requests, but not drafts before submission.
+    Draft visibility is deliberately narrower than submitted visibility: coordinators may
+    see submitted requests, but not drafts before submission. Organisers in the same
+    organisation may see each other's requests in any status.
     """
 
     def check(
@@ -81,12 +91,27 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
         roles = _granted_roles(user)
         viewer_id = _user_id(user)
 
+        is_owner = Role.ORGANISER.value in roles and request.organiser_id == viewer_id
+
         if permission is EventAccess.EDIT:
-            if Role.ORGANISER.value in roles and request.organiser_id == viewer_id:
+            if is_owner:
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
-        if Role.ORGANISER.value in roles and request.organiser_id == viewer_id:
+        # Clarification is part of review (clarification sheet row 101), so both sides of
+        # the exchange are pinned to SUBMITTED. Reading the history is not: it uses VIEW.
+        if permission is EventAccess.REQUEST_CLARIFICATION:
+            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+            if is_assigned and request.status is EventStatus.SUBMITTED:
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        if permission is EventAccess.RESPOND_TO_CLARIFICATION:
+            if is_owner and request.status is EventStatus.SUBMITTED:
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        if is_owner:
             return request
 
         if Role.ORGANISER.value in roles and _same_organisation(

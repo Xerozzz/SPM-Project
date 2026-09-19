@@ -15,6 +15,7 @@ import {
   updateDraft,
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
+import ClarificationThread from './ClarificationThread'
 
 /**
  * SCRUM-46: an organiser's event requests, each with a Submit action while it is a draft.
@@ -185,6 +186,11 @@ export default function MyEventRequests() {
                   <span className="text-sm text-slate-500">
                     Locked - ask your coordinator to request changes
                   </span>
+                )}
+                {request.status === 'submitted' && (
+                  <div className="basis-full">
+                    <ClarificationThread eventRequestId={request.id} mode="organiser" />
+                  </div>
                 )}
               </li>
             ))}

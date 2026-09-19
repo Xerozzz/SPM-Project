@@ -51,6 +51,11 @@ def list_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventReques
     return repo.list_for_organiser(db, organiser_id)
 
 
+def list_for_review(db: Session) -> list[EventRequest]:
+    """Submitted requests visible to coordinators for review and planning."""
+    return repo.list_submitted(db)
+
+
 def create(
     db: Session, organiser_id: uuid.UUID, fields: EventRequestFields, now: datetime
 ) -> EventRequest:
