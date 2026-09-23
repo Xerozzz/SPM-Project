@@ -229,9 +229,11 @@ function formValuesOf(venue: Venue): VenueFormValues {
     name: venue.name,
     location: venue.location,
     maximum_capacity: venue.maximum_capacity,
-    facilities: venue.facilities,
+    // The form holds these two as one comma-separated line, so they go back the way
+    // asList() reads them. Handing over the array would wipe them on the next save.
+    facilities: venue.facilities.join(', '),
     supported_layouts: [...venue.supported_layouts],
-    accessibility_features: venue.accessibility_features,
+    accessibility_features: venue.accessibility_features.join(', '),
     opens_at: shortTime(venue.opens_at),
     closes_at: shortTime(venue.closes_at),
   }

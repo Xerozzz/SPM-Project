@@ -192,6 +192,10 @@ test('editing a venue loads its values and saves them with PATCH', async () => {
   expect(screen.getByLabelText(/^Name/)).toHaveValue('Hall A')
   expect(screen.getByLabelText(/^Opens at/)).toHaveValue('08:00')
   expect(screen.getByLabelText('theatre')).toBeChecked()
+  // The form holds these as one line, so the array has to come back joined. Prefilling
+  // them as an array would send them back as [] and quietly wipe them on save.
+  expect(screen.getByLabelText(/^Facilities/)).toHaveValue('Projector')
+  expect(screen.getByLabelText(/^Accessibility features/)).toHaveValue('Step-free access')
 
   fireEvent.change(screen.getByLabelText(/^Maximum capacity/), { target: { value: '250' } })
   fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
@@ -201,6 +205,8 @@ test('editing a venue loads its values and saves them with PATCH', async () => {
   })
   expect(url).toBe('/api/venues/venue-1')
   expect(body.maximum_capacity).toBe(250)
+  expect(body.facilities).toEqual(['Projector'])
+  expect(body.accessibility_features).toEqual(['Step-free access'])
   expect(body.opens_at).toBe('08:00:00')
   expect(await screen.findByRole('status')).toHaveTextContent('“Hall A” has been updated.')
 })
