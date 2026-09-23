@@ -69,9 +69,7 @@ def search_params(**overrides: Any) -> dict[str, Any]:
     return params
 
 
-async def search_as(
-    make_client: MakeClient, user: User, **overrides: Any
-) -> httpx.Response:
+async def search_as(make_client: MakeClient, user: User, **overrides: Any) -> httpx.Response:
     async with make_client(user) as client:
         return await client.get("/api/venues/search", params=search_params(**overrides))
 
@@ -81,9 +79,7 @@ def result_names(response: httpx.Response) -> list[str]:
     return [row["name"] for row in response.json()]
 
 
-def make_confirmed_booking(
-    db: Session, venue: Venue, day: date, start: time, end: time
-) -> None:
+def make_confirmed_booking(db: Session, venue: Venue, day: date, start: time, end: time) -> None:
     """A confirmed hold on the venue for [start, end) on day (TC-55-AC4-*)."""
     db.add(
         VenueBooking(
@@ -96,9 +92,7 @@ def make_confirmed_booking(
     db.flush()
 
 
-def make_pending_request(
-    db: Session, venue: Venue, day: date, start: time, end: time
-) -> None:
+def make_pending_request(db: Session, venue: Venue, day: date, start: time, end: time) -> None:
     """A pending (not confirmed) request overlapping the slot (TC-55-AC6-01)."""
     db.add(
         VenueBooking(
@@ -111,9 +105,7 @@ def make_pending_request(
     db.flush()
 
 
-def make_unavailability_block(
-    db: Session, venue: Venue, day: date, start: time, end: time
-) -> None:
+def make_unavailability_block(db: Session, venue: Venue, day: date, start: time, end: time) -> None:
     """A recorded unavailability block for [start, end) on day (TC-55-AC5-*)."""
     db.add(
         VenueUnavailability(
