@@ -3,8 +3,10 @@ import { type FormEvent, useState } from 'react'
 
 import {
   createVenue,
+  deactivateVenue,
   listVenues,
   ROOM_LAYOUTS,
+  updateVenue,
   type Venue,
   type VenueInput,
   type VenueProblem,
@@ -15,9 +17,9 @@ import { useAuth } from '../auth/useAuth'
 /**
  * SCRUM-59: the venue catalogue.
  *
- * Venue Staff add venues; everyone else reads the same catalogue without the form (AC2).
- * Changing and retiring a venue land with the story that adds them. The server enforces
- * the split too, so a missing control is presentation and not the authorisation rule.
+ * Venue Staff add venues, change their details and take them out of use; everyone else
+ * reads the same catalogue without those controls (AC2). The server enforces the split
+ * too, so hiding a button is presentation and not the authorisation rule.
  */
 export default function VenueCatalogue() {
   const { token, hasRole } = useAuth()
@@ -25,6 +27,9 @@ export default function VenueCatalogue() {
   const isStaff = hasRole('venue_staff')
   const [problems, setProblems] = useState<VenueProblem[]>([])
   const [outcome, setOutcome] = useState<string | null>(null)
+  /** The venue being edited, or null when the form is adding a new one. */
+  const [editing, setEditing] = useState<Venue | null>(null)
+
   const queryKey = ['venues', token]
   const venues = useQuery({
     queryKey,
@@ -44,13 +49,30 @@ export default function VenueCatalogue() {
     }
   }
 
-  const add = useMutation({
-    mutationFn: (venue: VenueInput) => createVenue(token ?? '', venue),
-    onSuccess: (venue) => {
-      setProblems([])
-      setOutcome(`“${venue.name}” has been added to the catalogue.`)
-      refresh()
-    },
+  /** Every successful save clears the form state and reports what happened. */
+  function handleSaved(message: string) {
+    setProblems([])
+    setEditing(null)
+    setOutcome(message)
+    refresh()
+  }
+
+  const save = useMutation({
+    mutationFn: ({ id, venue }: { id: string | null; venue: VenueInput }) =>
+      id ? updateVenue(token ?? '', id, venue) : createVenue(token ?? '', venue),
+    onSuccess: (venue, { id }) =>
+      handleSaved(
+        id
+          ? `“${venue.name}” has been updated.`
+          : `“${venue.name}” has been added to the catalogue.`,
+      ),
+    onError: handleFailure,
+  })
+
+  const deactivate = useMutation({
+    mutationFn: (id: string) => deactivateVenue(token ?? '', id),
+    onSuccess: (venue) =>
+      handleSaved(`“${venue.name}” has been deactivated and can no longer be selected.`),
     onError: handleFailure,
   })
 
@@ -59,7 +81,7 @@ export default function VenueCatalogue() {
       <h2 className="font-medium">Venue catalogue</h2>
       <p className="mt-1 text-sm text-slate-500">
         {isStaff
-          ? 'Add venues to the catalogue.'
+          ? 'Add venues, change their details, and take them out of use.'
           : 'Venues available for planning. Venue Staff maintain this list.'}
       </p>
 
@@ -76,16 +98,33 @@ export default function VenueCatalogue() {
       {venues.data && venues.data.length > 0 && (
         <ul className="mt-3 divide-y divide-slate-200">
           {venues.data.map((venue) => (
-            <VenueRow key={venue.id} venue={venue} />
+            <VenueRow
+              key={venue.id}
+              venue={venue}
+              canManage={isStaff}
+              isBusy={deactivate.isPending || save.isPending}
+              onEdit={() => {
+                setProblems([])
+                setOutcome(null)
+                setEditing(venue)
+              }}
+              onDeactivate={() => deactivate.mutate(venue.id)}
+            />
           ))}
         </ul>
       )}
 
       {isStaff && (
-        <AddVenueForm
+        <VenueForm
+          key={editing?.id ?? 'new'}
+          editing={editing}
           problems={problems}
-          isSaving={add.isPending}
-          onSubmit={(venue) => add.mutate(venue)}
+          isSaving={save.isPending}
+          onCancel={() => {
+            setEditing(null)
+            setProblems([])
+          }}
+          onSubmit={(venue) => save.mutate({ id: editing?.id ?? null, venue })}
         />
       )}
 
@@ -98,7 +137,19 @@ export default function VenueCatalogue() {
   )
 }
 
-function VenueRow({ venue }: { venue: Venue }) {
+function VenueRow({
+  venue,
+  canManage,
+  isBusy,
+  onEdit,
+  onDeactivate,
+}: {
+  venue: Venue
+  canManage: boolean
+  isBusy: boolean
+  onEdit: () => void
+  onDeactivate: () => void
+}) {
   return (
     <li className="flex flex-wrap items-start justify-between gap-4 py-3">
       <div>
@@ -117,6 +168,28 @@ function VenueRow({ venue }: { venue: Venue }) {
           </p>
         )}
       </div>
+      {canManage && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={isBusy}
+            aria-label={`Edit ${venue.name}`}
+            className="rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={onDeactivate}
+            disabled={isBusy}
+            aria-label={`Deactivate ${venue.name}`}
+            className="rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
+          >
+            Deactivate
+          </button>
+        </div>
+      )}
     </li>
   )
 }
@@ -150,16 +223,36 @@ const emptyVenue: VenueFormValues = {
   closes_at: '',
 }
 
-function AddVenueForm({
+/** An existing venue as the form holds it: "HH:MM:SS" from the API becomes "HH:MM". */
+function formValuesOf(venue: Venue): VenueFormValues {
+  return {
+    name: venue.name,
+    location: venue.location,
+    maximum_capacity: venue.maximum_capacity,
+    facilities: venue.facilities,
+    supported_layouts: [...venue.supported_layouts],
+    accessibility_features: venue.accessibility_features,
+    opens_at: shortTime(venue.opens_at),
+    closes_at: shortTime(venue.closes_at),
+  }
+}
+
+function VenueForm({
+  editing,
   problems,
   isSaving,
   onSubmit,
+  onCancel,
 }: {
+  editing: Venue | null
   problems: VenueProblem[]
   isSaving: boolean
   onSubmit: (venue: VenueInput) => void
+  onCancel: () => void
 }) {
-  const [values, setValues] = useState<VenueFormValues>(emptyVenue)
+  const [values, setValues] = useState<VenueFormValues>(
+    editing ? formValuesOf(editing) : emptyVenue,
+  )
   const reasonFor = (field: string) => problems.find((p) => p.field === field)?.reason
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -187,7 +280,7 @@ function AddVenueForm({
 
   return (
     <form className="mt-4 space-y-3 border-t border-slate-200 pt-4" noValidate onSubmit={submit}>
-      <h3 className="text-sm font-medium">Add a venue</h3>
+      <h3 className="text-sm font-medium">{editing ? `Edit “${editing.name}”` : 'Add a venue'}</h3>
 
       <Field label="Name" error={reasonFor('name')}>
         <input
@@ -277,13 +370,24 @@ function AddVenueForm({
         />
       </Field>
 
-      <button
-        type="submit"
-        disabled={isSaving}
-        className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-      >
-        Add venue
-      </button>
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          disabled={isSaving}
+          className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+        >
+          {editing ? 'Save changes' : 'Add venue'}
+        </button>
+        {editing && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded border border-slate-300 px-3 py-1.5 text-sm"
+          >
+            Cancel
+          </button>
+        )}
+      </div>
     </form>
   )
 }

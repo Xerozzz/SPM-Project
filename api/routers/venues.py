@@ -14,7 +14,7 @@ from core.database import get_db
 from core.dependencies import get_current_user, require_role
 from domain.roles import Role
 from domain.venue import VenueFields
-from schemas.venues import VenueCreate, VenueProblemRead, VenueRead
+from schemas.venues import VenueCreate, VenueProblemRead, VenueRead, VenueUpdate
 from services import venues as service
 
 router = APIRouter(prefix="/venues", tags=["venues"])
@@ -65,5 +65,27 @@ def create(body: VenueCreate, user: VenueStaff, db: Db) -> VenueRead:
     del user
     try:
         return VenueRead.model_validate(service.create(db, VenueFields(**body.model_dump())))
+    except _REFUSALS as exc:
+        raise _http_error(exc) from exc
+
+
+@router.patch("/{venue_id}", response_model=VenueRead)
+def update(venue_id: uuid.UUID, body: VenueUpdate, user: VenueStaff, db: Db) -> VenueRead:
+    """Change a venue's details (AC1); an invalid change saves nothing (AC5)."""
+    del user
+    try:
+        return VenueRead.model_validate(
+            service.update(db, venue_id, body.model_dump(exclude_unset=True))
+        )
+    except _REFUSALS as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post("/{venue_id}/deactivate", response_model=VenueRead)
+def deactivate(venue_id: uuid.UUID, user: VenueStaff, db: Db) -> VenueRead:
+    """Take a venue out of the selectable catalogue without deleting it (AC3, ADR-0012)."""
+    del user
+    try:
+        return VenueRead.model_validate(service.deactivate(db, venue_id))
     except _REFUSALS as exc:
         raise _http_error(exc) from exc

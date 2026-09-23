@@ -112,3 +112,23 @@ export async function createVenue(token: string, venue: VenueInput): Promise<Ven
     }),
   )
 }
+
+export async function updateVenue(
+  token: string,
+  id: string,
+  changes: Partial<VenueInput>,
+): Promise<Venue> {
+  return readVenue(
+    await fetch(`/api/venues/${id}`, {
+      method: 'PATCH',
+      headers: jsonHeaders(token),
+      body: JSON.stringify(changes),
+    }),
+  )
+}
+
+export async function deactivateVenue(token: string, id: string): Promise<Venue> {
+  return readVenue(
+    await fetch(`/api/venues/${id}/deactivate`, { method: 'POST', headers: authHeaders(token) }),
+  )
+}
