@@ -8,6 +8,7 @@ workflows.
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy.orm import Session
@@ -242,7 +243,13 @@ async def test_submit_endpoint_returns_409_when_no_coordinator_is_available(
     coord = make_user("coordinator")
     # Real wall-clock time: this goes through the HTTP endpoint, which stamps `now`
     # itself, so the date has to be safely in the future regardless of when this runs.
-    clash_start = datetime.now(UTC) + timedelta(days=365)
+    # Anchored to SGT noon so +5h stays on the same Singapore calendar day.
+    sgt_noon = (
+        (datetime.now(UTC) + timedelta(days=365))
+        .astimezone(ZoneInfo("Asia/Singapore"))
+        .replace(hour=12, minute=0, second=0, microsecond=0)
+    )
+    clash_start = sgt_noon.astimezone(UTC)
     _confirmed(db, organiser, coord, clash_start)
     draft = make_draft(
         db,
