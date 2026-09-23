@@ -5,6 +5,7 @@ import { useAuth } from '../auth/useAuth'
 import MyEventRequests from '../components/MyEventRequests'
 import EventRequestForm from '../components/EventRequestForm'
 import EventRequestReview from '../components/EventRequestReview'
+import VenueCatalogue from '../components/VenueCatalogue'
 
 /**
  * Home page, visible only after sign-in. Shows the session roles and a sign-out button.
@@ -37,6 +38,9 @@ export default function HomePage() {
       )}
 
       {hasRole('coordinator') && <EventRequestReview />}
+
+      {/* SCRUM-59: Venue Staff maintain the catalogue; coordinators read it for planning. */}
+      {(hasRole('venue_staff') || hasRole('coordinator')) && <VenueCatalogue />}
 
       <section className="mt-6 rounded-lg border border-slate-200 p-4">
         <h2 className="font-medium">API health</h2>

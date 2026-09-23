@@ -11,6 +11,8 @@ catalogue story will replace these fixed values with database-backed options.
 from dataclasses import dataclass, fields
 from datetime import datetime
 
+from domain.validation import FieldProblem as FieldProblem
+
 # Order matters only for how problems are reported: it matches the order on the ticket.
 REQUIRED_TEXT_FIELDS: tuple[str, ...] = (
     "name",
@@ -58,14 +60,6 @@ class EventRequestFields:
     equipment_requirement: str | None = None
     layout_requirement: str | None = None
     registration_requirement: str | None = None
-
-
-@dataclass(frozen=True)
-class FieldProblem:
-    """One thing the organiser has to fix, and which field it is on."""
-
-    field: str
-    reason: str
 
 
 def validate_catalogue_requirements(request: EventRequestFields) -> list[FieldProblem]:

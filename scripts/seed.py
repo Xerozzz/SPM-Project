@@ -6,10 +6,12 @@ every start, so a fresh `docker compose up` is immediately usable.
 - Two sample event requests for organiser@example.com (SCRUM-46): one complete draft
   and one with gaps, so both the happy path and the field-error path can be demonstrated.
   These are *reset to Draft on every run* — they are demo data, not user data.
+- Three venues for the catalogue (SCRUM-59), one of them deactivated so the selectable
+  list and the staff list visibly differ. Inserted only when missing, like the users.
 """
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 
 from core.database import Session, SessionLocal
 from core.security import hash_password
@@ -17,6 +19,7 @@ from domain.roles import Role
 from models.event_request import EventRequest
 from models.organisation import Organisation
 from models.user import User
+from models.venue import Venue
 from repositories import event_requests as event_requests_repo
 from repositories import users as users_repo
 
@@ -35,7 +38,12 @@ _SEED_USERS: list[tuple[str, str, list[Role], uuid.UUID]] = [
     ("venue-staff@example.com", "password123", [Role.VENUE_STAFF], _PRIMARY_ORG_ID),
     ("tech-support@example.com", "password123", [Role.TECH_SUPPORT], _PRIMARY_ORG_ID),
     ("attendee@example.com", "password123", [Role.ATTENDEE], _PRIMARY_ORG_ID),
-    ("multi-role@example.com", "password123", [Role.ORGANISER, Role.COORDINATOR], _PRIMARY_ORG_ID),
+    (
+        "multi-role@example.com",
+        "password123",
+        [Role.ORGANISER, Role.COORDINATOR],
+        _PRIMARY_ORG_ID,
+    ),
 ]
 
 
@@ -50,7 +58,9 @@ _SAMPLE_IDS = (
 
 
 def _sample_event_requests() -> list[tuple[uuid.UUID, dict[str, object]]]:
-    start = (datetime.now(UTC) + timedelta(days=30)).replace(minute=0, second=0, microsecond=0)
+    start = (datetime.now(UTC) + timedelta(days=30)).replace(
+        minute=0, second=0, microsecond=0
+    )
     orientation_day: dict[str, object] = {
         "name": "Orientation Day",
         "purpose": "Welcome new students to the faculty",
@@ -79,6 +89,53 @@ def _sample_event_requests() -> list[tuple[uuid.UUID, dict[str, object]]]:
         "registration_requirement": None,
     }
     return [(_SAMPLE_IDS[0], orientation_day), (_SAMPLE_IDS[1], hackathon)]
+
+
+_SEED_VENUES: tuple[dict[str, object], ...] = (
+    {
+        "name": "Mochtar Riady Auditorium",
+        "location": "Level 5, Administration Building",
+        "maximum_capacity": 500,
+        "facilities": ["Projector", "PA system", "Stage lighting"],
+        "supported_layouts": ["theatre", "standing"],
+        "accessibility_features": ["Step-free access", "Hearing loop"],
+        "opens_at": time(8, 0),
+        "closes_at": time(22, 0),
+        "is_active": True,
+    },
+    {
+        "name": "SCIS Seminar Room 2-1",
+        "location": "Level 2, School of Computing and Information Systems",
+        "maximum_capacity": 40,
+        "facilities": ["Projector", "Whiteboard"],
+        "supported_layouts": ["classroom", "boardroom", "u_shape"],
+        "accessibility_features": ["Step-free access"],
+        "opens_at": time(7, 30),
+        "closes_at": time(21, 0),
+        "is_active": True,
+    },
+    {
+        # Deactivated on purpose: it should appear in the staff catalogue and not in the
+        # selectable one, so SCRUM-59 AC3 and AC4 are both demonstrable from a fresh start.
+        "name": "Old Sports Hall",
+        "location": "Level 1, Campus Green",
+        "maximum_capacity": 300,
+        "facilities": ["PA system"],
+        "supported_layouts": ["standing", "banquet"],
+        "accessibility_features": [],
+        "opens_at": time(9, 0),
+        "closes_at": time(18, 0),
+        "is_active": False,
+    },
+)
+
+
+def _seed_venues(db: Session) -> None:
+    """Insert missing catalogue venues; never touch existing rows."""
+    for values in _SEED_VENUES:
+        name = values["name"]
+        if db.query(Venue).filter(Venue.name == name).first() is None:
+            db.add(Venue(**values))
 
 
 def _seed_organisations(db: Session) -> None:
@@ -130,6 +187,7 @@ def main() -> None:
         _seed_users(db)
         db.flush()
         _seed_event_requests(db)
+        _seed_venues(db)
         db.commit()
     finally:
         db.close()
