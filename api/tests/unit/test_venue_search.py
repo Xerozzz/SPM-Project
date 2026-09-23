@@ -1,10 +1,11 @@
 """SCRUM-55 AC2/AC3/AC4/AC6: pure venue-search rules, without a database.
 
-TDD red phase: the domain helpers imported here (`domain/venue_search.py`) do not exist
-yet. Each test names its Test Case ID so the CSV row maps to exactly one test. When the
-implementation lands, these tests must pass unchanged.
+Multi-day requested periods (1 Dec 2026 10:00 through 3 Dec 2026 12:00): the
+domain helpers take tz-aware datetimes for the requested period and wall-clock
+`datetime.time` for daily operating hours. Each test names its Test Case ID so
+the CSV row maps to exactly one test.
 
-Expected domain surface (to be built):
+Expected domain surface:
     VenueSearchCriteria: minimum_capacity, location, required_facilities,
         required_accessibility, required_layout
     SearchableVenue: maximum_capacity, location, facilities,
@@ -12,7 +13,10 @@ Expected domain surface (to be built):
     venue_matches_criteria(venue, criteria) -> bool  (static filters only;
         active status and persisted availability are integration concerns)
     is_within_operating_hours(opens_at, closes_at, requested_start, requested_end) -> bool
-        (all `datetime.time`; end equal to closing is allowed)
+        (opens/closes are `datetime.time`; requested bounds are tz-aware datetimes;
+        only their wall-clock time-of-day must fit inside opening hours, so a
+        multi-day request is within hours when its start time-of-day and end
+        time-of-day are both inside; end equal to closing is allowed)
     intervals_overlap(a_start, a_end, b_start, b_end) -> bool
         (tz-aware datetimes; half-open [start, end), adjacent is not overlap)
     booking_blocks_availability(status) -> bool
@@ -104,8 +108,15 @@ def test_tc55_ac2_03_each_single_criterion_gap_excludes(
 def test_tc55_ac3_03_closing_boundary_is_inclusive() -> None:
     opens, closes = time(8, 0), time(22, 0)
 
-    assert is_within_operating_hours(opens, closes, time(20, 0), time(22, 0)) is True
-    assert is_within_operating_hours(opens, closes, time(20, 0), time(22, 1)) is False
+    within = is_within_operating_hours(
+        opens, closes, _dt(1, 20), _dt(3, 22, 0)
+    )
+    just_outside = is_within_operating_hours(
+        opens, closes, _dt(1, 20), _dt(3, 22, 1)
+    )
+
+    assert within is True
+    assert just_outside is False
 
 
 # ------------------------------------------------------- TC-55-AC3-04
@@ -113,32 +124,36 @@ def test_tc55_ac3_03_closing_boundary_is_inclusive() -> None:
 
 @pytest.mark.story("SCRUM-55")
 def test_tc55_ac3_04_request_starting_before_opening_is_outside() -> None:
-    assert is_within_operating_hours(time(8, 0), time(22, 0), time(7, 59), time(9, 0)) is False
+    assert (
+        is_within_operating_hours(time(8, 0), time(22, 0), _dt(1, 7, 59), _dt(3, 9, 0))
+        is False
+    )
 
 
 # ------------------------------------------------------- TC-55-AC4-03
 
 
-def _dt(hour: int, minute: int = 0) -> datetime:
-    return datetime(2026, 12, 1, hour, minute, tzinfo=UTC)
+def _dt(day: int, hour: int, minute: int = 0) -> datetime:
+    return datetime(2026, 12, day, hour, minute, tzinfo=UTC)
 
 
 @pytest.mark.story("SCRUM-55")
 @pytest.mark.parametrize(
     ("start", "end", "expected", "case_id"),
     [
-        (_dt(11), _dt(13), True, "starts-inside"),
-        (_dt(9), _dt(11), True, "ends-inside"),
-        (_dt(9), _dt(13), True, "contains-booking"),
-        (_dt(10, 30), _dt(11, 30), True, "contained-by-booking"),
-        (_dt(12), _dt(14), False, "adjacent-is-not-overlap"),
+        (_dt(2, 11), _dt(2, 13), True, "starts-inside"),
+        (_dt(2, 9), _dt(2, 11), True, "ends-inside"),
+        (_dt(2, 9), _dt(2, 13), True, "contains-booking"),
+        (_dt(2, 10, 30), _dt(2, 11, 30), True, "contained-by-booking"),
+        (_dt(1, 10), _dt(3, 12), True, "multi-day-contains-booking"),
+        (_dt(2, 12), _dt(2, 14), False, "adjacent-is-not-overlap"),
     ],
 )
 def test_tc55_ac4_03_interval_overlap_matrix(
     start: datetime, end: datetime, expected: bool, case_id: str
 ) -> None:
     del case_id
-    booking_start, booking_end = _dt(10), _dt(12)
+    booking_start, booking_end = _dt(2, 10), _dt(2, 12)
 
     assert intervals_overlap(booking_start, booking_end, start, end) is expected
 

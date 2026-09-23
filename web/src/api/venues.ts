@@ -224,8 +224,9 @@ export async function deleteVenueUnavailability(
 
 /** SCRUM-55: coordinator venue search. Mirrors GET /api/venues/search. */
 export interface VenueSearchInput {
-  date: string
+  startDate: string
   startTime: string
+  endDate: string
   endTime: string
   minimumCapacity?: number
   location?: string
@@ -236,9 +237,8 @@ export interface VenueSearchInput {
 
 export async function searchVenues(token: string, input: VenueSearchInput): Promise<Venue[]> {
   const params = new URLSearchParams({
-    date: input.date,
-    start_time: input.startTime,
-    end_time: input.endTime,
+    start_at: `${input.startDate}T${input.startTime}:00+00:00`,
+    end_at: `${input.endDate}T${input.endTime}:00+00:00`,
   })
   if (input.minimumCapacity !== undefined) params.set('minimum_capacity', String(input.minimumCapacity))
   if (input.location !== undefined) params.set('location', input.location)

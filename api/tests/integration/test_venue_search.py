@@ -1,21 +1,18 @@
-"""SCRUM-55 AC2-AC6/AC8: coordinator venue search over persisted venues (TDD red phase).
+"""SCRUM-55 AC2-AC6/AC8: coordinator venue search over persisted venues.
 
-Expected contract to be built (not yet implemented, so every test here fails red):
+Multi-day requested periods (1 Dec 2026 10:00 through 3 Dec 2026 12:00):
     GET /api/venues/search
-        Query: date=YYYY-MM-DD, start_time=HH:MM, end_time=HH:MM,
+        Query: start_at=ISO datetime, end_at=ISO datetime,
                minimum_capacity=int, location=str,
                accessibility=str (repeatable), facility=str (repeatable), layout=str
         Auth: Event Coordinator only (-> 403 for other roles, 401 when anonymous).
         Response: 200 with a list of VenueRead (same shape as GET /api/venues),
                   containing only active venues satisfying every criterion,
-                  within operating hours, and free of confirmed bookings and
-                  unavailability blocks in the slot. Pending requests do not block.
+                  within operating hours on every date, and free of confirmed
+                  bookings and unavailability blocks overlapping any part of the
+                  period. Pending requests do not block.
 
-Each test names its Test Case ID. Helpers `make_confirmed_booking`,
-`make_pending_request` and `make_unavailability_block` currently fail with a
-TDD-red message: the booking/unavailability models do not exist yet (no booking
-tables in alembic/versions/). When they land, replace the bodies with real inserts;
-the test bodies themselves must pass unchanged.
+Each test names its Test Case ID.
 """
 
 from collections.abc import Callable
@@ -34,7 +31,8 @@ from models.venue_unavailability import VenueUnavailability
 MakeUser = Callable[..., User]
 MakeClient = Callable[[User | None], httpx.AsyncClient]
 
-SEARCH_DATE = "2026-12-01"
+SEARCH_START = "2026-12-01T10:00:00+00:00"
+SEARCH_END = "2026-12-03T12:00:00+00:00"
 
 
 def make_venue(db: Session, **overrides: Any) -> Venue:
@@ -59,9 +57,8 @@ def make_venue(db: Session, **overrides: Any) -> Venue:
 def search_params(**overrides: Any) -> dict[str, Any]:
     """Criteria matching Hall A; pass field=value to change one."""
     params: dict[str, Any] = {
-        "date": SEARCH_DATE,
-        "start_time": "10:00",
-        "end_time": "12:00",
+        "start_at": SEARCH_START,
+        "end_at": SEARCH_END,
         "minimum_capacity": 100,
         "location": "Level 2, School of Computing",
         "accessibility": "Step-free access",
@@ -155,7 +152,10 @@ async def test_tc55_ac3_01_slot_ending_at_closing_time_is_within_hours(
     make_venue(db, name="Hall A")
 
     response = await search_as(
-        make_client, make_user("coordinator"), start_time="20:00", end_time="22:00"
+        make_client,
+        make_user("coordinator"),
+        start_at="2026-12-01T20:00:00+00:00",
+        end_at="2026-12-03T22:00:00+00:00",
     )
 
     assert result_names(response) == ["Hall A"]
@@ -171,7 +171,10 @@ async def test_tc55_ac3_02_slot_ending_after_closing_time_is_excluded(
     make_venue(db, name="Hall A")
 
     response = await search_as(
-        make_client, make_user("coordinator"), start_time="20:00", end_time="22:01"
+        make_client,
+        make_user("coordinator"),
+        start_at="2026-12-01T20:00:00+00:00",
+        end_at="2026-12-03T22:01:00+00:00",
     )
 
     assert result_names(response) == []
@@ -185,11 +188,9 @@ async def test_tc55_ac4_01_overlapping_confirmed_booking_excludes(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     venue = make_venue(db, name="Hall A")
-    make_confirmed_booking(db, venue, date(2026, 12, 1), time(10, 0), time(12, 0))
+    make_confirmed_booking(db, venue, date(2026, 12, 2), time(10, 0), time(12, 0))
 
-    response = await search_as(
-        make_client, make_user("coordinator"), start_time="11:00", end_time="13:00"
-    )
+    response = await search_as(make_client, make_user("coordinator"))
 
     assert result_names(response) == []
 
@@ -205,7 +206,10 @@ async def test_tc55_ac4_02_adjacent_confirmed_booking_does_not_exclude(
     make_confirmed_booking(db, venue, date(2026, 12, 1), time(10, 0), time(12, 0))
 
     response = await search_as(
-        make_client, make_user("coordinator"), start_time="12:00", end_time="14:00"
+        make_client,
+        make_user("coordinator"),
+        start_at="2026-12-01T12:00:00+00:00",
+        end_at="2026-12-01T14:00:00+00:00",
     )
 
     assert result_names(response) == ["Hall A"]
@@ -219,11 +223,9 @@ async def test_tc55_ac5_01_overlapping_unavailability_block_excludes(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     venue = make_venue(db, name="Hall A")
-    make_unavailability_block(db, venue, date(2026, 12, 1), time(10, 0), time(12, 0))
+    make_unavailability_block(db, venue, date(2026, 12, 2), time(10, 0), time(12, 0))
 
-    response = await search_as(
-        make_client, make_user("coordinator"), start_time="11:00", end_time="13:00"
-    )
+    response = await search_as(make_client, make_user("coordinator"))
 
     assert result_names(response) == []
 
@@ -239,7 +241,10 @@ async def test_tc55_ac5_02_adjacent_unavailability_block_does_not_exclude(
     make_unavailability_block(db, venue, date(2026, 12, 1), time(10, 0), time(12, 0))
 
     response = await search_as(
-        make_client, make_user("coordinator"), start_time="12:00", end_time="14:00"
+        make_client,
+        make_user("coordinator"),
+        start_at="2026-12-01T12:00:00+00:00",
+        end_at="2026-12-01T14:00:00+00:00",
     )
 
     assert result_names(response) == ["Hall A"]
@@ -253,11 +258,9 @@ async def test_tc55_ac6_01_pending_request_does_not_exclude(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     venue = make_venue(db, name="Hall A")
-    make_pending_request(db, venue, date(2026, 12, 1), time(10, 0), time(12, 0))
+    make_pending_request(db, venue, date(2026, 12, 2), time(10, 0), time(12, 0))
 
-    response = await search_as(
-        make_client, make_user("coordinator"), start_time="11:00", end_time="13:00"
-    )
+    response = await search_as(make_client, make_user("coordinator"))
 
     assert result_names(response) == ["Hall A"]
 
