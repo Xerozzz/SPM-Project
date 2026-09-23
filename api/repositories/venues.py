@@ -1,0 +1,23 @@
+"""Venue catalogue queries. The only layer that touches the venues table (ADR-0003)."""
+
+import uuid
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from models.venue import Venue
+
+
+def get(db: Session, venue_id: uuid.UUID) -> Venue | None:
+    """Return the venue with this id whatever its state, or None.
+
+    Deliberately does not filter on `is_active`: AC4 needs a deactivated venue to stay
+    readable for the events and bookings that already reference it.
+    """
+    return db.get(Venue, venue_id)
+
+
+def list_active(db: Session) -> list[Venue]:
+    """Venues that may be chosen for new work, by name (AC3)."""
+    statement = select(Venue).where(Venue.is_active.is_(True)).order_by(Venue.name)
+    return list(db.scalars(statement))
