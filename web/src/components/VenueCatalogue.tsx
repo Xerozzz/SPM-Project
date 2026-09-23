@@ -124,20 +124,28 @@ function VenueRow({ venue }: { venue: Venue }) {
 /**
  * What the form holds while it is being filled in. Times are strings here because that is
  * what a time input gives, empty included; they become the API's `string | null` only on
- * submit. Same split as EventRequestFormValues in validation/eventRequest.ts.
+ * submit. The two list fields are strings for the same reason: the user is part way through
+ * typing "Projector, Hearing loop" for most of the time the form is open, and splitting on
+ * every keystroke would throw away the comma they just pressed. Same split as
+ * EventRequestFormValues in validation/eventRequest.ts.
  */
-type VenueFormValues = Omit<VenueInput, 'opens_at' | 'closes_at'> & {
+type VenueFormValues = Omit<
+  VenueInput,
+  'opens_at' | 'closes_at' | 'facilities' | 'accessibility_features'
+> & {
   opens_at: string
   closes_at: string
+  facilities: string
+  accessibility_features: string
 }
 
 const emptyVenue: VenueFormValues = {
   name: '',
   location: '',
   maximum_capacity: null,
-  facilities: [],
+  facilities: '',
   supported_layouts: [],
-  accessibility_features: [],
+  accessibility_features: '',
   opens_at: '',
   closes_at: '',
 }
@@ -163,6 +171,8 @@ function AddVenueForm({
       // reject it with a parser error instead of the named-field problem AC5 asks for.
       opens_at: withSeconds(values.opens_at),
       closes_at: withSeconds(values.closes_at),
+      facilities: asList(values.facilities),
+      accessibility_features: asList(values.accessibility_features),
     })
   }
 
@@ -231,6 +241,24 @@ function AddVenueForm({
         )}
       </fieldset>
 
+      <Field label="Facilities" error={reasonFor('facilities')}>
+        <input
+          value={values.facilities}
+          onChange={(event) => setValues({ ...values, facilities: event.target.value })}
+          placeholder="Projector, Hearing loop"
+          className="mt-1 w-full rounded border border-slate-300 p-2 text-sm font-normal"
+        />
+      </Field>
+
+      <Field label="Accessibility features" error={reasonFor('accessibility_features')}>
+        <input
+          value={values.accessibility_features}
+          onChange={(event) => setValues({ ...values, accessibility_features: event.target.value })}
+          placeholder="Step-free access, Accessible toilet"
+          className="mt-1 w-full rounded border border-slate-300 p-2 text-sm font-normal"
+        />
+      </Field>
+
       <Field label="Opens at" error={reasonFor('opens_at')}>
         <input
           type="time"
@@ -280,6 +308,17 @@ function Field({
       )}
     </label>
   )
+}
+
+/**
+ * A comma-separated list as the API's array. Blanks are dropped, so trailing commas and
+ * "a,,b" behave, and an empty box means the venue simply has none of these.
+ */
+function asList(value: string): string[] {
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
 }
 
 /** A time input's "HH:MM", as the API's "HH:MM:SS", or null when nothing was entered. */

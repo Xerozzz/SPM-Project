@@ -78,6 +78,12 @@ test('adding a venue posts the form and confirms', async () => {
   fireEvent.change(screen.getByLabelText(/^Location/), { target: { value: 'Level 3' } })
   fireEvent.change(screen.getByLabelText(/^Maximum capacity/), { target: { value: '80' } })
   fireEvent.click(screen.getByLabelText('theatre'))
+  fireEvent.change(screen.getByLabelText(/^Facilities/), {
+    target: { value: 'Projector, Hearing loop' },
+  })
+  fireEvent.change(screen.getByLabelText(/^Accessibility features/), {
+    target: { value: 'Step-free access' },
+  })
   fireEvent.change(screen.getByLabelText(/^Opens at/), { target: { value: '09:00' } })
   fireEvent.change(screen.getByLabelText(/^Closes at/), { target: { value: '17:00' } })
   fireEvent.click(screen.getByRole('button', { name: 'Add venue' }))
@@ -87,6 +93,10 @@ test('adding a venue posts the form and confirms', async () => {
   })
   expect(body.maximum_capacity).toBe(80)
   expect(body.supported_layouts).toEqual(['theatre'])
+  // AC1 lists facilities and accessibility features among a venue's attributes, so the
+  // form has to be able to set them. Typed as one line, sent as an array.
+  expect(body.facilities).toEqual(['Projector', 'Hearing loop'])
+  expect(body.accessibility_features).toEqual(['Step-free access'])
   // The time inputs give "HH:MM"; the API is sent seconds too.
   expect(body.opens_at).toBe('09:00:00')
   expect(body.closes_at).toBe('17:00:00')
@@ -166,4 +176,26 @@ test('shows an error when the catalogue cannot be loaded', async () => {
   renderCatalogue('coordinator', async () => json({ detail: 'boom' }, 500))
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Could not load the venue catalogue')
+})
+
+test('an empty or untidy list of facilities is sent as a clean array', async () => {
+  // A venue with no projector and no step-free access is still a valid venue, so an empty
+  // box means an empty list rather than [''], and stray commas do not become blank entries.
+  let body: Record<string, unknown> = {}
+  renderCatalogue('venue_staff', async (_input, init) => {
+    if ((init?.method ?? 'GET') === 'GET') return json([])
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return json(venue(), 201)
+  })
+
+  fireEvent.change(await screen.findByLabelText(/^Facilities/), {
+    target: { value: ' Projector , , Hearing loop , ' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Add venue' }))
+
+  await waitFor(() => {
+    expect(body).toHaveProperty('facilities')
+  })
+  expect(body.facilities).toEqual(['Projector', 'Hearing loop'])
+  expect(body.accessibility_features).toEqual([])
 })

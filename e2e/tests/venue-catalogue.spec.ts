@@ -48,6 +48,8 @@ test('venue staff add a venue (AC1)', async ({ page }) => {
   await page.getByLabel(/^Location/).fill('Level 4, Campus Green')
   await page.getByLabel(/^Maximum capacity/).fill('120')
   await page.getByLabel('classroom').check()
+  await page.getByLabel(/^Facilities/).fill('Projector, Hearing loop')
+  await page.getByLabel(/^Accessibility features/).fill('Step-free access')
   await page.getByLabel(/^Opens at/).fill('09:00')
   await page.getByLabel(/^Closes at/).fill('18:00')
   await page.getByRole('button', { name: 'Add venue' }).click()
@@ -58,6 +60,8 @@ test('venue staff add a venue (AC1)', async ({ page }) => {
   )
   const added = catalogue(page).filter({ hasText: name })
   await expect(added).toContainText('up to 120 people')
+  await expect(added).toContainText('Facilities: Projector, Hearing loop')
+  await expect(added).toContainText('Accessibility: Step-free access')
   await expect(added).toContainText('09:00 to 18:00')
 })
 
