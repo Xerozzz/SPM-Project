@@ -1,13 +1,14 @@
 import { expect, type Page, test } from '@playwright/test'
 
-// SCRUM-59: reading the catalogue and adding to it, in the browser.
+// SCRUM-59: the venue catalogue through the browser.
 //
 // Relies on the dev seed (scripts/seed.py), which the api container runs on every start:
-// three venues, one of them ("Old Sports Hall") deactivated, so AC3 is visible without
-// this test having to change anything.
+// three venues, one of them ("Old Sports Hall") deactivated, so AC3 is visible without this
+// test having to deactivate anything first.
 //
-// The venue the add test creates is named with a timestamp so the file can be re-run
-// against the same database: names are unique and nothing here deletes a venue.
+// The venue this test adds is named with a timestamp so the file can be re-run against the
+// same database. Venue names are unique and deactivation is not a delete (ADR-0012), so a
+// fixed name would collide with the row left by the previous run.
 
 async function signIn(page: Page, email: string) {
   await page.goto('/')
@@ -17,30 +18,14 @@ async function signIn(page: Page, email: string) {
   await expect(page.getByRole('heading', { name: 'Venue catalogue' })).toBeVisible()
 }
 
-function section(page: Page) {
-  return page.getByRole('heading', { name: 'Venue catalogue' }).locator('xpath=..')
-}
-
 function catalogue(page: Page) {
-  return section(page).getByRole('listitem')
+  return page
+    .getByRole('heading', { name: 'Venue catalogue' })
+    .locator('xpath=..')
+    .getByRole('listitem')
 }
 
-test('a coordinator reads the catalogue and cannot add to it (AC2)', async ({ page }) => {
-  await signIn(page, 'coordinator@example.com')
-
-  await expect(catalogue(page).filter({ hasText: 'Mochtar Riady Auditorium' })).toContainText(
-    'up to 500 people',
-  )
-  await expect(section(page).getByRole('button')).toHaveCount(0)
-})
-
-test('a deactivated venue is not offered for planning (AC3)', async ({ page }) => {
-  await signIn(page, 'coordinator@example.com')
-
-  await expect(catalogue(page).filter({ hasText: 'Old Sports Hall' })).toHaveCount(0)
-})
-
-test('venue staff add a venue (AC1)', async ({ page }) => {
+test('venue staff add, edit and deactivate a venue (AC1, AC3)', async ({ page }) => {
   const name = `E2E Hall ${Date.now()}`
   await signIn(page, 'venue-staff@example.com')
 
@@ -63,6 +48,26 @@ test('venue staff add a venue (AC1)', async ({ page }) => {
   await expect(added).toContainText('Facilities: Projector, Hearing loop')
   await expect(added).toContainText('Accessibility: Step-free access')
   await expect(added).toContainText('09:00 to 18:00')
+
+  // AC1's update half: reopen the venue, change it, and save.
+  await added.getByRole('button', { name: `Edit ${name}` }).click()
+  await expect(page.getByLabel(/^Name/)).toHaveValue(name)
+  await page.getByLabel(/^Maximum capacity/).fill('150')
+  await page.getByRole('button', { name: 'Save changes' }).click()
+  await expect(page.getByRole('status').filter({ hasText: name })).toContainText(
+    `“${name}” has been updated.`,
+  )
+  await expect(catalogue(page).filter({ hasText: name })).toContainText('up to 150 people')
+
+  // AC3: deactivating takes it out of the selectable catalogue, without deleting it.
+  await catalogue(page)
+    .filter({ hasText: name })
+    .getByRole('button', { name: `Deactivate ${name}` })
+    .click()
+  await expect(page.getByRole('status').filter({ hasText: name })).toContainText(
+    `“${name}” has been deactivated and can no longer be selected.`,
+  )
+  await expect(catalogue(page).filter({ hasText: name })).toHaveCount(0)
 })
 
 test('an incomplete venue is refused and the fields are named (AC5)', async ({ page }) => {
@@ -75,7 +80,23 @@ test('an incomplete venue is refused and the fields are named (AC5)', async ({ p
   await expect(page.getByText('Location is required')).toBeVisible()
   await expect(page.getByText('Maximum capacity is required')).toBeVisible()
   await expect(page.getByText('Supported layouts is required')).toBeVisible()
+  // Nothing was saved, so no confirmation appears.
   await expect(page.getByRole('status').filter({ hasText: 'added to the catalogue' })).toHaveCount(
     0,
   )
+})
+
+test('a coordinator sees the catalogue but cannot change it (AC2, AC4)', async ({ page }) => {
+  await signIn(page, 'coordinator@example.com')
+
+  // AC2: the seeded active venues are readable...
+  await expect(catalogue(page).filter({ hasText: 'Mochtar Riady Auditorium' })).toContainText(
+    'up to 500 people',
+  )
+  // ...with no control that would create, edit or deactivate one.
+  await expect(page.getByRole('button', { name: 'Deactivate' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Add venue' })).toHaveCount(0)
+
+  // AC3: the seeded deactivated venue is not in the selectable catalogue a coordinator sees.
+  await expect(catalogue(page).filter({ hasText: 'Old Sports Hall' })).toHaveCount(0)
 })

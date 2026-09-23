@@ -25,6 +25,11 @@ class VenueCreate(BaseModel):
     closes_at: time | None = None
 
 
+class VenueUpdate(VenueCreate):
+    """Fields Venue Staff may change. All optional: a PATCH sends only what changed, and
+    the service validates the record as it would be afterwards."""
+
+
 class VenueRead(BaseModel):
     """A venue as the catalogue shows it."""
 

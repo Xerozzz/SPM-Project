@@ -4,7 +4,7 @@ Venue Staff add venues (AC1) and everyone signed in reads them (AC2). Invalid da
 refused with the affected field named and nothing stored (AC5). A deactivated venue leaves
 the selectable list but stays readable by id (AC3, AC4), which is what soft deactivation
 buys (ADR-0012); the endpoint that deactivates one lands with the story that adds it, so
-the deactivated venues here are arranged directly.
+deactivating one is now an endpoint too.
 """
 
 import uuid
@@ -249,3 +249,148 @@ async def test_stored_text_is_trimmed(make_user: MakeUser, make_client: MakeClie
 
     assert created["name"] == "Hall C"
     assert created["location"] == "Level 3"
+
+
+# ------------------------------- AC1 update and AC3: changing and retiring a venue
+
+
+@pytest.mark.story("SCRUM-59")
+async def test_venue_staff_update_a_venue(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    async with make_client(make_user("venue_staff")) as client:
+        created = await create_venue(client)
+        response = await client.patch(
+            f"/api/venues/{created['id']}",
+            json={"maximum_capacity": 250, "facilities": ["Projector", "Lectern"]},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["maximum_capacity"] == 250
+    assert response.json()["facilities"] == ["Projector", "Lectern"]
+    # Untouched fields keep their values.
+    assert response.json()["name"] == "Hall A"
+
+    db.expire_all()
+    stored = db.get(Venue, uuid.UUID(created["id"]))
+    assert stored is not None
+    assert stored.maximum_capacity == 250
+
+
+@pytest.mark.story("SCRUM-59")
+async def test_a_venue_keeps_its_own_name_when_updated(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # Re-saving a venue without changing its name must not collide with itself.
+    async with make_client(make_user("venue_staff")) as client:
+        created = await create_venue(client)
+        response = await client.patch(
+            f"/api/venues/{created['id']}", json={"name": "Hall A", "maximum_capacity": 150}
+        )
+
+    assert response.status_code == 200
+    assert response.json()["maximum_capacity"] == 150
+
+
+@pytest.mark.story("SCRUM-59")
+async def test_a_deactivated_venue_leaves_the_selectable_catalogue(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    async with make_client(make_user("venue_staff")) as staff:
+        keep = await create_venue(staff, name="Hall A")
+        retire = await create_venue(staff, name="Hall B")
+        deactivated = await staff.post(f"/api/venues/{retire['id']}/deactivate")
+        selectable = await staff.get("/api/venues")
+
+    assert deactivated.status_code == 200
+    assert deactivated.json()["is_active"] is False
+    assert [venue["id"] for venue in selectable.json()] == [keep["id"]]
+
+
+@pytest.mark.story("SCRUM-59")
+async def test_deactivating_twice_leaves_the_venue_deactivated(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # The caller asked for a state, and the venue is already in it, so this is not an error.
+    async with make_client(make_user("venue_staff")) as staff:
+        created = await create_venue(staff)
+        first = await staff.post(f"/api/venues/{created['id']}/deactivate")
+        second = await staff.post(f"/api/venues/{created['id']}/deactivate")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["is_active"] is False
+
+
+@pytest.mark.story("SCRUM-59")
+async def test_an_invalid_update_changes_nothing(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # AC5: "does not save the change" - the stored row must be untouched afterwards.
+    async with make_client(make_user("venue_staff")) as client:
+        created = await create_venue(client)
+        response = await client.patch(
+            f"/api/venues/{created['id']}", json={"maximum_capacity": 0, "location": "Moved"}
+        )
+
+    assert response.status_code == 422
+    assert [problem["field"] for problem in response.json()["detail"]] == ["maximum_capacity"]
+
+    db.expire_all()
+    stored = db.get(Venue, uuid.UUID(created["id"]))
+    assert stored is not None
+    assert stored.maximum_capacity == 200
+    assert stored.location == "Level 2, School of Computing"
+
+
+@pytest.mark.story("SCRUM-59")
+async def test_clearing_a_required_field_by_update_is_refused(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # The record is validated as it would be after the change, so blanking a required
+    # field is caught even though the other fields are absent from the payload.
+    async with make_client(make_user("venue_staff")) as client:
+        created = await create_venue(client)
+        response = await client.patch(f"/api/venues/{created['id']}", json={"location": "  "})
+
+    assert response.status_code == 422
+    assert [problem["field"] for problem in response.json()["detail"]] == ["location"]
+
+
+@pytest.mark.story("SCRUM-59")
+async def test_updating_an_unknown_venue_is_not_found(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.patch(f"/api/venues/{uuid.uuid4()}", json={"maximum_capacity": 10})
+
+    assert response.status_code == 404
+
+
+@pytest.mark.story("SCRUM-59")
+async def test_deactivating_an_unknown_venue_is_not_found(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.post(f"/api/venues/{uuid.uuid4()}/deactivate")
+
+    assert response.status_code == 404
+
+
+@pytest.mark.story("SCRUM-59")
+async def test_a_coordinator_cannot_update_or_deactivate_a_venue(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # AC2 again, for the two endpoints this change adds: a coordinator reads the
+    # catalogue, and maintaining it stays with Venue Staff.
+    async with make_client(make_user("venue_staff")) as staff:
+        created = await create_venue(staff)
+
+    async with make_client(make_user("coordinator")) as coordinator:
+        update_attempt = await coordinator.patch(
+            f"/api/venues/{created['id']}", json={"maximum_capacity": 10}
+        )
+        deactivate_attempt = await coordinator.post(f"/api/venues/{created['id']}/deactivate")
+
+    assert update_attempt.status_code == 403
+    assert deactivate_attempt.status_code == 403

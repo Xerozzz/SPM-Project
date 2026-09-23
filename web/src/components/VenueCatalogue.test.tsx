@@ -61,8 +61,42 @@ test('a coordinator sees the catalogue read-only', async () => {
   expect(screen.getByText(/Level 2, SCIS/)).toHaveTextContent('08:00 to 22:00')
   expect(screen.getByText(/Layouts:/)).toHaveTextContent('theatre, classroom')
   // AC2: no controls that would create, edit or deactivate a venue.
+  expect(screen.queryByRole('button', { name: /^Deactivate/ })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /^Edit/ })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Add venue' })).not.toBeInTheDocument()
   expect(requested).toBe('/api/venues')
+})
+
+test('venue staff see the maintenance controls', async () => {
+  let requested = ''
+  renderCatalogue('venue_staff', async (input) => {
+    requested = String(input)
+    return json([venue()])
+  })
+
+  expect(await screen.findByText('Hall A')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Deactivate Hall A' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Edit Hall A' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Add venue' })).toBeInTheDocument()
+  expect(requested).toBe('/api/venues')
+})
+
+test('deactivating a venue calls the deactivate endpoint and confirms', async () => {
+  let posted = ''
+  renderCatalogue('venue_staff', async (input, init) => {
+    if ((init?.method ?? 'GET') === 'GET') return json([venue()])
+    posted = String(input)
+    return json(venue({ is_active: false }))
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Deactivate Hall A' }))
+
+  await waitFor(() => {
+    expect(posted).toBe('/api/venues/venue-1/deactivate')
+  })
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    '“Hall A” has been deactivated and can no longer be selected.',
+  )
 })
 
 test('adding a venue posts the form and confirms', async () => {
@@ -137,6 +171,56 @@ test('a 422 that is not in the field-problem shape still reports something', asy
   fireEvent.click(await screen.findByRole('button', { name: 'Add venue' }))
 
   expect(await screen.findByRole('status')).toHaveTextContent('The venue could not be saved (422)')
+})
+
+test('editing a venue loads its values and saves them with PATCH', async () => {
+  // AC1's update half: the form is prefilled from the venue, and Save changes sends a PATCH.
+  let method = ''
+  let url = ''
+  let body: Record<string, unknown> = {}
+  renderCatalogue('venue_staff', async (input, init) => {
+    if ((init?.method ?? 'GET') === 'GET') return json([venue()])
+    method = String(init?.method)
+    url = String(input)
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return json(venue({ maximum_capacity: 250 }))
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit Hall A' }))
+
+  // Prefilled from the venue, with the API's "HH:MM:SS" shown as "HH:MM".
+  expect(screen.getByLabelText(/^Name/)).toHaveValue('Hall A')
+  expect(screen.getByLabelText(/^Opens at/)).toHaveValue('08:00')
+  expect(screen.getByLabelText('theatre')).toBeChecked()
+  // The form holds these as one line, so the array has to come back joined. Prefilling
+  // them as an array would send them back as [] and quietly wipe them on save.
+  expect(screen.getByLabelText(/^Facilities/)).toHaveValue('Projector')
+  expect(screen.getByLabelText(/^Accessibility features/)).toHaveValue('Step-free access')
+
+  fireEvent.change(screen.getByLabelText(/^Maximum capacity/), { target: { value: '250' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+  await waitFor(() => {
+    expect(method).toBe('PATCH')
+  })
+  expect(url).toBe('/api/venues/venue-1')
+  expect(body.maximum_capacity).toBe(250)
+  expect(body.facilities).toEqual(['Projector'])
+  expect(body.accessibility_features).toEqual(['Step-free access'])
+  expect(body.opens_at).toBe('08:00:00')
+  expect(await screen.findByRole('status')).toHaveTextContent('“Hall A” has been updated.')
+})
+
+test('cancelling an edit returns the form to adding a venue', async () => {
+  renderCatalogue('venue_staff', async () => json([venue()]))
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit Hall A' }))
+  expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+  expect(screen.getByRole('button', { name: 'Add venue' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
 })
 
 test('a refused save names the fields to correct', async () => {
