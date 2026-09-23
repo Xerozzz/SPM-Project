@@ -163,3 +163,45 @@ def test_tc55_ac6_02_pending_request_does_not_block_availability() -> None:
 def test_tc55_ac6_02_confirmed_request_blocks_availability() -> None:
     # Contrast case for the same status rule: only a confirmed hold blocks search.
     assert booking_blocks_availability("confirmed") is True
+
+
+# ------------------------------------------------------- TC-55-AC2-04
+
+
+@pytest.mark.story("SCRUM-55")
+def test_tc55_ac2_04_no_layout_constraint_matches_any_layout() -> None:
+    criteria = VenueSearchCriteria(
+        minimum_capacity=100,
+        location="Level 2, School of Computing",
+        required_facilities=["Projector"],
+        required_accessibility=["Step-free access"],
+        required_layout=None,
+    )
+
+    assert venue_matches_criteria(base_venue(), criteria) is True
+
+
+# ------------------------------------------------------- TC-55-AC3-05
+
+
+@pytest.mark.story("SCRUM-55")
+@pytest.mark.parametrize("index", [0, 1])
+def test_tc55_ac3_05_naive_requested_period_is_rejected(index: int) -> None:
+    bounds = [_dt(1, 10), _dt(3, 12)]
+    bounds[index] = bounds[index].replace(tzinfo=None)
+
+    with pytest.raises(ValueError, match="timezone-aware"):
+        is_within_operating_hours(time(8, 0), time(22, 0), bounds[0], bounds[1])
+
+
+# ------------------------------------------------------- TC-55-AC4-04
+
+
+@pytest.mark.story("SCRUM-55")
+@pytest.mark.parametrize("index", [0, 1, 2, 3])
+def test_tc55_ac4_04_naive_interval_bounds_are_rejected(index: int) -> None:
+    bounds = [_dt(2, 10), _dt(2, 12), _dt(2, 11), _dt(2, 13)]
+    bounds[index] = bounds[index].replace(tzinfo=None)
+
+    with pytest.raises(ValueError, match="timezone-aware"):
+        intervals_overlap(bounds[0], bounds[1], bounds[2], bounds[3])
