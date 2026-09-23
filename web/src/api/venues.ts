@@ -103,13 +103,6 @@ export async function listVenues(token: string): Promise<Venue[]> {
   return (await response.json()) as Venue[]
 }
 
-/** Every venue including deactivated ones. Venue Staff only. */
-export async function listAllVenues(token: string): Promise<Venue[]> {
-  const response = await fetch('/api/venues/all', { headers: authHeaders(token) })
-  if (!response.ok) throw new Error(`Could not load the venue catalogue (${response.status})`)
-  return (await response.json()) as Venue[]
-}
-
 export async function createVenue(token: string, venue: VenueInput): Promise<Venue> {
   return readVenue(
     await fetch('/api/venues', {
@@ -137,11 +130,5 @@ export async function updateVenue(
 export async function deactivateVenue(token: string, id: string): Promise<Venue> {
   return readVenue(
     await fetch(`/api/venues/${id}/deactivate`, { method: 'POST', headers: authHeaders(token) }),
-  )
-}
-
-export async function reactivateVenue(token: string, id: string): Promise<Venue> {
-  return readVenue(
-    await fetch(`/api/venues/${id}/reactivate`, { method: 'POST', headers: authHeaders(token) }),
   )
 }

@@ -40,11 +40,6 @@ def list_selectable(db: Session) -> list[Venue]:
     return repo.list_active(db)
 
 
-def list_for_staff(db: Session) -> list[Venue]:
-    """Every venue, including deactivated ones, for the staff who maintain the catalogue."""
-    return repo.list_all(db)
-
-
 def get(db: Session, venue_id: uuid.UUID) -> Venue:
     """AC4: one venue, active or not, so historical references stay readable."""
     venue = repo.get(db, venue_id)
@@ -86,14 +81,6 @@ def deactivate(db: Session, venue_id: uuid.UUID) -> Venue:
     """
     venue = get(db, venue_id)
     venue.is_active = False
-    return repo.save(db, venue)
-
-
-def reactivate(db: Session, venue_id: uuid.UUID) -> Venue:
-    """Put a venue back in the catalogue. Deactivation is reversible precisely because it
-    is not a delete; a venue closed for a term's renovation comes back."""
-    venue = get(db, venue_id)
-    venue.is_active = True
     return repo.save(db, venue)
 
 

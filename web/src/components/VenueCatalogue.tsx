@@ -4,9 +4,7 @@ import { type FormEvent, useState } from 'react'
 import {
   createVenue,
   deactivateVenue,
-  listAllVenues,
   listVenues,
-  reactivateVenue,
   ROOM_LAYOUTS,
   type Venue,
   type VenueInput,
@@ -18,10 +16,9 @@ import { useAuth } from '../auth/useAuth'
 /**
  * SCRUM-59: the venue catalogue.
  *
- * Venue Staff see every venue and can add one or change its state; everyone else sees the
- * selectable catalogue read-only (AC2). Which list is fetched follows the caller's role,
- * and the server enforces the same split, so hiding a button is presentation and not the
- * authorisation rule.
+ * Venue Staff add venues and take them out of use; everyone else reads the same catalogue
+ * without those controls (AC2). The server enforces the split too, so hiding a button is
+ * presentation and not the authorisation rule.
  */
 export default function VenueCatalogue() {
   const { token, hasRole } = useAuth()
@@ -30,10 +27,10 @@ export default function VenueCatalogue() {
   const [problems, setProblems] = useState<VenueProblem[]>([])
   const [outcome, setOutcome] = useState<string | null>(null)
 
-  const queryKey = ['venues', isStaff ? 'all' : 'selectable', token]
+  const queryKey = ['venues', token]
   const venues = useQuery({
     queryKey,
-    queryFn: () => (isStaff ? listAllVenues(token ?? '') : listVenues(token ?? '')),
+    queryFn: () => listVenues(token ?? ''),
     enabled: token !== null,
   })
 
@@ -59,16 +56,11 @@ export default function VenueCatalogue() {
     onError: handleFailure,
   })
 
-  const setActive = useMutation({
-    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
-      active ? reactivateVenue(token ?? '', id) : deactivateVenue(token ?? '', id),
+  const deactivate = useMutation({
+    mutationFn: (id: string) => deactivateVenue(token ?? '', id),
     onSuccess: (venue) => {
       setProblems([])
-      setOutcome(
-        venue.is_active
-          ? `“${venue.name}” is selectable again.`
-          : `“${venue.name}” has been deactivated and can no longer be selected.`,
-      )
+      setOutcome(`“${venue.name}” has been deactivated and can no longer be selected.`)
       refresh()
     },
     onError: handleFailure,
@@ -79,7 +71,7 @@ export default function VenueCatalogue() {
       <h2 className="font-medium">Venue catalogue</h2>
       <p className="mt-1 text-sm text-slate-500">
         {isStaff
-          ? 'Add venues and take them out of use. Deactivated venues stay on existing events.'
+          ? 'Add venues and take them out of use. A deactivated venue stays on existing events.'
           : 'Venues available for planning. Venue Staff maintain this list.'}
       </p>
 
@@ -100,8 +92,8 @@ export default function VenueCatalogue() {
               key={venue.id}
               venue={venue}
               canManage={isStaff}
-              isBusy={setActive.isPending}
-              onToggleActive={() => setActive.mutate({ id: venue.id, active: !venue.is_active })}
+              isBusy={deactivate.isPending}
+              onDeactivate={() => deactivate.mutate(venue.id)}
             />
           ))}
         </ul>
@@ -128,24 +120,17 @@ function VenueRow({
   venue,
   canManage,
   isBusy,
-  onToggleActive,
+  onDeactivate,
 }: {
   venue: Venue
   canManage: boolean
   isBusy: boolean
-  onToggleActive: () => void
+  onDeactivate: () => void
 }) {
   return (
     <li className="flex flex-wrap items-start justify-between gap-4 py-3">
       <div>
-        <p className="font-medium">
-          {venue.name}
-          {!venue.is_active && (
-            <span className="ml-2 rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-              Deactivated
-            </span>
-          )}
-        </p>
+        <p className="font-medium">{venue.name}</p>
         <p className="text-sm text-slate-500">
           {venue.location} · up to {venue.maximum_capacity} people · {shortTime(venue.opens_at)} to{' '}
           {shortTime(venue.closes_at)}
@@ -163,11 +148,11 @@ function VenueRow({
       {canManage && (
         <button
           type="button"
-          onClick={onToggleActive}
+          onClick={onDeactivate}
           disabled={isBusy}
           className="rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
         >
-          {venue.is_active ? 'Deactivate' : 'Reactivate'}
+          Deactivate
         </button>
       )}
     </li>

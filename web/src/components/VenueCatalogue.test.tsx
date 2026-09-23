@@ -63,22 +63,20 @@ test('a coordinator sees the catalogue read-only', async () => {
   // AC2: no controls that would create, edit or deactivate a venue.
   expect(screen.queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Add venue' })).not.toBeInTheDocument()
-  // A coordinator asks for the selectable catalogue, not the staff one.
   expect(requested).toBe('/api/venues')
 })
 
-test('venue staff see deactivated venues and the maintenance controls', async () => {
+test('venue staff see the maintenance controls', async () => {
   let requested = ''
   renderCatalogue('venue_staff', async (input) => {
     requested = String(input)
-    return json([venue(), venue({ id: 'venue-2', name: 'Old Hall', is_active: false })])
+    return json([venue()])
   })
 
-  expect(await screen.findByText('Old Hall')).toBeInTheDocument()
-  expect(screen.getByText('Deactivated')).toBeInTheDocument()
-  expect(screen.getAllByRole('button', { name: 'Deactivate' })).toHaveLength(1)
-  expect(screen.getByRole('button', { name: 'Reactivate' })).toBeInTheDocument()
-  expect(requested).toBe('/api/venues/all')
+  expect(await screen.findByText('Hall A')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Deactivate' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Add venue' })).toBeInTheDocument()
+  expect(requested).toBe('/api/venues')
 })
 
 test('deactivating a venue calls the deactivate endpoint and confirms', async () => {

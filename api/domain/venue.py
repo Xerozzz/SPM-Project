@@ -66,10 +66,6 @@ def validate_venue(venue: VenueFields) -> list[FieldProblem]:
 
     problems.extend(_capacity_problems(venue.maximum_capacity))
     problems.extend(_layout_problems(venue.supported_layouts))
-    problems.extend(_free_text_list_problems("facilities", venue.facilities))
-    problems.extend(
-        _free_text_list_problems("accessibility_features", venue.accessibility_features)
-    )
     problems.extend(_operating_hours_problems(venue.opens_at, venue.closes_at))
 
     return problems
@@ -95,18 +91,6 @@ def _layout_problems(supported_layouts: list[str] | None) -> list[FieldProblem]:
                 f"must be chosen from the catalogue layouts: {', '.join(ROOM_LAYOUTS)}",
             )
         ]
-    if len(set(supported_layouts)) != len(supported_layouts):
-        return [FieldProblem("supported_layouts", "must not repeat a layout")]
-    return []
-
-
-def _free_text_list_problems(name: str, values: list[str] | None) -> list[FieldProblem]:
-    """Facilities and accessibility features are optional, but a blank entry is a typo,
-    not a value: it would render as an empty bullet in the catalogue."""
-    if values is None:
-        return []
-    if any(_is_blank(value) for value in values):
-        return [FieldProblem(name, "must not contain a blank entry")]
     return []
 
 

@@ -49,16 +49,9 @@ def list_selectable(user: AnyUser, db: Db) -> list[VenueRead]:
     return [VenueRead.model_validate(row) for row in service.list_selectable(db)]
 
 
-@router.get("/all", response_model=list[VenueRead])
-def list_for_staff(user: VenueStaff, db: Db) -> list[VenueRead]:
-    """Every venue including deactivated ones, for the staff who maintain the catalogue."""
-    del user
-    return [VenueRead.model_validate(row) for row in service.list_for_staff(db)]
-
-
 @router.get("/{venue_id}", response_model=VenueRead)
 def read(venue_id: uuid.UUID, user: AnyUser, db: Db) -> VenueRead:
-    """One venue, active or not, so an existing event or booking stays readable (AC4)."""
+    """One venue, active or not, so an existing event that names it stays readable (AC4)."""
     del user
     try:
         return VenueRead.model_validate(service.get(db, venue_id))
@@ -94,15 +87,5 @@ def deactivate(venue_id: uuid.UUID, user: VenueStaff, db: Db) -> VenueRead:
     del user
     try:
         return VenueRead.model_validate(service.deactivate(db, venue_id))
-    except _REFUSALS as exc:
-        raise _http_error(exc) from exc
-
-
-@router.post("/{venue_id}/reactivate", response_model=VenueRead)
-def reactivate(venue_id: uuid.UUID, user: VenueStaff, db: Db) -> VenueRead:
-    """Put a venue back in the catalogue once it is available again."""
-    del user
-    try:
-        return VenueRead.model_validate(service.reactivate(db, venue_id))
     except _REFUSALS as exc:
         raise _http_error(exc) from exc

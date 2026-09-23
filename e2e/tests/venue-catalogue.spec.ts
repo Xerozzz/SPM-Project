@@ -3,8 +3,8 @@ import { expect, type Page, test } from '@playwright/test'
 // SCRUM-59: the venue catalogue through the browser.
 //
 // Relies on the dev seed (scripts/seed.py), which the api container runs on every start:
-// three venues, one of them ("Old Sports Hall") deactivated on purpose so AC3 and AC4 are
-// both visible without this test having to deactivate anything first.
+// three venues, one of them ("Old Sports Hall") deactivated, so AC3 is visible without this
+// test having to deactivate anything first.
 //
 // The venue this test adds is named with a timestamp so the file can be re-run against the
 // same database. Venue names are unique and deactivation is not a delete (ADR-0012), so a
@@ -50,7 +50,7 @@ test('venue staff add a venue and take it out of use (AC1, AC3)', async ({ page 
   await expect(page.getByRole('status').filter({ hasText: name })).toContainText(
     `“${name}” has been deactivated and can no longer be selected.`,
   )
-  await expect(catalogue(page).filter({ hasText: name })).toContainText('Deactivated')
+  await expect(catalogue(page).filter({ hasText: name })).toHaveCount(0)
 })
 
 test('an incomplete venue is refused and the fields are named (AC5)', async ({ page }) => {
@@ -82,14 +82,4 @@ test('a coordinator sees the catalogue but cannot change it (AC2, AC4)', async (
 
   // AC3: the seeded deactivated venue is not in the selectable catalogue a coordinator sees.
   await expect(catalogue(page).filter({ hasText: 'Old Sports Hall' })).toHaveCount(0)
-})
-
-test('venue staff see deactivated venues that coordinators do not (AC3, AC4)', async ({ page }) => {
-  await signIn(page, 'venue-staff@example.com')
-
-  // AC4: the deactivated seed venue keeps its details and is still readable to staff.
-  const retired = catalogue(page).filter({ hasText: 'Old Sports Hall' })
-  await expect(retired).toContainText('Deactivated')
-  await expect(retired).toContainText('up to 300 people')
-  await expect(retired.getByRole('button', { name: 'Reactivate' })).toBeVisible()
 })

@@ -104,22 +104,6 @@ def test_a_layout_outside_the_catalogue_is_refused() -> None:
 
 
 @pytest.mark.story("SCRUM-59")
-def test_a_repeated_layout_is_refused() -> None:
-    problems = validate_venue(complete_venue(supported_layouts=["theatre", "theatre"]))
-
-    assert problem_fields(problems) == ["supported_layouts"]
-
-
-@pytest.mark.story("SCRUM-59")
-@pytest.mark.parametrize("field", ["facilities", "accessibility_features"])
-def test_a_blank_entry_in_an_optional_list_is_refused(field: str) -> None:
-    # An empty string would render as an empty bullet in the catalogue.
-    blank: dict[str, Any] = {field: ["Projector", "  "]}
-
-    assert problem_fields(validate_venue(complete_venue(**blank))) == [field]
-
-
-@pytest.mark.story("SCRUM-59")
 @pytest.mark.parametrize("field", ["opens_at", "closes_at"])
 def test_each_missing_operating_hour_is_named(field: str) -> None:
     missing: dict[str, Any] = {field: None}
