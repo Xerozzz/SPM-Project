@@ -108,12 +108,8 @@ def test_tc55_ac2_03_each_single_criterion_gap_excludes(
 def test_tc55_ac3_03_closing_boundary_is_inclusive() -> None:
     opens, closes = time(8, 0), time(22, 0)
 
-    within = is_within_operating_hours(
-        opens, closes, _dt(1, 20), _dt(3, 22, 0)
-    )
-    just_outside = is_within_operating_hours(
-        opens, closes, _dt(1, 20), _dt(3, 22, 1)
-    )
+    within = is_within_operating_hours(opens, closes, _dt(1, 20), _dt(3, 22, 0))
+    just_outside = is_within_operating_hours(opens, closes, _dt(1, 20), _dt(3, 22, 1))
 
     assert within is True
     assert just_outside is False
@@ -124,10 +120,7 @@ def test_tc55_ac3_03_closing_boundary_is_inclusive() -> None:
 
 @pytest.mark.story("SCRUM-55")
 def test_tc55_ac3_04_request_starting_before_opening_is_outside() -> None:
-    assert (
-        is_within_operating_hours(time(8, 0), time(22, 0), _dt(1, 7, 59), _dt(3, 9, 0))
-        is False
-    )
+    assert is_within_operating_hours(time(8, 0), time(22, 0), _dt(1, 7, 59), _dt(3, 9, 0)) is False
 
 
 # ------------------------------------------------------- TC-55-AC4-03
