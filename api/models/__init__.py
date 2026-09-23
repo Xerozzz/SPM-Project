@@ -15,3 +15,5 @@ from models.event_request import EventRequest as EventRequest
 from models.organisation import Organisation as Organisation
 from models.user import User as User
 from models.venue import Venue as Venue
+from models.venue_booking import VenueBooking as VenueBooking
+from models.venue_unavailability import VenueUnavailability as VenueUnavailability
