@@ -6,14 +6,15 @@ import { useAuth } from '../auth/useAuth'
 /**
  * SCRUM-55: coordinator venue search.
  *
- * Every filter is optional except the date and time slot; strict matching means a venue
+ * Every filter is optional except the requested period; strict matching means a venue
  * must satisfy every supplied criterion to appear. An empty result is guidance, not a
  * dead end: the copy tells the coordinator to adjust the filters (AC7).
  */
 export default function VenueSearch() {
   const { token } = useAuth()
-  const [date, setDate] = useState('2026-12-01')
+  const [startDate, setStartDate] = useState('2026-12-01')
   const [startTime, setStartTime] = useState('10:00')
+  const [endDate, setEndDate] = useState('2026-12-03')
   const [endTime, setEndTime] = useState('12:00')
   const [minimumCapacity, setMinimumCapacity] = useState('')
   const [location, setLocation] = useState('')
@@ -31,8 +32,9 @@ export default function VenueSearch() {
     setError(null)
     try {
       const venues = await searchVenues(token ?? '', {
-        date,
+        startDate,
         startTime,
+        endDate,
         endTime,
         minimumCapacity: minimumCapacity === '' ? undefined : Number(minimumCapacity),
         location: location === '' ? undefined : location,
@@ -58,11 +60,11 @@ export default function VenueSearch() {
 
       <form onSubmit={onSearch} className="mt-3 grid gap-3">
         <label className="grid gap-1 text-sm">
-          Date
+          Start date
           <input
             type="date"
-            value={date}
-            onChange={(event) => setDate(event.target.value)}
+            value={startDate}
+            onChange={(event) => setStartDate(event.target.value)}
             className="rounded border border-slate-300 px-2 py-1.5"
           />
         </label>
@@ -72,6 +74,15 @@ export default function VenueSearch() {
             type="time"
             value={startTime}
             onChange={(event) => setStartTime(event.target.value)}
+            className="rounded border border-slate-300 px-2 py-1.5"
+          />
+        </label>
+        <label className="grid gap-1 text-sm">
+          End date
+          <input
+            type="date"
+            value={endDate}
+            onChange={(event) => setEndDate(event.target.value)}
             className="rounded border border-slate-300 px-2 py-1.5"
           />
         </label>

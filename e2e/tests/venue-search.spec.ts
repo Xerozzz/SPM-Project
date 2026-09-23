@@ -2,11 +2,11 @@ import { expect, type Page, test } from '@playwright/test'
 
 // SCRUM-55: an Event Coordinator searches for venues with planning filters.
 //
-// TDD red phase: the venue-search UI does not exist yet, so both tests fail until it
-// lands. Expected UI contract (to be built):
+// Multi-day requested periods (1 Dec 2026 10:00 through 3 Dec 2026 12:00).
+// Expected UI contract:
 //   - A "Venue search" section visible to coordinators with labelled inputs:
-//     Date, Start time, End time, Minimum capacity, Location, Accessibility needs,
-//     Facilities, Room layout, and a "Search venues" button.
+//     Start date, Start time, End date, End time, Minimum capacity, Location,
+//     Accessibility needs, Facilities, Room layout, and a "Search venues" button.
 //   - Results render as a list; each matching venue name is visible.
 //   - TC-55-AC7-01: when nothing matches, the results area states no match was found
 //     and suggests adjusting filters.
@@ -25,8 +25,9 @@ test('TC-55-AC1-01: a coordinator can provide every supported search criterion',
 }) => {
   await signInAsCoordinator(page)
 
-  await page.getByLabel('Date').fill('2026-12-01')
+  await page.getByLabel('Start date').fill('2026-12-01')
   await page.getByLabel('Start time').fill('10:00')
+  await page.getByLabel('End date').fill('2026-12-03')
   await page.getByLabel('End time').fill('12:00')
   await page.getByLabel('Minimum capacity').fill('100')
   await page.getByLabel('Location').fill('Level 2, School of Computing')
@@ -42,8 +43,9 @@ test('TC-55-AC1-01: a coordinator can provide every supported search criterion',
 test('TC-55-AC7-01: no-match guidance suggests adjusting filters', async ({ page }) => {
   await signInAsCoordinator(page)
 
-  await page.getByLabel('Date').fill('2026-12-01')
+  await page.getByLabel('Start date').fill('2026-12-01')
   await page.getByLabel('Start time').fill('10:00')
+  await page.getByLabel('End date').fill('2026-12-03')
   await page.getByLabel('End time').fill('12:00')
   await page.getByLabel('Minimum capacity').fill('999')
   await page.getByRole('button', { name: 'Search venues' }).click()

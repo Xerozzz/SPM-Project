@@ -51,16 +51,22 @@ def venue_matches_criteria(venue: SearchableVenue, criteria: VenueSearchCriteria
 
 
 def is_within_operating_hours(
-    opens_at: time, closes_at: time, requested_start: time, requested_end: time
+    opens_at: time, closes_at: time, requested_start: datetime, requested_end: datetime
 ) -> bool:
-    """AC3: the requested wall-clock slot must fit inside opening hours.
+    """AC3: the requested period must fit inside daily opening hours.
 
-    Both boundaries are inclusive: ending exactly at closing (or starting exactly at
+    The requested bounds are tz-aware datetimes; only their wall-clock time-of-day
+    is compared against the daily hours, so a multi-day request is within hours
+    when its start time-of-day and end time-of-day are both inside. Both
+    boundaries are inclusive: ending exactly at closing (or starting exactly at
     opening) is allowed, because the venue is still open at that instant.
     """
+    for moment in (requested_start, requested_end):
+        if moment.tzinfo is None:
+            raise ValueError("requested period bounds must be timezone-aware")
     return (
-        opens_at <= requested_start
-        and requested_end <= closes_at
+        opens_at <= requested_start.time()
+        and requested_end.time() <= closes_at
         and requested_start < requested_end
     )
 

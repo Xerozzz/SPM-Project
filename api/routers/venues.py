@@ -6,7 +6,7 @@ inline role check (AGENTS.md section 3).
 """
 
 import uuid
-from datetime import date, time
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -50,22 +50,20 @@ def _http_error(exc: Exception) -> HTTPException:
 def search(
     user: Coordinator,
     db: Db,
-    date: date,
-    start_time: time,
-    end_time: time,
+    start_at: datetime,
+    end_at: datetime,
     minimum_capacity: int | None = None,
     location: str | None = None,
     accessibility: Annotated[list[str] | None, Query()] = None,
     facility: Annotated[list[str] | None, Query()] = None,
     layout: str | None = None,
 ) -> list[VenueRead]:
-    """SCRUM-55: active venues satisfying every criterion and free for the slot."""
+    """SCRUM-55: active venues satisfying every criterion and free for the period."""
     del user
     rows = search_service.search(
         db,
-        day=date,
-        start=start_time,
-        end=end_time,
+        start_at=start_at,
+        end_at=end_at,
         minimum_capacity=minimum_capacity,
         location=location,
         accessibility=accessibility,
