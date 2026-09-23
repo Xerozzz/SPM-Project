@@ -1,9 +1,10 @@
-"""SCRUM-59: reading the venue catalogue.
+"""SCRUM-59: reading the venue catalogue and adding to it.
 
-Venue Staff maintain it; everyone signed in reads it (AC2). A deactivated venue leaves the
-selectable list but stays readable by id (AC3, AC4), which is what soft deactivation buys
-(ADR-0012). Venues are arranged directly here because the endpoints that create them land
-with the story that adds them.
+Venue Staff add venues (AC1) and everyone signed in reads them (AC2). Invalid data is
+refused with the affected field named and nothing stored (AC5). A deactivated venue leaves
+the selectable list but stays readable by id (AC3, AC4), which is what soft deactivation
+buys (ADR-0012); the endpoint that deactivates one lands with the story that adds it, so
+the deactivated venues here are arranged directly.
 """
 
 import uuid
@@ -20,6 +21,29 @@ from models.venue import Venue
 
 MakeUser = Callable[..., User]
 MakeClient = Callable[[User | None], httpx.AsyncClient]
+
+
+def venue_body(**overrides: Any) -> dict[str, Any]:
+    """A complete, valid venue payload; pass field=value to change or break one."""
+    values: dict[str, Any] = {
+        "name": "Hall A",
+        "location": "Level 2, School of Computing",
+        "maximum_capacity": 200,
+        "facilities": ["Projector", "Hearing loop"],
+        "supported_layouts": ["theatre", "classroom"],
+        "accessibility_features": ["Step-free access"],
+        "opens_at": "08:00:00",
+        "closes_at": "22:00:00",
+    }
+    values.update(overrides)
+    return values
+
+
+async def create_venue(client: httpx.AsyncClient, **overrides: Any) -> dict[str, Any]:
+    response = await client.post("/api/venues", json=venue_body(**overrides))
+    assert response.status_code == 201, response.text
+    body: dict[str, Any] = response.json()
+    return body
 
 
 def make_venue(db: Session, **overrides: Any) -> Venue:
@@ -134,3 +158,94 @@ async def test_the_catalogue_requires_a_signed_in_user(make_client: MakeClient) 
     async with make_client(None) as anonymous:
         assert (await anonymous.get("/api/venues")).status_code == 401
         assert (await anonymous.get(f"/api/venues/{uuid.uuid4()}")).status_code == 401
+
+
+# ------------------------------------------------- AC1 and AC5: adding a venue
+
+
+@pytest.mark.story("SCRUM-59")
+async def test_venue_staff_create_a_venue_with_every_attribute(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.post("/api/venues", json=venue_body())
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["name"] == "Hall A"
+    assert body["location"] == "Level 2, School of Computing"
+    assert body["maximum_capacity"] == 200
+    assert body["facilities"] == ["Projector", "Hearing loop"]
+    assert body["supported_layouts"] == ["theatre", "classroom"]
+    assert body["accessibility_features"] == ["Step-free access"]
+    assert body["opens_at"] == "08:00:00"
+    assert body["closes_at"] == "22:00:00"
+    # A new venue is selectable straight away; nothing else has to happen to it.
+    assert body["is_active"] is True
+
+    stored = db.get(Venue, uuid.UUID(body["id"]))
+    assert stored is not None
+    assert stored.name == "Hall A"
+
+
+@pytest.mark.story("SCRUM-59")
+async def test_a_duplicate_venue_name_is_refused(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    async with make_client(make_user("venue_staff")) as client:
+        await create_venue(client)
+        response = await client.post("/api/venues", json=venue_body(location="Elsewhere"))
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "A venue with that name already exists"
+
+
+@pytest.mark.story("SCRUM-59")
+async def test_a_coordinator_cannot_add_a_venue(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # AC2: a coordinator views the catalogue but does not maintain it.
+    async with make_client(make_user("coordinator")) as coordinator:
+        response = await coordinator.post("/api/venues", json=venue_body())
+
+    assert response.status_code == 403
+
+
+@pytest.mark.story("SCRUM-59")
+async def test_an_incomplete_venue_is_refused_and_the_fields_are_named(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    incomplete = venue_body(name=None, maximum_capacity=None, supported_layouts=[])
+
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.post("/api/venues", json=incomplete)
+
+    assert response.status_code == 422
+    named = {problem["field"] for problem in response.json()["detail"]}
+    assert named == {"name", "maximum_capacity", "supported_layouts"}
+    assert db.query(Venue).count() == 0
+
+
+@pytest.mark.story("SCRUM-59")
+async def test_an_invalid_venue_is_refused_with_the_reason(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.post(
+            "/api/venues", json=venue_body(opens_at="18:00:00", closes_at="09:00:00")
+        )
+
+    assert response.status_code == 422
+    problems = response.json()["detail"]
+    assert [problem["field"] for problem in problems] == ["closes_at"]
+    assert problems[0]["reason"] == "must be after the opening time"
+
+
+@pytest.mark.story("SCRUM-59")
+async def test_stored_text_is_trimmed(make_user: MakeUser, make_client: MakeClient) -> None:
+    # Leading and trailing spaces are a typing artefact, not part of the venue's name.
+    async with make_client(make_user("venue_staff")) as client:
+        created = await create_venue(client, name="  Hall C  ", location="  Level 3  ")
+
+    assert created["name"] == "Hall C"
+    assert created["location"] == "Level 3"

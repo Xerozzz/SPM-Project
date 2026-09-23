@@ -1,12 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { AuthProvider } from '../auth/context'
 import VenueCatalogue from './VenueCatalogue'
 
-// SCRUM-59: the catalogue is read-only here. The API decides who may change it; these
-// tests cover what the component shows and which endpoint it asks for.
+// SCRUM-59: Venue Staff maintain the catalogue and everyone else reads it. The API decides
+// who may do what; these tests cover what the component shows and which endpoint it calls.
 
 afterEach(() => {
   localStorage.clear()
@@ -49,7 +49,7 @@ function renderCatalogue(role: 'venue_staff' | 'coordinator', fetcher: typeof fe
   )
 }
 
-test('a coordinator sees every attribute of a venue', async () => {
+test('a coordinator sees the catalogue read-only', async () => {
   let requested = ''
   renderCatalogue('coordinator', async (input) => {
     requested = String(input)
@@ -58,30 +58,144 @@ test('a coordinator sees every attribute of a venue', async () => {
 
   expect(await screen.findByText('Hall A')).toBeInTheDocument()
   expect(screen.getByText(/Level 2, SCIS/)).toHaveTextContent('up to 200 people')
-  // "HH:MM:SS" from the API reads better as "HH:MM" in a list.
   expect(screen.getByText(/Level 2, SCIS/)).toHaveTextContent('08:00 to 22:00')
   expect(screen.getByText(/Layouts:/)).toHaveTextContent('theatre, classroom')
-  expect(screen.getByText(/Facilities:/)).toHaveTextContent('Projector')
-  expect(screen.getByText(/Accessibility:/)).toHaveTextContent('Step-free access')
+  // AC2: no controls that would create, edit or deactivate a venue.
+  expect(screen.queryByRole('button', { name: 'Add venue' })).not.toBeInTheDocument()
   expect(requested).toBe('/api/venues')
 })
 
-test('the catalogue offers no controls that would change it', async () => {
-  // AC2: a coordinator views but cannot create, edit or deactivate.
-  renderCatalogue('coordinator', async () => json([venue()]))
-
-  expect(await screen.findByText('Hall A')).toBeInTheDocument()
-  expect(screen.queryByRole('button')).not.toBeInTheDocument()
-})
-
-test('an empty catalogue says so', async () => {
-  renderCatalogue('coordinator', async () => json([]))
+test('adding a venue posts the form and confirms', async () => {
+  let body: Record<string, unknown> = {}
+  renderCatalogue('venue_staff', async (_input, init) => {
+    if ((init?.method ?? 'GET') === 'GET') return json([])
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return json(venue({ name: 'Hall B' }), 201)
+  })
 
   expect(await screen.findByText('No venues in the catalogue yet.')).toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'Hall B' } })
+  fireEvent.change(screen.getByLabelText(/^Location/), { target: { value: 'Level 3' } })
+  fireEvent.change(screen.getByLabelText(/^Maximum capacity/), { target: { value: '80' } })
+  fireEvent.click(screen.getByLabelText('theatre'))
+  fireEvent.change(screen.getByLabelText(/^Facilities/), {
+    target: { value: 'Projector, Hearing loop' },
+  })
+  fireEvent.change(screen.getByLabelText(/^Accessibility features/), {
+    target: { value: 'Step-free access' },
+  })
+  fireEvent.change(screen.getByLabelText(/^Opens at/), { target: { value: '09:00' } })
+  fireEvent.change(screen.getByLabelText(/^Closes at/), { target: { value: '17:00' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Add venue' }))
+
+  await waitFor(() => {
+    expect(body.name).toBe('Hall B')
+  })
+  expect(body.maximum_capacity).toBe(80)
+  expect(body.supported_layouts).toEqual(['theatre'])
+  // AC1 lists facilities and accessibility features among a venue's attributes, so the
+  // form has to be able to set them. Typed as one line, sent as an array.
+  expect(body.facilities).toEqual(['Projector', 'Hearing loop'])
+  expect(body.accessibility_features).toEqual(['Step-free access'])
+  // The time inputs give "HH:MM"; the API is sent seconds too.
+  expect(body.opens_at).toBe('09:00:00')
+  expect(body.closes_at).toBe('17:00:00')
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    '“Hall B” has been added to the catalogue.',
+  )
+})
+
+test('an untouched time field is sent as null, not an empty string', async () => {
+  // Regression: "" is not a time, so the API rejected it with a parser error in its own
+  // shape and the form showed nothing at all. An empty input means "not supplied", so it
+  // has to go as null for AC5 to name the field. Caught by the e2e test, locked in here.
+  let body: Record<string, unknown> = {}
+  renderCatalogue('venue_staff', async (_input, init) => {
+    if ((init?.method ?? 'GET') === 'GET') return json([])
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return json({ detail: [{ field: 'opens_at', reason: 'is required' }] }, 422)
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Add venue' }))
+
+  await waitFor(() => {
+    expect(body).toHaveProperty('opens_at')
+  })
+  expect(body.opens_at).toBeNull()
+  expect(body.closes_at).toBeNull()
+  expect(await screen.findByText('Opens at is required')).toBeInTheDocument()
+})
+
+test('a 422 that is not in the field-problem shape still reports something', async () => {
+  // FastAPI's own validation errors look nothing like ours; showing no message at all
+  // leaves the user staring at a form that silently did nothing.
+  renderCatalogue('venue_staff', async (_input, init) => {
+    if ((init?.method ?? 'GET') === 'GET') return json([])
+    return json({ detail: [{ type: 'time_parsing', loc: ['body', 'opens_at'] }] }, 422)
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Add venue' }))
+
+  expect(await screen.findByRole('status')).toHaveTextContent('The venue could not be saved (422)')
+})
+
+test('a refused save names the fields to correct', async () => {
+  renderCatalogue('venue_staff', async (_input, init) => {
+    if ((init?.method ?? 'GET') === 'GET') return json([])
+    return json(
+      {
+        detail: [
+          { field: 'name', reason: 'is required' },
+          { field: 'maximum_capacity', reason: 'must be at least 1' },
+        ],
+      },
+      422,
+    )
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Add venue' }))
+
+  // AC5: the affected field is identified, next to the input it belongs to.
+  expect(await screen.findByText('Name is required')).toBeInTheDocument()
+  expect(screen.getByText('Maximum capacity must be at least 1')).toBeInTheDocument()
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+})
+
+test('a duplicate name is reported on the name field', async () => {
+  renderCatalogue('venue_staff', async (_input, init) => {
+    if ((init?.method ?? 'GET') === 'GET') return json([])
+    return json({ detail: 'A venue with that name already exists' }, 409)
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Add venue' }))
+
+  expect(await screen.findByText('Name is already used by another venue')).toBeInTheDocument()
 })
 
 test('shows an error when the catalogue cannot be loaded', async () => {
   renderCatalogue('coordinator', async () => json({ detail: 'boom' }, 500))
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Could not load the venue catalogue')
+})
+
+test('an empty or untidy list of facilities is sent as a clean array', async () => {
+  // A venue with no projector and no step-free access is still a valid venue, so an empty
+  // box means an empty list rather than [''], and stray commas do not become blank entries.
+  let body: Record<string, unknown> = {}
+  renderCatalogue('venue_staff', async (_input, init) => {
+    if ((init?.method ?? 'GET') === 'GET') return json([])
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return json(venue(), 201)
+  })
+
+  fireEvent.change(await screen.findByLabelText(/^Facilities/), {
+    target: { value: ' Projector , , Hearing loop , ' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Add venue' }))
+
+  await waitFor(() => {
+    expect(body).toHaveProperty('facilities')
+  })
+  expect(body.facilities).toEqual(['Projector', 'Hearing loop'])
+  expect(body.accessibility_features).toEqual([])
 })
