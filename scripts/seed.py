@@ -93,6 +93,18 @@ def _sample_event_requests() -> list[tuple[uuid.UUID, dict[str, object]]]:
 
 _SEED_VENUES: tuple[dict[str, object], ...] = (
     {
+        # SCRUM-55 E2E: the venue the search spec filters for (Hall A in the tests).
+        "name": "Hall A",
+        "location": "Level 2, School of Computing",
+        "maximum_capacity": 200,
+        "facilities": ["Projector", "Hearing loop"],
+        "supported_layouts": ["theatre", "classroom"],
+        "accessibility_features": ["Step-free access"],
+        "opens_at": time(8, 0),
+        "closes_at": time(22, 0),
+        "is_active": True,
+    },
+    {
         "name": "Mochtar Riady Auditorium",
         "location": "Level 5, Administration Building",
         "maximum_capacity": 500,

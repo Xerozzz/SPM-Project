@@ -1,13 +1,15 @@
-"""HTTP endpoints for the venue catalogue (SCRUM-59).
+"""HTTP endpoints for the venue catalogue (SCRUM-59) and venue search (SCRUM-55).
 
-Venue Staff maintain the catalogue; every signed-in user may read it. The split is done
-with the shared role dependency, never with an inline role check (AGENTS.md section 3).
+Venue Staff maintain the catalogue; every signed-in user may read it. Venue search is
+coordinator-only. The split is done with the shared role dependency, never with an
+inline role check (AGENTS.md section 3).
 """
 
 import uuid
+from datetime import date, time
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from core.database import get_db
@@ -15,11 +17,13 @@ from core.dependencies import get_current_user, require_role
 from domain.roles import Role
 from domain.venue import VenueFields
 from schemas.venues import VenueCreate, VenueProblemRead, VenueRead, VenueUpdate
+from services import venue_search as search_service
 from services import venues as service
 
 router = APIRouter(prefix="/venues", tags=["venues"])
 
 VenueStaff = Annotated[dict[str, object], Depends(require_role(Role.VENUE_STAFF))]
+Coordinator = Annotated[dict[str, object], Depends(require_role(Role.COORDINATOR))]
 AnyUser = Annotated[dict[str, object], Depends(get_current_user)]
 Db = Annotated[Session, Depends(get_db)]
 
@@ -40,6 +44,35 @@ def _http_error(exc: Exception) -> HTTPException:
     # A literal 422, as in routers/event_requests.py: Starlette renamed its constant
     # between the versions we allow.
     return HTTPException(422, [p.model_dump() for p in problems])
+
+
+@router.get("/search", response_model=list[VenueRead])
+def search(
+    user: Coordinator,
+    db: Db,
+    date: date,
+    start_time: time,
+    end_time: time,
+    minimum_capacity: int | None = None,
+    location: str | None = None,
+    accessibility: Annotated[list[str] | None, Query()] = None,
+    facility: Annotated[list[str] | None, Query()] = None,
+    layout: str | None = None,
+) -> list[VenueRead]:
+    """SCRUM-55: active venues satisfying every criterion and free for the slot."""
+    del user
+    rows = search_service.search(
+        db,
+        day=date,
+        start=start_time,
+        end=end_time,
+        minimum_capacity=minimum_capacity,
+        location=location,
+        accessibility=accessibility,
+        facility=facility,
+        layout=layout,
+    )
+    return [VenueRead.model_validate(row) for row in rows]
 
 
 @router.get("", response_model=list[VenueRead])
