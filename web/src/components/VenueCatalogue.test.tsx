@@ -129,6 +129,40 @@ test('adding a venue posts the form and confirms', async () => {
   )
 })
 
+test('an untouched time field is sent as null, not an empty string', async () => {
+  // Regression: "" is not a time, so the API rejected it with a parser error in its own
+  // shape and the form showed nothing at all. An empty input means "not supplied", so it
+  // has to go as null for AC5 to name the field. Caught by the e2e test, locked in here.
+  let body: Record<string, unknown> = {}
+  renderCatalogue('venue_staff', async (_input, init) => {
+    if ((init?.method ?? 'GET') === 'GET') return json([])
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return json({ detail: [{ field: 'opens_at', reason: 'is required' }] }, 422)
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Add venue' }))
+
+  await waitFor(() => {
+    expect(body).toHaveProperty('opens_at')
+  })
+  expect(body.opens_at).toBeNull()
+  expect(body.closes_at).toBeNull()
+  expect(await screen.findByText('Opens at is required')).toBeInTheDocument()
+})
+
+test('a 422 that is not in the field-problem shape still reports something', async () => {
+  // FastAPI's own validation errors look nothing like ours; showing no message at all
+  // leaves the user staring at a form that silently did nothing.
+  renderCatalogue('venue_staff', async (_input, init) => {
+    if ((init?.method ?? 'GET') === 'GET') return json([])
+    return json({ detail: [{ type: 'time_parsing', loc: ['body', 'opens_at'] }] }, 422)
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Add venue' }))
+
+  expect(await screen.findByRole('status')).toHaveTextContent('The venue could not be saved (422)')
+})
+
 test('a refused save names the fields to correct', async () => {
   renderCatalogue('venue_staff', async (_input, init) => {
     if ((init?.method ?? 'GET') === 'GET') return json([])

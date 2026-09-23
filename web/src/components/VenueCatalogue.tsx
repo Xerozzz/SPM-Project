@@ -174,7 +174,17 @@ function VenueRow({
   )
 }
 
-const emptyVenue: VenueInput = {
+/**
+ * What the form holds while it is being filled in. Times are strings here because that is
+ * what a time input gives, empty included; they become the API's `string | null` only on
+ * submit. Same split as EventRequestFormValues in validation/eventRequest.ts.
+ */
+type VenueFormValues = Omit<VenueInput, 'opens_at' | 'closes_at'> & {
+  opens_at: string
+  closes_at: string
+}
+
+const emptyVenue: VenueFormValues = {
   name: '',
   location: '',
   maximum_capacity: null,
@@ -194,16 +204,18 @@ function AddVenueForm({
   isSaving: boolean
   onSubmit: (venue: VenueInput) => void
 }) {
-  const [values, setValues] = useState<VenueInput>(emptyVenue)
+  const [values, setValues] = useState<VenueFormValues>(emptyVenue)
   const reasonFor = (field: string) => problems.find((p) => p.field === field)?.reason
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     onSubmit({
       ...values,
-      // datetime inputs give "HH:MM"; the API stores seconds too.
-      opens_at: values.opens_at ? `${values.opens_at}:00` : '',
-      closes_at: values.closes_at ? `${values.closes_at}:00` : '',
+      // A time input gives "HH:MM" once filled, and "" while empty. Empty means the field
+      // was not supplied, so it has to go as null: "" is not a time, and the API would
+      // reject it with a parser error instead of the named-field problem AC5 asks for.
+      opens_at: withSeconds(values.opens_at),
+      closes_at: withSeconds(values.closes_at),
     })
   }
 
@@ -321,6 +333,11 @@ function Field({
       )}
     </label>
   )
+}
+
+/** A time input's "HH:MM", as the API's "HH:MM:SS", or null when nothing was entered. */
+function withSeconds(value: string): string | null {
+  return value ? `${value}:00` : null
 }
 
 /** "08:00:00" reads better as "08:00" in a list. */

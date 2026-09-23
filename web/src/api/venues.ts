@@ -37,8 +37,9 @@ export interface VenueInput {
   facilities: string[]
   supported_layouts: string[]
   accessibility_features: string[]
-  opens_at: string
-  closes_at: string
+  /** null when Venue Staff have not entered a time yet; the API names it as required. */
+  opens_at: string | null
+  closes_at: string | null
 }
 
 /** One field Venue Staff must fix before the record can be saved (AC5). */
@@ -58,6 +59,18 @@ export class VenueRejectedError extends Error {
   }
 }
 
+function asVenueProblems(detail: unknown): VenueProblem[] | null {
+  if (!Array.isArray(detail)) return null
+  const problems = detail.filter(
+    (item): item is VenueProblem =>
+      typeof item === 'object' &&
+      item !== null &&
+      typeof (item as VenueProblem).field === 'string' &&
+      typeof (item as VenueProblem).reason === 'string',
+  )
+  return problems.length === detail.length ? problems : null
+}
+
 function authHeaders(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}` }
 }
@@ -68,8 +81,13 @@ function jsonHeaders(token: string): HeadersInit {
 
 async function readVenue(response: Response): Promise<Venue> {
   if (response.status === 422) {
-    const body = (await response.json()) as { detail: VenueProblem[] }
-    throw new VenueRejectedError(body.detail)
+    const body = (await response.json()) as { detail: unknown }
+    const problems = asVenueProblems(body.detail)
+    // A 422 the API did not build from domain/venue.py (a malformed payload, say) has a
+    // different shape. Reporting it as a plain error beats rendering an empty field list
+    // that leaves the user staring at a form with no explanation.
+    if (problems === null) throw new Error('The venue could not be saved (422)')
+    throw new VenueRejectedError(problems)
   }
   if (response.status === 409) {
     throw new VenueRejectedError([{ field: 'name', reason: 'is already used by another venue' }])
