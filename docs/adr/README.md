@@ -23,6 +23,7 @@ someone else made two weeks ago.
 | [0010](0010-event-clarification-history.md) | Retain event clarification as a message history | Proposed |
 | [0011](0011-event-request-review-decisions.md) | Store the current event-request review decision on the request | Proposed |
 | [0012](0012-venue-soft-deactivation.md) | Deactivate venues instead of deleting them | Proposed |
+| [0013](0013-venue-unavailability-before-booking.md) | Record venue unavailability before booking allocation exists | Proposed |
 
 ## When to write one
 
