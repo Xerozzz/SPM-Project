@@ -106,6 +106,11 @@ test('venue staff can record unavailability for a selected venue', async () => {
   await waitFor(() => expect(posted.reason).toBe('Air-conditioning maintenance'))
   expect(posted.starts_at).toMatch(/2026-10-01T/)
   expect(posted.ends_at).toMatch(/2026-10-01T/)
+  await waitFor(() => {
+    expect(screen.getByLabelText(/^Start date and time/)).toHaveValue('')
+  })
+  expect(screen.getByLabelText(/^End date and time/)).toHaveValue('')
+  expect(screen.getByLabelText(/^Reason/)).toHaveValue('')
 })
 
 test('unavailability validation names the date and reason fields to correct', async () => {

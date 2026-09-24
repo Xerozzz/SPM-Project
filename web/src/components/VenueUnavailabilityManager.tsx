@@ -25,6 +25,7 @@ export default function VenueUnavailabilityManager({ venues }: { venues: Venue[]
   const [editing, setEditing] = useState<VenueUnavailability | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [problems, setProblems] = useState<VenueProblem[]>([])
+  const [formVersion, setFormVersion] = useState(0)
   const selectedVenue = venues.find((venue) => venue.id === venueId)
   const queryKey = ['venue-unavailabilities', token, venueId]
   const records = useQuery({
@@ -46,6 +47,7 @@ export default function VenueUnavailabilityManager({ venues }: { venues: Venue[]
     setEditing(null)
     setError(null)
     setProblems([])
+    setFormVersion((current) => current + 1)
     refresh()
   }
   const save = useMutation({
@@ -92,7 +94,7 @@ export default function VenueUnavailabilityManager({ venues }: { venues: Venue[]
       </label>
       {venueId && (
         <UnavailabilityForm
-          key={editing?.id ?? `${venueId}-new`}
+          key={`${venueId}-${editing?.id ?? 'new'}-${formVersion}`}
           editing={editing}
           isSaving={save.isPending}
           problems={problems}
