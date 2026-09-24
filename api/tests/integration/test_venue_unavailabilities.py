@@ -81,15 +81,25 @@ async def test_venue_staff_delete_a_record(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     venue = make_venue(db)
-    async with make_client(make_user("venue_staff")) as client:
-        created = await client.post(f"/api/venues/{venue.id}/unavailabilities", json=body())
-        deleted = await client.delete(
-            f"/api/venues/{venue.id}/unavailabilities/{created.json()['id']}"
-        )
-        listed = await client.get(f"/api/venues/{venue.id}/unavailabilities")
+    url = f"/api/venues/{venue.id}/unavailabilities"
 
+    async with make_client(make_user("venue_staff")) as client:
+        first = await client.post(url, json=body())
+        second = await client.post(
+            url,
+            json=body(
+                starts_at="2026-10-02T09:00:00Z",
+                ends_at="2026-10-02T11:00:00Z",
+            ),
+        )
+        deleted = await client.delete(f"{url}/{first.json()['id']}")
+        listed = await client.get(url)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
     assert deleted.status_code == 204
-    assert listed.json() == []
+    assert listed.status_code == 200
+    assert [record["id"] for record in listed.json()] == [second.json()["id"]]
 
 
 @pytest.mark.story("SCRUM-62")
