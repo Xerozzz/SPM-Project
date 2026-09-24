@@ -48,6 +48,20 @@ export interface VenueProblem {
   reason: string
 }
 
+export interface VenueUnavailability {
+  id: string
+  venue_id: string
+  starts_at: string
+  ends_at: string
+  reason: string
+}
+
+export interface VenueUnavailabilityInput {
+  starts_at: string | null
+  ends_at: string | null
+  reason: string
+}
+
 /** Thrown when the API refuses a save and names the fields to correct. */
 export class VenueRejectedError extends Error {
   readonly problems: VenueProblem[]
@@ -131,4 +145,63 @@ export async function deactivateVenue(token: string, id: string): Promise<Venue>
   return readVenue(
     await fetch(`/api/venues/${id}/deactivate`, { method: 'POST', headers: authHeaders(token) }),
   )
+}
+
+async function readUnavailability(response: Response): Promise<VenueUnavailability> {
+  if (!response.ok)
+    throw new Error(`The unavailability period could not be saved (${response.status})`)
+  return (await response.json()) as VenueUnavailability
+}
+
+export async function listVenueUnavailabilities(
+  token: string,
+  venueId: string,
+): Promise<VenueUnavailability[]> {
+  const response = await fetch(`/api/venues/${venueId}/unavailabilities`, {
+    headers: authHeaders(token),
+  })
+  if (!response.ok) throw new Error(`Could not load venue unavailability (${response.status})`)
+  return (await response.json()) as VenueUnavailability[]
+}
+
+export async function createVenueUnavailability(
+  token: string,
+  venueId: string,
+  input: VenueUnavailabilityInput,
+): Promise<VenueUnavailability> {
+  return readUnavailability(
+    await fetch(`/api/venues/${venueId}/unavailabilities`, {
+      method: 'POST',
+      headers: jsonHeaders(token),
+      body: JSON.stringify(input),
+    }),
+  )
+}
+
+export async function updateVenueUnavailability(
+  token: string,
+  venueId: string,
+  id: string,
+  input: VenueUnavailabilityInput,
+): Promise<VenueUnavailability> {
+  return readUnavailability(
+    await fetch(`/api/venues/${venueId}/unavailabilities/${id}`, {
+      method: 'PUT',
+      headers: jsonHeaders(token),
+      body: JSON.stringify(input),
+    }),
+  )
+}
+
+export async function deleteVenueUnavailability(
+  token: string,
+  venueId: string,
+  id: string,
+): Promise<void> {
+  const response = await fetch(`/api/venues/${venueId}/unavailabilities/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  })
+  if (!response.ok)
+    throw new Error(`The unavailability period could not be deleted (${response.status})`)
 }

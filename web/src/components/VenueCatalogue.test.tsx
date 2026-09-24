@@ -74,11 +74,38 @@ test('venue staff see the maintenance controls', async () => {
     return json([venue()])
   })
 
-  expect(await screen.findByText('Hall A')).toBeInTheDocument()
+  expect((await screen.findAllByText('Hall A')).length).toBe(2)
   expect(screen.getByRole('button', { name: 'Deactivate Hall A' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Edit Hall A' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Add venue' })).toBeInTheDocument()
   expect(requested).toBe('/api/venues')
+})
+
+test('venue staff can record unavailability for a selected venue', async () => {
+  let posted: Record<string, unknown> = {}
+  renderCatalogue('venue_staff', async (input, init) => {
+    const url = String(input)
+    if (url === '/api/venues') return json([venue()])
+    if ((init?.method ?? 'GET') === 'GET') return json([])
+    posted = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return json({ id: 'closure-1', venue_id: 'venue-1', ...posted }, 201)
+  })
+
+  fireEvent.change(await screen.findByLabelText(/^Venue$/), { target: { value: 'venue-1' } })
+  fireEvent.change(screen.getByLabelText(/^Start date and time/), {
+    target: { value: '2026-10-01T09:00' },
+  })
+  fireEvent.change(screen.getByLabelText(/^End date and time/), {
+    target: { value: '2026-10-01T11:00' },
+  })
+  fireEvent.change(screen.getByLabelText(/^Reason/), {
+    target: { value: 'Air-conditioning maintenance' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Record unavailability' }))
+
+  await waitFor(() => expect(posted.reason).toBe('Air-conditioning maintenance'))
+  expect(posted.starts_at).toMatch(/2026-10-01T/)
+  expect(posted.ends_at).toMatch(/2026-10-01T/)
 })
 
 test('deactivating a venue calls the deactivate endpoint and confirms', async () => {
