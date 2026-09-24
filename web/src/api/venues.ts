@@ -73,6 +73,17 @@ export class VenueRejectedError extends Error {
   }
 }
 
+/** A validation refusal for one or more unavailability fields (SCRUM-62). */
+export class VenueUnavailabilityRejectedError extends Error {
+  readonly problems: VenueProblem[]
+
+  constructor(problems: VenueProblem[]) {
+    super('The unavailability period could not be saved')
+    this.name = 'VenueUnavailabilityRejectedError'
+    this.problems = problems
+  }
+}
+
 function asVenueProblems(detail: unknown): VenueProblem[] | null {
   if (!Array.isArray(detail)) return null
   const problems = detail.filter(
@@ -148,6 +159,11 @@ export async function deactivateVenue(token: string, id: string): Promise<Venue>
 }
 
 async function readUnavailability(response: Response): Promise<VenueUnavailability> {
+  if (response.status === 422) {
+    const body = (await response.json()) as { detail: unknown }
+    const problems = asVenueProblems(body.detail)
+    if (problems !== null) throw new VenueUnavailabilityRejectedError(problems)
+  }
   if (!response.ok)
     throw new Error(`The unavailability period could not be saved (${response.status})`)
   return (await response.json()) as VenueUnavailability

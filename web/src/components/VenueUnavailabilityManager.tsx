@@ -8,7 +8,9 @@ import {
   type Venue,
   type VenueUnavailability,
   type VenueUnavailabilityInput,
+  type VenueProblem,
   updateVenueUnavailability,
+  VenueUnavailabilityRejectedError,
 } from '../api/venues'
 import { useAuth } from '../auth/useAuth'
 
@@ -22,6 +24,7 @@ export default function VenueUnavailabilityManager({ venues }: { venues: Venue[]
   const [venueId, setVenueId] = useState('')
   const [editing, setEditing] = useState<VenueUnavailability | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [problems, setProblems] = useState<VenueProblem[]>([])
   const selectedVenue = venues.find((venue) => venue.id === venueId)
   const queryKey = ['venue-unavailabilities', token, venueId]
   const records = useQuery({
@@ -30,10 +33,19 @@ export default function VenueUnavailabilityManager({ venues }: { venues: Venue[]
     enabled: token !== null && venueId !== '',
   })
   const refresh = () => void queryClient.invalidateQueries({ queryKey })
-  const failed = (reason: Error) => setError(reason.message)
+  const failed = (reason: Error) => {
+    if (reason instanceof VenueUnavailabilityRejectedError) {
+      setProblems(reason.problems)
+      setError(null)
+    } else {
+      setProblems([])
+      setError(reason.message)
+    }
+  }
   const saved = () => {
     setEditing(null)
     setError(null)
+    setProblems([])
     refresh()
   }
   const save = useMutation({
@@ -66,6 +78,7 @@ export default function VenueUnavailabilityManager({ venues }: { venues: Venue[]
             setVenueId(event.target.value)
             setEditing(null)
             setError(null)
+            setProblems([])
           }}
           className="mt-1 w-full rounded border border-slate-300 p-2 text-sm"
         >
@@ -82,6 +95,7 @@ export default function VenueUnavailabilityManager({ venues }: { venues: Venue[]
           key={editing?.id ?? `${venueId}-new`}
           editing={editing}
           isSaving={save.isPending}
+          problems={problems}
           onCancel={() => setEditing(null)}
           onSubmit={(input) => save.mutate(input)}
         />
@@ -134,15 +148,18 @@ export default function VenueUnavailabilityManager({ venues }: { venues: Venue[]
 function UnavailabilityForm({
   editing,
   isSaving,
+  problems,
   onCancel,
   onSubmit,
 }: {
   editing: VenueUnavailability | null
   isSaving: boolean
+  problems: VenueProblem[]
   onCancel: () => void
   onSubmit: (input: VenueUnavailabilityInput) => void
 }) {
   const [values, setValues] = useState<FormValues>(editing ? valuesOf(editing) : emptyValues)
+  const reasonFor = (field: string) => problems.find((problem) => problem.field === field)?.reason
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     onSubmit({
@@ -162,6 +179,9 @@ function UnavailabilityForm({
           onChange={(event) => setValues({ ...values, startsAt: event.target.value })}
           className="mt-1 w-full rounded border border-slate-300 p-2 text-sm"
         />
+        {reasonFor('starts_at') && (
+          <ErrorMessage text={`Start date and time ${reasonFor('starts_at')}`} />
+        )}
       </label>
       <label className="block text-sm font-medium">
         End date and time
@@ -172,6 +192,9 @@ function UnavailabilityForm({
           onChange={(event) => setValues({ ...values, endsAt: event.target.value })}
           className="mt-1 w-full rounded border border-slate-300 p-2 text-sm"
         />
+        {reasonFor('ends_at') && (
+          <ErrorMessage text={`End date and time ${reasonFor('ends_at')}`} />
+        )}
       </label>
       <label className="block text-sm font-medium">
         Reason
@@ -181,6 +204,7 @@ function UnavailabilityForm({
           onChange={(event) => setValues({ ...values, reason: event.target.value })}
           className="mt-1 w-full rounded border border-slate-300 p-2 text-sm"
         />
+        {reasonFor('reason') && <ErrorMessage text={`Reason ${reasonFor('reason')}`} />}
       </label>
       <button
         type="submit"
@@ -200,6 +224,10 @@ function UnavailabilityForm({
       )}
     </form>
   )
+}
+
+function ErrorMessage({ text }: { text: string }) {
+  return <span className="mt-1 block text-sm font-normal text-red-600">{text}</span>
 }
 
 function valuesOf(record: VenueUnavailability): FormValues {

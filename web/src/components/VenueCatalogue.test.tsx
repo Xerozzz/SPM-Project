@@ -108,6 +108,30 @@ test('venue staff can record unavailability for a selected venue', async () => {
   expect(posted.ends_at).toMatch(/2026-10-01T/)
 })
 
+test('unavailability validation names the date and reason fields to correct', async () => {
+  renderCatalogue('venue_staff', async (input, init) => {
+    if (String(input) === '/api/venues') return json([venue()])
+    if ((init?.method ?? 'GET') === 'GET') return json([])
+    return json(
+      {
+        detail: [
+          { field: 'ends_at', reason: 'must be after the start time' },
+          { field: 'reason', reason: 'is required' },
+        ],
+      },
+      422,
+    )
+  })
+
+  fireEvent.change(await screen.findByLabelText(/^Venue$/), { target: { value: 'venue-1' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Record unavailability' }))
+
+  expect(
+    await screen.findByText('End date and time must be after the start time'),
+  ).toBeInTheDocument()
+  expect(screen.getByText('Reason is required')).toBeInTheDocument()
+})
+
 test('deactivating a venue calls the deactivate endpoint and confirms', async () => {
   let posted = ''
   renderCatalogue('venue_staff', async (input, init) => {
