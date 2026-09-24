@@ -44,5 +44,12 @@ def test_datetimes_must_be_utc(field: str) -> None:
 
 
 @pytest.mark.story("SCRUM-62")
+@pytest.mark.parametrize("field", ["starts_at", "ends_at"])
+def test_datetimes_are_required(field: str) -> None:
+    problems = validate_unavailability(fields(**{field: None}))
+    assert (field, "is required") in {(problem.field, problem.reason) for problem in problems}
+
+
+@pytest.mark.story("SCRUM-62")
 def test_reason_is_required() -> None:
     assert validate_unavailability(fields(reason="  ")).pop().field == "reason"
