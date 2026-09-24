@@ -132,6 +132,26 @@ test('unavailability validation names the date and reason fields to correct', as
   expect(screen.getByText('Reason is required')).toBeInTheDocument()
 })
 
+test('venue staff see the recorded unavailability periods for the selected venue', async () => {
+  renderCatalogue('venue_staff', async (input) => {
+    if (String(input) === '/api/venues') return json([venue()])
+    return json([
+      {
+        id: 'closure-1',
+        venue_id: 'venue-1',
+        starts_at: '2026-09-24T03:10:00Z',
+        ends_at: '2026-09-25T03:10:00Z',
+        reason: 'Maintenance',
+      },
+    ])
+  })
+
+  fireEvent.change(await screen.findByLabelText(/^Venue$/), { target: { value: 'venue-1' } })
+
+  expect(await screen.findByText('Recorded unavailability periods')).toBeInTheDocument()
+  expect(await screen.findByText('Maintenance')).toBeInTheDocument()
+})
+
 test('deactivating a venue calls the deactivate endpoint and confirms', async () => {
   let posted = ''
   renderCatalogue('venue_staff', async (input, init) => {

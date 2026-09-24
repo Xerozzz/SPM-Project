@@ -100,10 +100,14 @@ export default function VenueUnavailabilityManager({ venues }: { venues: Venue[]
           onSubmit={(input) => save.mutate(input)}
         />
       )}
+      {venueId && <h3 className="mt-5 text-sm font-medium">Recorded unavailability periods</h3>}
       {records.isError && (
         <p role="alert" className="mt-3 text-sm text-red-600">
           {records.error.message}
         </p>
+      )}
+      {records.data?.length === 0 && (
+        <p className="mt-3 text-sm text-slate-500">No unavailability periods are recorded.</p>
       )}
       {records.data?.map((record) => (
         <div
