@@ -18,7 +18,9 @@ a cross-table constraint between bookings and closures.
 We will store each closure as a `venue_unavailabilities` row linked to an active venue, with
 UTC start and end instants and a required reason. SCRUM-62 will expose CRUD API endpoints; a
 future calendar reads these rows, and the future booking story owns the decision and database
-design that prevents an allocation from overlapping them.
+design that prevents an allocation from overlapping them. Closure records entered in error are
+removable operational data, rather than retained venue history, so SCRUM-62 uses hard deletion.
+Deleting a closure never changes a booking.
 
 ## Alternatives considered
 
@@ -39,6 +41,8 @@ design that prevents an allocation from overlapping them.
   until SCRUM-41 provides booking allocation and SCRUM-54 provides the calendar.
 - The API represents overlapping closure records faithfully; it does not attempt general-purpose
   conflict detection that belongs to the booking story.
+- A deleted closure cannot be recovered. We accept this because a closure recorded in error is
+  operational noise, not historical venue data.
 
 **What this makes harder to change later**
 - The future booking design must deliberately incorporate this table or supersede this ADR with

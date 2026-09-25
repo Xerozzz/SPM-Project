@@ -125,6 +125,7 @@ export default function VenueUnavailabilityManager({ venues }: { venues: Venue[]
             <button
               type="button"
               onClick={() => setEditing(record)}
+              aria-label={`Edit closure: ${record.reason}`}
               className="rounded border border-slate-300 px-2 py-1"
             >
               Edit
@@ -132,6 +133,7 @@ export default function VenueUnavailabilityManager({ venues }: { venues: Venue[]
             <button
               type="button"
               onClick={() => remove.mutate(record.id)}
+              aria-label={`Delete closure: ${record.reason}`}
               className="rounded border border-slate-300 px-2 py-1"
             >
               Delete
