@@ -36,7 +36,7 @@ def _datetime_problems(value: datetime | None, field: str) -> list[FieldProblem]
     if value is None:
         return [FieldProblem(field, "is required")]
     if not _is_utc(value):
-        return [FieldProblem(field, "must be a timezone-aware UTC datetime")]
+        return [FieldProblem(field, "must be given in UTC")]
     return []
 
 

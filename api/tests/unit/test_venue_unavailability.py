@@ -1,6 +1,6 @@
 """SCRUM-62: pure validation for venue closure periods."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -38,7 +38,17 @@ def test_end_must_be_after_start() -> None:
 def test_datetimes_must_be_utc(field: str) -> None:
     naive = datetime.fromisoformat("2026-10-01T09:00:00")
     problems = validate_unavailability(fields(**{field: naive}))
-    assert (field, "must be a timezone-aware UTC datetime") in {
+    assert (field, "must be given in UTC") in {
+        (problem.field, problem.reason) for problem in problems
+    }
+
+
+@pytest.mark.story("SCRUM-62")
+@pytest.mark.parametrize("field", ["starts_at", "ends_at"])
+def test_datetimes_with_non_utc_offsets_are_rejected(field: str) -> None:
+    singapore_time = datetime(2026, 10, 1, 17, tzinfo=timezone(timedelta(hours=8)))
+    problems = validate_unavailability(fields(**{field: singapore_time}))
+    assert (field, "must be given in UTC") in {
         (problem.field, problem.reason) for problem in problems
     }
 

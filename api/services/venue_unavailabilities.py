@@ -1,7 +1,6 @@
 """Venue-unavailability orchestration for SCRUM-62."""
 
 import uuid
-from datetime import UTC
 
 from core.database import Session
 from domain.validation import FieldProblem
@@ -81,7 +80,7 @@ def _stored_values(fields: VenueUnavailabilityFields) -> dict[str, object]:
     assert fields.ends_at is not None
     assert fields.reason is not None
     return {
-        "starts_at": fields.starts_at.astimezone(UTC),
-        "ends_at": fields.ends_at.astimezone(UTC),
+        "starts_at": fields.starts_at,
+        "ends_at": fields.ends_at,
         "reason": fields.reason.strip(),
     }

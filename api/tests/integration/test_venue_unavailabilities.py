@@ -139,3 +139,24 @@ async def test_create_rejects_an_inactive_venue_and_invalid_period(
     assert invalid_response.json()["detail"] == [
         {"field": "ends_at", "reason": "must be after the start time"}
     ]
+
+
+@pytest.mark.story("SCRUM-62")
+async def test_create_rejects_aware_non_utc_datetimes(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    venue = make_venue(db)
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.post(
+            f"/api/venues/{venue.id}/unavailabilities",
+            json=body(
+                starts_at="2026-10-01T17:00:00+08:00",
+                ends_at="2026-10-01T19:00:00+08:00",
+            ),
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == [
+        {"field": "starts_at", "reason": "must be given in UTC"},
+        {"field": "ends_at", "reason": "must be given in UTC"},
+    ]

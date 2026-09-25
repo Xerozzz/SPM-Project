@@ -74,7 +74,7 @@ test('venue staff see the maintenance controls', async () => {
     return json([venue()])
   })
 
-  expect(await within(screen.getByRole('list')).findByText('Hall A')).toBeInTheDocument()
+  expect(await within(await screen.findByRole('list')).findByText('Hall A')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Deactivate Hall A' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Edit Hall A' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Add venue' })).toBeInTheDocument()
