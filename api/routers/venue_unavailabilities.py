@@ -1,6 +1,7 @@
 """HTTP endpoints for Venue Staff closure management (SCRUM-62)."""
 
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -49,7 +50,9 @@ def create_record(
     del user
     try:
         return VenueUnavailabilityRead.model_validate(
-            service.create(db, venue_id, VenueUnavailabilityFields(**body.model_dump()))
+            service.create(
+                db, venue_id, VenueUnavailabilityFields(**body.model_dump()), datetime.now(UTC)
+            )
         )
     except (venues.VenueNotFoundError, service.VenueUnavailabilityError) as exc:
         raise _http_error(exc) from exc
@@ -67,7 +70,11 @@ def update_record(
     try:
         return VenueUnavailabilityRead.model_validate(
             service.update(
-                db, venue_id, unavailability_id, VenueUnavailabilityFields(**body.model_dump())
+                db,
+                venue_id,
+                unavailability_id,
+                VenueUnavailabilityFields(**body.model_dump()),
+                datetime.now(UTC),
             )
         )
     except service.VenueUnavailabilityError as exc:

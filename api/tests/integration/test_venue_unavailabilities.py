@@ -2,6 +2,7 @@
 
 import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
@@ -139,6 +140,25 @@ async def test_create_rejects_an_inactive_venue_and_invalid_period(
     assert invalid_response.json()["detail"] == [
         {"field": "ends_at", "reason": "must be after the start time"}
     ]
+
+
+@pytest.mark.story("SCRUM-62")
+async def test_create_rejects_a_closure_that_has_already_ended(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    venue = make_venue(db)
+    ended_at = datetime.now(UTC) - timedelta(minutes=1)
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.post(
+            f"/api/venues/{venue.id}/unavailabilities",
+            json=body(
+                starts_at=(ended_at - timedelta(hours=1)).isoformat().replace("+00:00", "Z"),
+                ends_at=ended_at.isoformat().replace("+00:00", "Z"),
+            ),
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == [{"field": "ends_at", "reason": "must be in the future"}]
 
 
 @pytest.mark.story("SCRUM-62")

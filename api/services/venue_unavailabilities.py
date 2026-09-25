@@ -1,6 +1,7 @@
 """Venue-unavailability orchestration for SCRUM-62."""
 
 import uuid
+from datetime import datetime
 
 from core.database import Session
 from domain.validation import FieldProblem
@@ -34,12 +35,12 @@ def list_for_venue(db: Session, venue_id: uuid.UUID) -> list[VenueUnavailability
 
 
 def create(
-    db: Session, venue_id: uuid.UUID, fields: VenueUnavailabilityFields
+    db: Session, venue_id: uuid.UUID, fields: VenueUnavailabilityFields, now: datetime
 ) -> VenueUnavailability:
     venue = venues.get(db, venue_id)
     if not venue.is_active:
         raise InactiveVenueError
-    _ensure_valid(fields)
+    _ensure_valid(fields, now)
     return repo.save(db, VenueUnavailability(venue_id=venue_id, **_stored_values(fields)))
 
 
@@ -48,9 +49,10 @@ def update(
     venue_id: uuid.UUID,
     unavailability_id: uuid.UUID,
     fields: VenueUnavailabilityFields,
+    now: datetime,
 ) -> VenueUnavailability:
     record = _get_for_venue(db, venue_id, unavailability_id)
-    _ensure_valid(fields)
+    _ensure_valid(fields, now)
     for name, value in _stored_values(fields).items():
         setattr(record, name, value)
     return repo.save(db, record)
@@ -69,8 +71,8 @@ def _get_for_venue(
     return record
 
 
-def _ensure_valid(fields: VenueUnavailabilityFields) -> None:
-    problems = validate_unavailability(fields)
+def _ensure_valid(fields: VenueUnavailabilityFields, now: datetime) -> None:
+    problems = validate_unavailability(fields, now)
     if problems:
         raise InvalidVenueUnavailabilityError(problems)
 

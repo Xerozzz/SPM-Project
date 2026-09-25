@@ -15,7 +15,7 @@ class VenueUnavailabilityFields:
     reason: str | None = None
 
 
-def validate_unavailability(fields: VenueUnavailabilityFields) -> list[FieldProblem]:
+def validate_unavailability(fields: VenueUnavailabilityFields, now: datetime) -> list[FieldProblem]:
     """Return every reason this closure cannot be stored."""
     problems = _datetime_problems(fields.starts_at, "starts_at")
     problems.extend(_datetime_problems(fields.ends_at, "ends_at"))
@@ -27,6 +27,8 @@ def validate_unavailability(fields: VenueUnavailabilityFields) -> list[FieldProb
         and fields.ends_at <= fields.starts_at
     ):
         problems.append(FieldProblem("ends_at", "must be after the start time"))
+    if fields.ends_at is not None and _is_utc(fields.ends_at) and fields.ends_at <= now:
+        problems.append(FieldProblem("ends_at", "must be in the future"))
     if fields.reason is None or not fields.reason.strip():
         problems.append(FieldProblem("reason", "is required"))
     return problems
