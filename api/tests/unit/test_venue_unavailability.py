@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from domain.validation import FieldProblem
 from domain.venue_unavailability import VenueUnavailabilityFields, validate_unavailability
 
 
@@ -26,12 +27,20 @@ def test_valid_unavailability_has_no_problems() -> None:
 
 
 @pytest.mark.story("SCRUM-62")
-def test_end_must_be_after_start() -> None:
+@pytest.mark.parametrize(
+    ("offset", "expected"),
+    [
+        (-1, [FieldProblem("ends_at", "must be after the start time")]),
+        (0, [FieldProblem("ends_at", "must be after the start time")]),
+        (1, []),
+    ],
+)
+def test_end_time_boundary_is_just_after_start(
+    offset: int, expected: list[FieldProblem]
+) -> None:
     start = datetime(2026, 10, 1, 9, tzinfo=UTC)
-    assert (
-        validate_unavailability(fields(ends_at=start)).pop().reason
-        == "must be after the start time"
-    )
+    closure = fields(ends_at=start + timedelta(microseconds=offset))
+    assert validate_unavailability(closure) == expected
 
 
 @pytest.mark.story("SCRUM-62")
@@ -70,4 +79,4 @@ def test_datetimes_are_required(field: str) -> None:
 
 @pytest.mark.story("SCRUM-62")
 def test_reason_is_required() -> None:
-    assert validate_unavailability(fields(reason="  ")).pop().field == "reason"
+    assert validate_unavailability(fields(reason="  ")) == [FieldProblem("reason", "is required")]
