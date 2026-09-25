@@ -125,7 +125,7 @@ export default function VenueUnavailabilityManager({ venues }: { venues: Venue[]
             <button
               type="button"
               onClick={() => setEditing(record)}
-              aria-label={`Edit closure: ${record.reason}`}
+              aria-label={`Edit closure: ${closureDescription(record)}`}
               className="rounded border border-slate-300 px-2 py-1"
             >
               Edit
@@ -133,7 +133,7 @@ export default function VenueUnavailabilityManager({ venues }: { venues: Venue[]
             <button
               type="button"
               onClick={() => remove.mutate(record.id)}
-              aria-label={`Delete closure: ${record.reason}`}
+              aria-label={`Delete closure: ${closureDescription(record)}`}
               className="rounded border border-slate-300 px-2 py-1"
             >
               Delete
@@ -254,4 +254,8 @@ function localDateTime(value: string): string {
 
 function display(value: string): string {
   return new Date(value).toLocaleString()
+}
+
+function closureDescription(record: VenueUnavailability): string {
+  return `${record.reason}, ${display(record.starts_at)} to ${display(record.ends_at)}`
 }
