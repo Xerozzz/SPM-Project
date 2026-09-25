@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -51,6 +52,13 @@ def test_datetimes_with_non_utc_offsets_are_rejected(field: str) -> None:
     assert (field, "must be given in UTC") in {
         (problem.field, problem.reason) for problem in problems
     }
+
+
+@pytest.mark.story("SCRUM-62")
+def test_datetimes_with_zoneinfo_utc_are_valid() -> None:
+    start = datetime(2026, 10, 1, 9, tzinfo=ZoneInfo("UTC"))
+    utc_fields = fields(starts_at=start, ends_at=start + timedelta(hours=2))
+    assert validate_unavailability(utc_fields) == []
 
 
 @pytest.mark.story("SCRUM-62")

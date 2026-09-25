@@ -1,7 +1,7 @@
 """Pure validation for SCRUM-62 venue closure periods."""
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timedelta
 
 from domain.validation import FieldProblem
 
@@ -41,4 +41,4 @@ def _datetime_problems(value: datetime | None, field: str) -> list[FieldProblem]
 
 
 def _is_utc(value: datetime | None) -> bool:
-    return value is not None and value.tzinfo == UTC
+    return value is not None and value.utcoffset() == timedelta(0)
