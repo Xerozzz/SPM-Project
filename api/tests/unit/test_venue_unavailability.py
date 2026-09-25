@@ -35,9 +35,7 @@ def test_valid_unavailability_has_no_problems() -> None:
         (1, []),
     ],
 )
-def test_end_time_boundary_is_just_after_start(
-    offset: int, expected: list[FieldProblem]
-) -> None:
+def test_end_time_boundary_is_just_after_start(offset: int, expected: list[FieldProblem]) -> None:
     start = datetime(2026, 10, 1, 9, tzinfo=UTC)
     closure = fields(ends_at=start + timedelta(microseconds=offset))
     assert validate_unavailability(closure) == expected
