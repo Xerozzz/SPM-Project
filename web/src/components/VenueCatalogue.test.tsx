@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { AuthProvider } from '../auth/context'
@@ -74,11 +74,144 @@ test('venue staff see the maintenance controls', async () => {
     return json([venue()])
   })
 
-  expect(await screen.findByText('Hall A')).toBeInTheDocument()
+  expect(await within(await screen.findByRole('list')).findByText('Hall A')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Deactivate Hall A' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Edit Hall A' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Add venue' })).toBeInTheDocument()
   expect(requested).toBe('/api/venues')
+})
+
+test('venue staff can record unavailability for a selected venue', async () => {
+  let posted: Record<string, unknown> = {}
+  renderCatalogue('venue_staff', async (input, init) => {
+    const url = String(input)
+    if (url === '/api/venues') return json([venue()])
+    if ((init?.method ?? 'GET') === 'GET') return json([])
+    posted = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return json({ id: 'closure-1', venue_id: 'venue-1', ...posted }, 201)
+  })
+
+  fireEvent.change(await screen.findByLabelText(/^Venue$/), { target: { value: 'venue-1' } })
+  fireEvent.change(screen.getByLabelText(/^Start date and time/), {
+    target: { value: '2026-10-01T09:00' },
+  })
+  fireEvent.change(screen.getByLabelText(/^End date and time/), {
+    target: { value: '2026-10-01T11:00' },
+  })
+  fireEvent.change(screen.getByLabelText(/^Reason/), {
+    target: { value: 'Air-conditioning maintenance' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Record unavailability' }))
+
+  await waitFor(() => expect(posted.reason).toBe('Air-conditioning maintenance'))
+  expect(posted.starts_at).toBe(new Date(2026, 9, 1, 9, 0).toISOString())
+  expect(posted.ends_at).toBe(new Date(2026, 9, 1, 11, 0).toISOString())
+  await waitFor(() => {
+    expect(screen.getByLabelText(/^Start date and time/)).toHaveValue('')
+  })
+  expect(screen.getByLabelText(/^End date and time/)).toHaveValue('')
+  expect(screen.getByLabelText(/^Reason/)).toHaveValue('')
+})
+
+test('unavailability validation names the date and reason fields to correct', async () => {
+  renderCatalogue('venue_staff', async (input, init) => {
+    if (String(input) === '/api/venues') return json([venue()])
+    if ((init?.method ?? 'GET') === 'GET') return json([])
+    return json(
+      {
+        detail: [
+          { field: 'ends_at', reason: 'must be after the start time' },
+          { field: 'reason', reason: 'is required' },
+        ],
+      },
+      422,
+    )
+  })
+
+  fireEvent.change(await screen.findByLabelText(/^Venue$/), { target: { value: 'venue-1' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Record unavailability' }))
+
+  expect(
+    await screen.findByText('End date and time must be after the start time'),
+  ).toBeInTheDocument()
+  expect(screen.getByText('Reason is required')).toBeInTheDocument()
+})
+
+test('venue staff see the recorded unavailability periods for the selected venue', async () => {
+  renderCatalogue('venue_staff', async (input) => {
+    if (String(input) === '/api/venues') return json([venue()])
+    return json([
+      {
+        id: 'closure-1',
+        venue_id: 'venue-1',
+        starts_at: '2026-09-24T03:10:00Z',
+        ends_at: '2026-09-25T03:10:00Z',
+        reason: 'Maintenance',
+      },
+    ])
+  })
+
+  fireEvent.change(await screen.findByLabelText(/^Venue$/), { target: { value: 'venue-1' } })
+
+  expect(await screen.findByText('Recorded unavailability periods')).toBeInTheDocument()
+  expect(await screen.findByText('Maintenance')).toBeInTheDocument()
+})
+
+test('editing a closure prefills it and saves with PUT', async () => {
+  let method = ''
+  let url = ''
+  let body: Record<string, unknown> = {}
+  const record = {
+    id: 'closure-1',
+    venue_id: 'venue-1',
+    starts_at: new Date(2026, 9, 1, 9, 0).toISOString(),
+    ends_at: new Date(2026, 9, 1, 11, 0).toISOString(),
+    reason: 'Maintenance',
+  }
+  renderCatalogue('venue_staff', async (input, init) => {
+    if (String(input) === '/api/venues') return json([venue()])
+    if ((init?.method ?? 'GET') === 'GET') return json([record])
+    method = String(init?.method)
+    url = String(input)
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return json(record)
+  })
+
+  fireEvent.change(await screen.findByLabelText(/^Venue$/), { target: { value: 'venue-1' } })
+  fireEvent.click(await screen.findByRole('button', { name: /^Edit closure:/ }))
+
+  // UTC returned by the API is prefilled as the same local wall-clock time.
+  expect(screen.getByLabelText(/^Start date and time/)).toHaveValue('2026-10-01T09:00')
+  fireEvent.click(screen.getByRole('button', { name: 'Save closure' }))
+
+  await waitFor(() => expect(method).toBe('PUT'))
+  expect(url).toBe('/api/venues/venue-1/unavailabilities/closure-1')
+  expect(body.starts_at).toBe(new Date(2026, 9, 1, 9, 0).toISOString())
+})
+
+test('deleting a closure calls its DELETE endpoint', async () => {
+  let method = ''
+  let url = ''
+  const record = {
+    id: 'closure-1',
+    venue_id: 'venue-1',
+    starts_at: new Date(2026, 9, 1, 9, 0).toISOString(),
+    ends_at: new Date(2026, 9, 1, 11, 0).toISOString(),
+    reason: 'Maintenance',
+  }
+  renderCatalogue('venue_staff', async (input, init) => {
+    if (String(input) === '/api/venues') return json([venue()])
+    if ((init?.method ?? 'GET') === 'GET') return json([record])
+    method = String(init?.method)
+    url = String(input)
+    return new Response(null, { status: 204 })
+  })
+
+  fireEvent.change(await screen.findByLabelText(/^Venue$/), { target: { value: 'venue-1' } })
+  fireEvent.click(await screen.findByRole('button', { name: /^Delete closure:/ }))
+
+  await waitFor(() => expect(method).toBe('DELETE'))
+  expect(url).toBe('/api/venues/venue-1/unavailabilities/closure-1')
 })
 
 test('deactivating a venue calls the deactivate endpoint and confirms', async () => {

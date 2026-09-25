@@ -13,6 +13,7 @@ import {
   VenueRejectedError,
 } from '../api/venues'
 import { useAuth } from '../auth/useAuth'
+import VenueUnavailabilityManager from './VenueUnavailabilityManager'
 
 /**
  * SCRUM-59: the venue catalogue.
@@ -127,6 +128,8 @@ export default function VenueCatalogue() {
           onSubmit={(venue) => save.mutate({ id: editing?.id ?? null, venue })}
         />
       )}
+
+      {isStaff && venues.data && <VenueUnavailabilityManager venues={venues.data} />}
 
       {outcome && (
         <p role="status" className="mt-4 rounded bg-green-50 p-3 text-sm text-green-800">
