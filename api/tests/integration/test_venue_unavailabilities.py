@@ -160,3 +160,81 @@ async def test_create_rejects_aware_non_utc_datetimes(
         {"field": "starts_at", "reason": "must be given in UTC"},
         {"field": "ends_at", "reason": "must be given in UTC"},
     ]
+
+
+@pytest.mark.story("SCRUM-62")
+async def test_update_cannot_reach_a_closure_at_another_venue(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    first_venue = make_venue(db)
+    second_venue = make_venue(db)
+    first_url = f"/api/venues/{first_venue.id}/unavailabilities"
+    async with make_client(make_user("venue_staff")) as client:
+        created = await client.post(first_url, json=body())
+        response = await client.put(
+            f"/api/venues/{second_venue.id}/unavailabilities/{created.json()['id']}",
+            json=body(reason="Attempted cross-venue update"),
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Venue unavailability not found"
+    assert db.get(VenueUnavailability, uuid.UUID(created.json()["id"])) is not None
+
+
+@pytest.mark.story("SCRUM-62")
+async def test_delete_cannot_reach_a_closure_at_another_venue(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    first_venue = make_venue(db)
+    second_venue = make_venue(db)
+    first_url = f"/api/venues/{first_venue.id}/unavailabilities"
+    async with make_client(make_user("venue_staff")) as client:
+        created = await client.post(first_url, json=body())
+        response = await client.delete(
+            f"/api/venues/{second_venue.id}/unavailabilities/{created.json()['id']}"
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Venue unavailability not found"
+    assert db.get(VenueUnavailability, uuid.UUID(created.json()["id"])) is not None
+
+
+@pytest.mark.story("SCRUM-62")
+async def test_unknown_venue_is_not_available_for_listing_or_creation(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    url = f"/api/venues/{uuid.uuid4()}/unavailabilities"
+    async with make_client(make_user("venue_staff")) as client:
+        listed = await client.get(url)
+        created = await client.post(url, json=body())
+
+    assert listed.status_code == 404
+    assert created.status_code == 404
+    assert listed.json()["detail"] == "Venue not found"
+    assert created.json()["detail"] == "Venue not found"
+
+
+@pytest.mark.story("SCRUM-62")
+async def test_update_rejects_an_unknown_closure(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    venue = make_venue(db)
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.put(
+            f"/api/venues/{venue.id}/unavailabilities/{uuid.uuid4()}", json=body()
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Venue unavailability not found"
+
+
+@pytest.mark.story("SCRUM-62")
+async def test_delete_rejects_an_unknown_closure(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    venue = make_venue(db)
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.delete(f"/api/venues/{venue.id}/unavailabilities/{uuid.uuid4()}")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Venue unavailability not found"
