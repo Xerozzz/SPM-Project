@@ -5,7 +5,9 @@ overlapping the requested slot, while pending requests never block. Unavailabili
 blocks live in the SCRUM-62 table (venue_unavailabilities, starts_at/ends_at) and are
 read by repositories/venue_availability.py. The half-open overlap rule lives in
 domain/venue_search.py and the repository queries it with bound parameters, so no
-exclusion constraint is needed for search correctness.
+exclusion constraint is needed for search correctness. Status is a VARCHAR holding the
+lowercase value of domain.venue_booking.BookingStatus. See ADR-0014: this table is a
+search-only scaffold until SCRUM-41 owns the write path and conflict invariant.
 
 Revision ID: 0010
 Revises: 0009

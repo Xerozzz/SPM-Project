@@ -24,6 +24,7 @@ someone else made two weeks ago.
 | [0011](0011-event-request-review-decisions.md) | Store the current event-request review decision on the request | Proposed |
 | [0012](0012-venue-soft-deactivation.md) | Deactivate venues instead of deleting them | Proposed |
 | [0013](0013-venue-unavailability-before-booking.md) | Record venue unavailability before booking allocation exists | Proposed |
+| [0014](0014-venue-bookings-search-scaffolding.md) | Keep a search-only venue_bookings table until booking allocation lands | Proposed |
 
 ## When to write one
 
