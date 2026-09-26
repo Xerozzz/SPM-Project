@@ -72,11 +72,7 @@ def is_within_operating_hours(
             raise ValueError("requested period bounds must be timezone-aware")
     local_start = requested_start.astimezone(_ORG_TZ).time()
     local_end = requested_end.astimezone(_ORG_TZ).time()
-    return (
-        opens_at <= local_start
-        and local_end <= closes_at
-        and requested_start < requested_end
-    )
+    return opens_at <= local_start and local_end <= closes_at and requested_start < requested_end
 
 
 def intervals_overlap(
