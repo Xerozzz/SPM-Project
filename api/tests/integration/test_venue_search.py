@@ -26,6 +26,7 @@ import httpx
 import pytest
 from sqlalchemy.orm import Session
 
+from domain.venue_booking import BookingStatus
 from models.user import User
 from models.venue import Venue
 from models.venue_booking import VenueBooking
@@ -97,7 +98,7 @@ def make_confirmed_booking(db: Session, venue: Venue, day: date, start: time, en
             venue_id=venue.id,
             start_at=_sgt(day, start),
             end_at=_sgt(day, end),
-            status="confirmed",
+            status=BookingStatus.CONFIRMED,
         )
     )
     db.flush()
@@ -110,7 +111,7 @@ def make_pending_request(db: Session, venue: Venue, day: date, start: time, end:
             venue_id=venue.id,
             start_at=_sgt(day, start),
             end_at=_sgt(day, end),
-            status="pending",
+            status=BookingStatus.PENDING,
         )
     )
     db.flush()
@@ -141,6 +142,24 @@ async def test_tc55_ac2_01_only_active_fully_matching_venue_returned(
     make_venue(db, name="Hall C", is_active=False)
 
     response = await search_as(make_client, make_user("coordinator"))
+
+    assert result_names(response) == ["Hall A"]
+
+
+@pytest.mark.story("SCRUM-55")
+async def test_tc55_ac2_05_free_text_criteria_match_case_insensitively(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    make_venue(db, name="Hall A")
+
+    response = await search_as(
+        make_client,
+        make_user("coordinator"),
+        location="level 2, SCHOOL of computing",
+        accessibility="STEP-FREE access",
+        facility="projector",
+        layout="THEATRE",
+    )
 
     assert result_names(response) == ["Hall A"]
 
@@ -284,3 +303,56 @@ async def test_tc55_ac8_01_non_coordinator_is_refused(
     response = await search_as(make_client, make_user("venue_staff"))
 
     assert response.status_code == 403
+
+
+# ------------------------------------------------------- TC-55-AC3-06 (API half)
+
+
+@pytest.mark.story("SCRUM-55")
+async def test_tc55_ac3_06_overnight_request_running_through_closed_night_is_excluded(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    make_venue(db, name="Hall A")
+
+    response = await search_as(
+        make_client,
+        make_user("coordinator"),
+        # 3 Dec 21:00 SGT through 4 Dec 08:30 SGT: both endpoints look open but the
+        # period runs through the closed night.
+        start_at="2026-12-03T13:00:00+00:00",
+        end_at="2026-12-04T00:30:00+00:00",
+    )
+
+    assert result_names(response) == []
+
+
+@pytest.mark.story("SCRUM-55")
+async def test_tc55_ac3_07_naive_requested_period_is_rejected_with_422(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    make_venue(db, name="Hall A")
+
+    async with make_client(make_user("coordinator")) as client:
+        response = await client.get(
+            "/api/venues/search",
+            params={"start_at": "2026-12-01T10:00:00", "end_at": SEARCH_END},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["field"] == "start_at"
+
+
+@pytest.mark.story("SCRUM-55")
+async def test_tc55_ac3_08_inverted_requested_period_is_rejected_with_422(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    make_venue(db, name="Hall A")
+
+    async with make_client(make_user("coordinator")) as client:
+        response = await client.get(
+            "/api/venues/search",
+            params={"start_at": SEARCH_END, "end_at": SEARCH_START},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["field"] == "end_at"

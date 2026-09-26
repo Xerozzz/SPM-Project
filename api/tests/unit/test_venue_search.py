@@ -17,10 +17,12 @@ Expected domain surface:
         (opens/closes are local SGT `datetime.time`; requested bounds are tz-aware
         datetimes converted to SGT before their time-of-day is compared, so a
         multi-day request is within hours when its SGT start time-of-day and end
-        time-of-day are both inside; end equal to closing is allowed)
+        time-of-day are both inside and the local end is not earlier in the day
+        than the local start (a request running through the closed night is
+        outside); end equal to closing is allowed)
     intervals_overlap(a_start, a_end, b_start, b_end) -> bool
         (tz-aware datetimes; half-open [start, end), adjacent is not overlap)
-    booking_blocks_availability(status) -> bool
+    booking_blocks_availability(status: BookingStatus) -> bool
         (True for confirmed, False for pending)
 """
 
@@ -29,6 +31,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from domain.venue_booking import BookingStatus
 from domain.venue_search import (
     SearchableVenue,
     VenueSearchCriteria,
@@ -125,6 +128,21 @@ def test_tc55_ac3_04_request_starting_before_opening_is_outside() -> None:
     assert is_within_operating_hours(time(8, 0), time(22, 0), _dt(1, 7, 59), _dt(3, 9, 0)) is False
 
 
+@pytest.mark.story("SCRUM-55")
+def test_tc55_ac3_06_overnight_request_running_through_closed_night_is_outside() -> None:
+    # Both endpoints look open (21:00 and 08:30 are inside 08:00-22:00), but the
+    # period runs through the closed night, so the venue must be excluded.
+    assert is_within_operating_hours(time(8, 0), time(22, 0), _dt(3, 21), _dt(4, 8, 30)) is False
+
+
+@pytest.mark.story("SCRUM-55")
+def test_tc55_ac3_08_inverted_requested_period_is_outside_hours() -> None:
+    # An end at or before the start is not a real period; the domain refuses it
+    # (the router reports the same shape as a 422 before it gets here).
+    assert is_within_operating_hours(time(8, 0), time(22, 0), _dt(1, 10), _dt(1, 10)) is False
+    assert is_within_operating_hours(time(8, 0), time(22, 0), _dt(3, 12), _dt(1, 10)) is False
+
+
 # ------------------------------------------------------- TC-55-AC4-03
 
 
@@ -162,13 +180,13 @@ def test_tc55_ac4_03_interval_overlap_matrix(
 
 @pytest.mark.story("SCRUM-55")
 def test_tc55_ac6_02_pending_request_does_not_block_availability() -> None:
-    assert booking_blocks_availability("pending") is False
+    assert booking_blocks_availability(BookingStatus.PENDING) is False
 
 
 @pytest.mark.story("SCRUM-55")
 def test_tc55_ac6_02_confirmed_request_blocks_availability() -> None:
     # Contrast case for the same status rule: only a confirmed hold blocks search.
-    assert booking_blocks_availability("confirmed") is True
+    assert booking_blocks_availability(BookingStatus.CONFIRMED) is True
 
 
 # ------------------------------------------------------- TC-55-AC2-04
@@ -182,6 +200,19 @@ def test_tc55_ac2_04_no_layout_constraint_matches_any_layout() -> None:
         required_facilities=["Projector"],
         required_accessibility=["Step-free access"],
         required_layout=None,
+    )
+
+    assert venue_matches_criteria(base_venue(), criteria) is True
+
+
+@pytest.mark.story("SCRUM-55")
+def test_tc55_ac2_05_free_text_matching_ignores_case_and_whitespace() -> None:
+    criteria = VenueSearchCriteria(
+        minimum_capacity=100,
+        location="  level 2, school of computing ",
+        required_facilities=["  PROJECTOR "],
+        required_accessibility=["step-free ACCESS"],
+        required_layout=" THEATRE ",
     )
 
     assert venue_matches_criteria(base_venue(), criteria) is True

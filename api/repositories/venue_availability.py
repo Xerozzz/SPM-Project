@@ -7,6 +7,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from domain.venue_booking import BookingStatus
 from models.venue_booking import VenueBooking
 from models.venue_unavailability import VenueUnavailability
 
@@ -18,10 +19,12 @@ def venue_ids_with_confirmed_overlap(
 
     Half-open, like domain.venue_search.intervals_overlap: a booking ending exactly at
     the requested start (or starting exactly at the requested end) does not overlap.
-    Pending rows are ignored here, so they never block search (AC6).
+    Pending rows are ignored here, so they never block search (AC6). The status
+    comparison uses the same `BookingStatus` enum the domain rule takes, so the two
+    cannot disagree on what "confirmed" means.
     """
     statement = select(VenueBooking.venue_id).where(
-        VenueBooking.status == "confirmed",
+        VenueBooking.status == BookingStatus.CONFIRMED,
         VenueBooking.start_at < end_at,
         start_at < VenueBooking.end_at,
     )

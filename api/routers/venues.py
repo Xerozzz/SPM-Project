@@ -60,6 +60,9 @@ def search(
 ) -> list[VenueRead]:
     """SCRUM-55: active venues satisfying every criterion and free for the period."""
     del user
+    problems = _search_period_problems(start_at, end_at)
+    if problems:
+        raise HTTPException(422, problems)
     rows = search_service.search(
         db,
         start_at=start_at,
@@ -71,6 +74,23 @@ def search(
         layout=layout,
     )
     return [VenueRead.model_validate(row) for row in rows]
+
+
+def _search_period_problems(start_at: datetime, end_at: datetime) -> list[dict[str, str]]:
+    """422 problems for a requested period FastAPI parsed but the domain rejects.
+
+    A naive datetime (no offset) parses fine but has no instant behind it, so the
+    domain raises ValueError; report it here in the same FieldProblem shape the
+    catalogue uses (SCRUM-59/SCRUM-62) instead of letting it become a 500.
+    """
+    problems: list[dict[str, str]] = []
+    if start_at.tzinfo is None:
+        problems.append({"field": "start_at", "reason": "must be given in UTC"})
+    if end_at.tzinfo is None:
+        problems.append({"field": "end_at", "reason": "must be given in UTC"})
+    if not problems and end_at <= start_at:
+        problems.append({"field": "end_at", "reason": "must be after the start time"})
+    return problems
 
 
 @router.get("", response_model=list[VenueRead])
