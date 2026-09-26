@@ -1,6 +1,8 @@
 """SCRUM-55 AC2-AC6/AC8: coordinator venue search over persisted venues.
 
-Multi-day requested periods (1 Dec 2026 10:00 through 3 Dec 2026 12:00):
+Multi-day requested periods (1 Dec 2026 10:00 through 3 Dec 2026 12:00 SGT):
+All clock times below are SGT wall-clock; the API stores and compares instants
+in UTC, converting to SGT only for the operating-hours check.
     GET /api/venues/search
         Query: start_at=ISO datetime, end_at=ISO datetime,
                minimum_capacity=int, location=str,
@@ -16,8 +18,9 @@ Each test names its Test Case ID.
 """
 
 from collections.abc import Callable
-from datetime import UTC, date, datetime, time
+from datetime import date, datetime, time
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -31,8 +34,11 @@ from models.venue_unavailability import VenueUnavailability
 MakeUser = Callable[..., User]
 MakeClient = Callable[[User | None], httpx.AsyncClient]
 
-SEARCH_START = "2026-12-01T10:00:00+00:00"
-SEARCH_END = "2026-12-03T12:00:00+00:00"
+_SGT = ZoneInfo("Asia/Singapore")
+
+# 1 Dec 2026 10:00 SGT through 3 Dec 2026 12:00 SGT, as UTC instants.
+SEARCH_START = "2026-12-01T02:00:00+00:00"
+SEARCH_END = "2026-12-03T04:00:00+00:00"
 
 
 def make_venue(db: Session, **overrides: Any) -> Venue:
@@ -79,13 +85,18 @@ def result_names(response: httpx.Response) -> list[str]:
     return [row["name"] for row in response.json()]
 
 
+def _sgt(day: date, at: time) -> datetime:
+    """Combine an SGT calendar date with an SGT wall-clock time."""
+    return datetime.combine(day, at, tzinfo=_SGT)
+
+
 def make_confirmed_booking(db: Session, venue: Venue, day: date, start: time, end: time) -> None:
-    """A confirmed hold on the venue for [start, end) on day (TC-55-AC4-*)."""
+    """A confirmed hold on the venue for [start, end) SGT on day (TC-55-AC4-*)."""
     db.add(
         VenueBooking(
             venue_id=venue.id,
-            start_at=datetime.combine(day, start, tzinfo=UTC),
-            end_at=datetime.combine(day, end, tzinfo=UTC),
+            start_at=_sgt(day, start),
+            end_at=_sgt(day, end),
             status="confirmed",
         )
     )
@@ -97,8 +108,8 @@ def make_pending_request(db: Session, venue: Venue, day: date, start: time, end:
     db.add(
         VenueBooking(
             venue_id=venue.id,
-            start_at=datetime.combine(day, start, tzinfo=UTC),
-            end_at=datetime.combine(day, end, tzinfo=UTC),
+            start_at=_sgt(day, start),
+            end_at=_sgt(day, end),
             status="pending",
         )
     )
@@ -106,12 +117,12 @@ def make_pending_request(db: Session, venue: Venue, day: date, start: time, end:
 
 
 def make_unavailability_block(db: Session, venue: Venue, day: date, start: time, end: time) -> None:
-    """A recorded unavailability block for [start, end) on day (TC-55-AC5-*)."""
+    """A recorded unavailability block for [start, end) SGT on day (TC-55-AC5-*)."""
     db.add(
         VenueUnavailability(
             venue_id=venue.id,
-            starts_at=datetime.combine(day, start, tzinfo=UTC),
-            ends_at=datetime.combine(day, end, tzinfo=UTC),
+            starts_at=_sgt(day, start),
+            ends_at=_sgt(day, end),
             reason="maintenance",
         )
     )
@@ -146,8 +157,9 @@ async def test_tc55_ac3_01_slot_ending_at_closing_time_is_within_hours(
     response = await search_as(
         make_client,
         make_user("coordinator"),
-        start_at="2026-12-01T20:00:00+00:00",
-        end_at="2026-12-03T22:00:00+00:00",
+        # 1 Dec 20:00 SGT through 3 Dec 22:00 SGT (closing boundary, inclusive).
+        start_at="2026-12-01T12:00:00+00:00",
+        end_at="2026-12-03T14:00:00+00:00",
     )
 
     assert result_names(response) == ["Hall A"]
@@ -165,8 +177,9 @@ async def test_tc55_ac3_02_slot_ending_after_closing_time_is_excluded(
     response = await search_as(
         make_client,
         make_user("coordinator"),
-        start_at="2026-12-01T20:00:00+00:00",
-        end_at="2026-12-03T22:01:00+00:00",
+        # 1 Dec 20:00 SGT through 3 Dec 22:01 SGT (one minute past closing).
+        start_at="2026-12-01T12:00:00+00:00",
+        end_at="2026-12-03T14:01:00+00:00",
     )
 
     assert result_names(response) == []
@@ -200,8 +213,9 @@ async def test_tc55_ac4_02_adjacent_confirmed_booking_does_not_exclude(
     response = await search_as(
         make_client,
         make_user("coordinator"),
-        start_at="2026-12-01T12:00:00+00:00",
-        end_at="2026-12-01T14:00:00+00:00",
+        # 1 Dec 12:00-14:00 SGT, adjacent to the 10:00-12:00 SGT booking.
+        start_at="2026-12-01T04:00:00+00:00",
+        end_at="2026-12-01T06:00:00+00:00",
     )
 
     assert result_names(response) == ["Hall A"]
@@ -235,8 +249,9 @@ async def test_tc55_ac5_02_adjacent_unavailability_block_does_not_exclude(
     response = await search_as(
         make_client,
         make_user("coordinator"),
-        start_at="2026-12-01T12:00:00+00:00",
-        end_at="2026-12-01T14:00:00+00:00",
+        # 1 Dec 12:00-14:00 SGT, adjacent to the 10:00-12:00 SGT block.
+        start_at="2026-12-01T04:00:00+00:00",
+        end_at="2026-12-01T06:00:00+00:00",
     )
 
     assert result_names(response) == ["Hall A"]

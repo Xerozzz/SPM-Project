@@ -10,12 +10,34 @@ import { useAuth } from '../auth/useAuth'
  * must satisfy every supplied criterion to appear. An empty result is guidance, not a
  * dead end: the copy tells the coordinator to adjust the filters (AC7).
  */
+function toDateInput(value: Date): string {
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, '0')
+  const day = String(value.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function toTimeInput(value: Date): string {
+  const hours = String(value.getHours()).padStart(2, '0')
+  const minutes = String(value.getMinutes()).padStart(2, '0')
+  return `${hours}:${minutes}`
+}
+
+function defaultSearchPeriod(): { date: string; start: string; end: string } {
+  const now = new Date()
+  now.setMinutes(0, 0, 0)
+  const start = new Date(now.getTime() + 60 * 60 * 1000)
+  const end = new Date(start.getTime() + 60 * 60 * 1000)
+  return { date: toDateInput(start), start: toTimeInput(start), end: toTimeInput(end) }
+}
+
 export default function VenueSearch() {
   const { token } = useAuth()
-  const [startDate, setStartDate] = useState('2026-12-01')
-  const [startTime, setStartTime] = useState('10:00')
-  const [endDate, setEndDate] = useState('2026-12-03')
-  const [endTime, setEndTime] = useState('12:00')
+  const [defaults] = useState(defaultSearchPeriod)
+  const [startDate, setStartDate] = useState(defaults.date)
+  const [startTime, setStartTime] = useState(defaults.start)
+  const [endDate, setEndDate] = useState(defaults.date)
+  const [endTime, setEndTime] = useState(defaults.end)
   const [minimumCapacity, setMinimumCapacity] = useState('')
   const [location, setLocation] = useState('')
   const [accessibility, setAccessibility] = useState('')

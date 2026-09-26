@@ -1,8 +1,9 @@
 """SCRUM-55 AC2/AC3/AC4/AC6: pure venue-search rules, without a database.
 
-Multi-day requested periods (1 Dec 2026 10:00 through 3 Dec 2026 12:00): the
+Multi-day requested periods (1 Dec 2026 10:00 through 3 Dec 2026 12:00 SGT): the
 domain helpers take tz-aware datetimes for the requested period and wall-clock
-`datetime.time` for daily operating hours. Each test names its Test Case ID so
+`datetime.time` for daily operating hours (local SGT wall-clock, see
+domain/venue.py). Each test names its Test Case ID so
 the CSV row maps to exactly one test.
 
 Expected domain surface:
@@ -13,9 +14,9 @@ Expected domain surface:
     venue_matches_criteria(venue, criteria) -> bool  (static filters only;
         active status and persisted availability are integration concerns)
     is_within_operating_hours(opens_at, closes_at, requested_start, requested_end) -> bool
-        (opens/closes are `datetime.time`; requested bounds are tz-aware datetimes;
-        only their wall-clock time-of-day must fit inside opening hours, so a
-        multi-day request is within hours when its start time-of-day and end
+        (opens/closes are local SGT `datetime.time`; requested bounds are tz-aware
+        datetimes converted to SGT before their time-of-day is compared, so a
+        multi-day request is within hours when its SGT start time-of-day and end
         time-of-day are both inside; end equal to closing is allowed)
     intervals_overlap(a_start, a_end, b_start, b_end) -> bool
         (tz-aware datetimes; half-open [start, end), adjacent is not overlap)
@@ -23,7 +24,8 @@ Expected domain surface:
         (True for confirmed, False for pending)
 """
 
-from datetime import UTC, datetime, time
+from datetime import datetime, time
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -126,8 +128,12 @@ def test_tc55_ac3_04_request_starting_before_opening_is_outside() -> None:
 # ------------------------------------------------------- TC-55-AC4-03
 
 
+_SGT = ZoneInfo("Asia/Singapore")
+
+
 def _dt(day: int, hour: int, minute: int = 0) -> datetime:
-    return datetime(2026, 12, day, hour, minute, tzinfo=UTC)
+    """A tz-aware instant whose SGT wall-clock reads day/hour:minute."""
+    return datetime(2026, 12, day, hour, minute, tzinfo=_SGT)
 
 
 @pytest.mark.story("SCRUM-55")

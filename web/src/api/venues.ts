@@ -235,12 +235,22 @@ export interface VenueSearchInput {
   layout?: string
 }
 
+/**
+ * Search fields are Singapore wall-clock values. Make that conversion explicit
+ * rather than relying on the browser machine's timezone before sending UTC
+ * instants to the API for overlap checks.
+ */
+function singaporeWallClockToUtc(date: string, time: string): string {
+  return new Date(`${date}T${time}:00+08:00`).toISOString()
+}
+
 export async function searchVenues(token: string, input: VenueSearchInput): Promise<Venue[]> {
   const params = new URLSearchParams({
-    start_at: `${input.startDate}T${input.startTime}:00+00:00`,
-    end_at: `${input.endDate}T${input.endTime}:00+00:00`,
+    start_at: singaporeWallClockToUtc(input.startDate, input.startTime),
+    end_at: singaporeWallClockToUtc(input.endDate, input.endTime),
   })
-  if (input.minimumCapacity !== undefined) params.set('minimum_capacity', String(input.minimumCapacity))
+  if (input.minimumCapacity !== undefined)
+    params.set('minimum_capacity', String(input.minimumCapacity))
   if (input.location !== undefined) params.set('location', input.location)
   if (input.accessibility !== undefined) params.set('accessibility', input.accessibility)
   if (input.facility !== undefined) params.set('facility', input.facility)

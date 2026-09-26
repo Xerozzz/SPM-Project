@@ -7,6 +7,9 @@ covered by fast unit tests rather than by standing up an API.
 
 from dataclasses import dataclass
 from datetime import datetime, time
+from zoneinfo import ZoneInfo
+
+_ORG_TZ = ZoneInfo("Asia/Singapore")
 
 
 @dataclass(frozen=True)
@@ -55,18 +58,23 @@ def is_within_operating_hours(
 ) -> bool:
     """AC3: the requested period must fit inside daily opening hours.
 
-    The requested bounds are tz-aware datetimes; only their wall-clock time-of-day
-    is compared against the daily hours, so a multi-day request is within hours
-    when its start time-of-day and end time-of-day are both inside. Both
-    boundaries are inclusive: ending exactly at closing (or starting exactly at
-    opening) is allowed, because the venue is still open at that instant.
+    The requested bounds are tz-aware datetimes; they are converted to the
+    organisation's local time (Asia/Singapore) before their wall-clock
+    time-of-day is compared against the daily hours, because `opens_at` /
+    `closes_at` are local wall-clock times (see domain/venue.py), not UTC
+    instants. A multi-day request is within hours when its local start
+    time-of-day and end time-of-day are both inside. Both boundaries are
+    inclusive: ending exactly at closing (or starting exactly at opening) is
+    allowed, because the venue is still open at that instant.
     """
     for moment in (requested_start, requested_end):
         if moment.tzinfo is None:
             raise ValueError("requested period bounds must be timezone-aware")
+    local_start = requested_start.astimezone(_ORG_TZ).time()
+    local_end = requested_end.astimezone(_ORG_TZ).time()
     return (
-        opens_at <= requested_start.time()
-        and requested_end.time() <= closes_at
+        opens_at <= local_start
+        and local_end <= closes_at
         and requested_start < requested_end
     )
 
