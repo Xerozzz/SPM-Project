@@ -43,7 +43,7 @@ class SuitabilityVenue:
 class SuitabilityResult:
     """Everything the Coordinator needs to judge fit.
 
-        Each pair records both sides — what was asked for and what the venue
+    Each pair records both sides — what was asked for and what the venue
     offers — so the caller (SCRUM-38) does not have to carry the event's needs
     separately and pair them back up itself.
     """
@@ -68,12 +68,12 @@ def evaluate_suitability(event: SuitabilityEvent, venue: SuitabilityVenue) -> Su
     # trimmed, casefolded key to avoid false "missing" warnings from casing or
     # stray whitespace. Report each missing facility once, keeping the first
     # spelling the event used (stripped) for display.
-    offered = {f.strip().casefold() for f in venue.facilities}
+    offered = {f.strip().casefold() for f in venue.facilities if f.strip()}
     unavailable: list[str] = []
     seen: set[str] = set()
     for raw in event.required_facilities:
         key = raw.strip().casefold()
-        if key not in offered and key not in seen:
+        if key and key not in offered and key not in seen:
             seen.add(key)
             unavailable.append(raw.strip())
 

@@ -149,6 +149,16 @@ def test_tc56_ac2_05_duplicated_requirement_is_reported_once() -> None:
     assert result.unavailable_facilities == ["Projector"]
 
 
+@pytest.mark.story("SCRUM-56")
+def test_tc56_ac2_06_blank_requirement_is_ignored() -> None:
+    event = make_event(required_facilities=["", "   "])
+    venue = make_venue(facilities=["Whiteboard"])
+
+    result = evaluate_suitability(event, venue)
+
+    assert result.unavailable_facilities == []
+
+
 # ------------------------------------------------------------------ AC3: accessibility display
 
 
