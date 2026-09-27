@@ -221,3 +221,41 @@ export async function deleteVenueUnavailability(
   if (!response.ok)
     throw new Error(`The unavailability period could not be deleted (${response.status})`)
 }
+
+/** SCRUM-55: coordinator venue search. Mirrors GET /api/venues/search. */
+export interface VenueSearchInput {
+  startDate: string
+  startTime: string
+  endDate: string
+  endTime: string
+  minimumCapacity?: number
+  location?: string
+  accessibility?: string
+  facility?: string
+  layout?: string
+}
+
+/**
+ * Search fields are Singapore wall-clock values. Make that conversion explicit
+ * rather than relying on the browser machine's timezone before sending UTC
+ * instants to the API for overlap checks.
+ */
+function singaporeWallClockToUtc(date: string, time: string): string {
+  return new Date(`${date}T${time}:00+08:00`).toISOString()
+}
+
+export async function searchVenues(token: string, input: VenueSearchInput): Promise<Venue[]> {
+  const params = new URLSearchParams({
+    start_at: singaporeWallClockToUtc(input.startDate, input.startTime),
+    end_at: singaporeWallClockToUtc(input.endDate, input.endTime),
+  })
+  if (input.minimumCapacity !== undefined)
+    params.set('minimum_capacity', String(input.minimumCapacity))
+  if (input.location !== undefined) params.set('location', input.location)
+  if (input.accessibility !== undefined) params.set('accessibility', input.accessibility)
+  if (input.facility !== undefined) params.set('facility', input.facility)
+  if (input.layout !== undefined) params.set('layout', input.layout)
+  const response = await fetch(`/api/venues/search?${params}`, { headers: authHeaders(token) })
+  if (!response.ok) throw new Error(`Could not search venues (${response.status})`)
+  return (await response.json()) as Venue[]
+}

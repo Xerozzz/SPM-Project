@@ -6,6 +6,7 @@ import MyEventRequests from '../components/MyEventRequests'
 import EventRequestForm from '../components/EventRequestForm'
 import EventRequestReview from '../components/EventRequestReview'
 import VenueCatalogue from '../components/VenueCatalogue'
+import VenueSearch from '../components/VenueSearch'
 
 /**
  * Home page, visible only after sign-in. Shows the session roles and a sign-out button.
@@ -38,6 +39,9 @@ export default function HomePage() {
       )}
 
       {hasRole('coordinator') && <EventRequestReview />}
+
+      {/* SCRUM-55: coordinators search active venues by event requirements. */}
+      {hasRole('coordinator') && <VenueSearch />}
 
       {/* SCRUM-59: Venue Staff maintain the catalogue; coordinators read it for planning. */}
       {(hasRole('venue_staff') || hasRole('coordinator')) && <VenueCatalogue />}

@@ -1,13 +1,15 @@
-"""HTTP endpoints for the venue catalogue (SCRUM-59).
+"""HTTP endpoints for the venue catalogue (SCRUM-59) and venue search (SCRUM-55).
 
-Venue Staff maintain the catalogue; every signed-in user may read it. The split is done
-with the shared role dependency, never with an inline role check (AGENTS.md section 3).
+Venue Staff maintain the catalogue; every signed-in user may read it. Venue search is
+coordinator-only. The split is done with the shared role dependency, never with an
+inline role check (AGENTS.md section 3).
 """
 
 import uuid
+from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from core.database import get_db
@@ -15,11 +17,13 @@ from core.dependencies import get_current_user, require_role
 from domain.roles import Role
 from domain.venue import VenueFields
 from schemas.venues import VenueCreate, VenueProblemRead, VenueRead, VenueUpdate
+from services import venue_search as search_service
 from services import venues as service
 
 router = APIRouter(prefix="/venues", tags=["venues"])
 
 VenueStaff = Annotated[dict[str, object], Depends(require_role(Role.VENUE_STAFF))]
+Coordinator = Annotated[dict[str, object], Depends(require_role(Role.COORDINATOR))]
 AnyUser = Annotated[dict[str, object], Depends(get_current_user)]
 Db = Annotated[Session, Depends(get_db)]
 
@@ -40,6 +44,53 @@ def _http_error(exc: Exception) -> HTTPException:
     # A literal 422, as in routers/event_requests.py: Starlette renamed its constant
     # between the versions we allow.
     return HTTPException(422, [p.model_dump() for p in problems])
+
+
+@router.get("/search", response_model=list[VenueRead])
+def search(
+    user: Coordinator,
+    db: Db,
+    start_at: datetime,
+    end_at: datetime,
+    minimum_capacity: int | None = None,
+    location: str | None = None,
+    accessibility: Annotated[list[str] | None, Query()] = None,
+    facility: Annotated[list[str] | None, Query()] = None,
+    layout: str | None = None,
+) -> list[VenueRead]:
+    """SCRUM-55: active venues satisfying every criterion and free for the period."""
+    del user
+    problems = _search_period_problems(start_at, end_at)
+    if problems:
+        raise HTTPException(422, problems)
+    rows = search_service.search(
+        db,
+        start_at=start_at,
+        end_at=end_at,
+        minimum_capacity=minimum_capacity,
+        location=location,
+        accessibility=accessibility,
+        facility=facility,
+        layout=layout,
+    )
+    return [VenueRead.model_validate(row) for row in rows]
+
+
+def _search_period_problems(start_at: datetime, end_at: datetime) -> list[dict[str, str]]:
+    """422 problems for a requested period FastAPI parsed but the domain rejects.
+
+    A naive datetime (no offset) parses fine but has no instant behind it, so the
+    domain raises ValueError; report it here in the same FieldProblem shape the
+    catalogue uses (SCRUM-59/SCRUM-62) instead of letting it become a 500.
+    """
+    problems: list[dict[str, str]] = []
+    if start_at.tzinfo is None:
+        problems.append({"field": "start_at", "reason": "must be given in UTC"})
+    if end_at.tzinfo is None:
+        problems.append({"field": "end_at", "reason": "must be given in UTC"})
+    if not problems and end_at <= start_at:
+        problems.append({"field": "end_at", "reason": "must be after the start time"})
+    return problems
 
 
 @router.get("", response_model=list[VenueRead])
