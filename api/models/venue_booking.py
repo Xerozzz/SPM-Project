@@ -1,10 +1,9 @@
-"""A confirmed or pending hold on a venue for one time slot (SCRUM-55, ADR-0014).
+"""A venue hold or request for one time slot (SCRUM-55/SCRUM-38).
 
 Search (AC4/AC6) treats only `confirmed` rows as blocking: a pending request never
 excludes a venue. The half-open overlap rule itself lives in domain/venue_search.py;
 the repository issues the overlap query with bound parameters, never string SQL.
-This table is a search-only scaffold: SCRUM-41 owns the write path and the conflict
-invariant that keeps confirmed rows correct.
+SCRUM-38 writes pending requests; SCRUM-41 still owns confirmation and conflicts.
 """
 
 import uuid
@@ -26,14 +25,20 @@ class VenueBooking(Base):
     """One hold on a venue for [start_at, end_at), stored as tz-aware UTC instants."""
 
     __tablename__ = "venue_bookings"
-
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     venue_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("venues.id"), nullable=False, index=True
     )
+    # Nullable for legacy SCRUM-55 search-fixture rows; SCRUM-38 writes both links.
+    event_request_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("event_requests.id")
+    )
+    requested_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id")
+    )
     start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    # "confirmed" blocks search; "pending" does not (domain.venue_search). Stored as
+    # Only "confirmed" blocks search (domain.venue_search). Stored as
     # the enum's lowercase value in a plain VARCHAR (native_enum=False), so adding a
     # status later is a code change, not a Postgres type migration (like EventRequest).
     status: Mapped[BookingStatus] = mapped_column(

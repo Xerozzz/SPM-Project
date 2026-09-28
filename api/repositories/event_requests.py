@@ -25,7 +25,7 @@ def get_for_update(db: Session, request_id: uuid.UUID) -> EventRequest | None:
     sees status SUBMITTED and the state machine refuses it. Correctness comes from the
     database, not from a check-then-act in Python (same reasoning as ADR-0002).
     """
-    return db.get(EventRequest, request_id, with_for_update=True)
+    return db.get(EventRequest, request_id, with_for_update=True, populate_existing=True)
 
 
 def list_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventRequest]:
