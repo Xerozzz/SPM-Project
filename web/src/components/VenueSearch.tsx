@@ -10,41 +10,52 @@ import { useAuth } from '../auth/useAuth'
  * must satisfy every supplied criterion to appear. An empty result is guidance, not a
  * dead end: the copy tells the coordinator to adjust the filters (AC7).
  */
+/**
+ * Singapore is a fixed +08:00 with no daylight saving, which is the same assumption
+ * `singaporeWallClockToUtc` in api/venues.ts already makes when it reads these fields back.
+ * Shifting the instant by the offset gives a Date whose *UTC* fields read as Singapore
+ * wall clock, so the helpers below deliberately use the getUTC* accessors.
+ */
+const SGT_OFFSET_MS = 8 * 60 * 60 * 1000
+
 function toDateInput(value: Date): string {
-  const year = value.getFullYear()
-  const month = String(value.getMonth() + 1).padStart(2, '0')
-  const day = String(value.getDate()).padStart(2, '0')
+  const year = value.getUTCFullYear()
+  const month = String(value.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(value.getUTCDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
 }
 
 function toTimeInput(value: Date): string {
-  const hours = String(value.getHours()).padStart(2, '0')
-  const minutes = String(value.getMinutes()).padStart(2, '0')
+  const hours = String(value.getUTCHours()).padStart(2, '0')
+  const minutes = String(value.getUTCMinutes()).padStart(2, '0')
   return `${hours}:${minutes}`
 }
 
 /**
- * The slot the form opens on: the next full hour, rolled forward to the next morning when
- * that would land outside the hours any venue keeps.
+ * The slot the form opens on: the next full Singapore hour, rolled forward to the next
+ * morning when that would land outside the hours any venue keeps.
  *
- * The previous default was simply "one hour from now", which meant that from late evening
- * until early morning the form opened on a period every venue is closed for, so the first
- * search always returned nothing and the empty-state copy blamed the filters. The window
- * below is deliberately narrower than any seeded venue's hours so the default always has a
- * chance of matching; the coordinator can still type any period they like.
+ * Two bugs live here, so both are worth stating. The original default was simply "one hour
+ * from now", so from late evening until morning the form opened on a period every venue is
+ * closed for, and the first search returned nothing while the empty-state copy blamed the
+ * filters. The first attempt at a fix clamped the hours but still derived them from the
+ * *browser's* clock, while the API client reads the very same fields as Singapore wall
+ * clock. For a browser west of SGT that produced a default period which had already ended,
+ * and the search then answers 422 rather than merely returning nothing. Everything below is
+ * therefore computed in Singapore time regardless of where the coordinator is sitting.
  */
 const EARLIEST_HOUR = 9
 const LATEST_START_HOUR = 17
 
 function defaultSearchPeriod(): { date: string; start: string; end: string } {
-  const start = new Date()
-  start.setMinutes(0, 0, 0)
-  start.setHours(start.getHours() + 1)
-  if (start.getHours() >= LATEST_START_HOUR) {
-    start.setDate(start.getDate() + 1)
-    start.setHours(EARLIEST_HOUR)
-  } else if (start.getHours() < EARLIEST_HOUR) {
-    start.setHours(EARLIEST_HOUR)
+  const start = new Date(Date.now() + SGT_OFFSET_MS)
+  start.setUTCMinutes(0, 0, 0)
+  start.setUTCHours(start.getUTCHours() + 1)
+  if (start.getUTCHours() >= LATEST_START_HOUR) {
+    start.setUTCDate(start.getUTCDate() + 1)
+    start.setUTCHours(EARLIEST_HOUR)
+  } else if (start.getUTCHours() < EARLIEST_HOUR) {
+    start.setUTCHours(EARLIEST_HOUR)
   }
   const end = new Date(start.getTime() + 60 * 60 * 1000)
   return { date: toDateInput(start), start: toTimeInput(start), end: toTimeInput(end) }

@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeEach, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { AuthProvider } from '../auth/context'
 import VenueSearch from './VenueSearch'
@@ -51,34 +51,46 @@ function defaults() {
 const EARLIEST_OPEN = '09:00'
 const EARLIEST_CLOSE = '18:00'
 
-test.each([
-  ['02:30', 'the small hours'],
-  ['08:10', 'before opening'],
-  ['10:05', 'mid-morning'],
-  ['16:40', 'late afternoon'],
-  ['21:05', 'evening'],
-  ['23:50', 'just before midnight'],
-])('the form opens on a period inside venue hours at %s (%s)', (clock) => {
-  // Regression: the default used to be simply "one hour from now", so from late evening
-  // until morning the form opened on a period every venue is closed for. The first search
-  // then returned nothing and the empty-state copy blamed the filters.
-  vi.useFakeTimers()
-  vi.setSystemTime(new Date(`2026-09-28T${clock}:00`))
-  renderSearch()
+/**
+ * The instant the API client will actually send for a form value. The form's fields are
+ * Singapore wall clock whatever the browser's zone is (singaporeWallClockToUtc in
+ * api/venues.ts), so asserting against browser-local time proves nothing: that was exactly
+ * the hole that let the timezone bug through the first time.
+ */
+function instantSent(date: string, time: string): Date {
+  return new Date(`${date}T${time}:00+08:00`)
+}
 
-  const { startTime, endTime } = defaults()
-  expect(startTime >= EARLIEST_OPEN).toBe(true)
-  expect(endTime <= EARLIEST_CLOSE).toBe(true)
-  expect(startTime < endTime).toBe(true)
-})
+// Sampled across the clock and across the offsets a coordinator might actually sit at. The
+// second axis is the one that matters: the default used to be derived from the browser's
+// clock while being read back as Singapore time, so for a browser west of SGT it produced a
+// period that had already ended and the search answered 422 rather than returning nothing.
+const TIMES = ['00:30', '02:30', '06:10', '08:10', '10:05', '13:20', '16:40', '21:05', '23:50']
+const OFFSETS = ['+08:00', '+00:00', '-04:00', '-11:00', '+13:00']
 
-test('the default period is never in the past', () => {
-  vi.useFakeTimers()
-  vi.setSystemTime(new Date('2026-09-28T21:05:00'))
-  renderSearch()
+describe.each(OFFSETS)('with the browser at UTC%s', (offset) => {
+  test.each(TIMES)('the default period is still in the future at %s', (clock) => {
+    vi.useFakeTimers()
+    const now = new Date(`2026-09-28T${clock}:00${offset}`)
+    vi.setSystemTime(now)
+    renderSearch()
 
-  const { startDate, startTime } = defaults()
-  expect(new Date(`${startDate}T${startTime}`).getTime()).toBeGreaterThan(Date.now())
+    const { endDate, endTime } = defaults()
+    expect(instantSent(endDate, endTime).getTime()).toBeGreaterThan(now.getTime())
+  })
+
+  test.each(TIMES)('the default period is inside venue hours at %s', (clock) => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(`2026-09-28T${clock}:00${offset}`))
+    renderSearch()
+
+    const { startDate, startTime, endDate, endTime } = defaults()
+    expect(startTime >= EARLIEST_OPEN).toBe(true)
+    expect(endTime <= EARLIEST_CLOSE).toBe(true)
+    expect(instantSent(startDate, startTime).getTime()).toBeLessThan(
+      instantSent(endDate, endTime).getTime(),
+    )
+  })
 })
 
 test('searching sends the period as UTC instants and lists what comes back', async () => {

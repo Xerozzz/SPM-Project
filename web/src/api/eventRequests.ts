@@ -2,7 +2,8 @@
  * Event request API calls for organisers. Mirrors api/schemas/event_requests.py.
  */
 
-export type EventStatus = 'draft' | 'submitted' | 'approved' | 'rejected'
+export type EventStatus =
+  'draft' | 'submitted' | 'approved' | 'rejected'
 
 export type EventAction = 'edit' | 'submit' | 'approve' | 'reject'
 
@@ -103,7 +104,12 @@ export class SubmissionRejectedError extends EventRequestValidationError {
 }
 
 function parseValidationProblems(body: unknown): FieldProblem[] | null {
-  if (!body || typeof body !== 'object' || !('detail' in body) || !Array.isArray(body.detail)) {
+  if (
+    !body ||
+    typeof body !== 'object' ||
+    !('detail' in body) ||
+    !Array.isArray(body.detail)
+  ) {
     return null
   }
 

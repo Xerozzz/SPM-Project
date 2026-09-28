@@ -91,4 +91,6 @@ test('an unassigned request offers no decision buttons either', async () => {
 
   expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
+  // Not the same sentence as "assigned to another coordinator": nobody is assigned here.
+  expect(screen.getByText(/Not assigned to a coordinator yet/)).toBeInTheDocument()
 })
