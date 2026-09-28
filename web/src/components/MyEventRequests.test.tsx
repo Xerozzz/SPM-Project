@@ -58,7 +58,7 @@ function json(body: unknown, status = 200) {
 function renderSignedIn(handlers: Record<string, Handler>) {
   localStorage.setItem(
     'connectsphere.token',
-    JSON.stringify({ token: 'token', roles: ['organiser'] }),
+    JSON.stringify({ token: 'token', userId: 'user-1', roles: ['organiser'] }),
   )
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const key = `${init?.method ?? 'GET'} ${String(input)}`
@@ -246,6 +246,7 @@ function eventRequest(overrides: Partial<EventRequest>): EventRequest {
   return {
     id: 'req',
     status: 'draft',
+    coordinator_id: null,
     name: null,
     purpose: null,
     description: null,

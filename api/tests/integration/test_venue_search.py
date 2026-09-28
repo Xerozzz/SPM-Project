@@ -18,7 +18,7 @@ Each test names its Test Case ID.
 """
 
 from collections.abc import Callable
-from datetime import date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -356,3 +356,59 @@ async def test_tc55_ac3_08_inverted_requested_period_is_rejected_with_422(
 
     assert response.status_code == 422
     assert response.json()["detail"][0]["field"] == "end_at"
+
+
+# ------------------------------------------- TC-55-AC3-09 / AC2-06: refused periods
+
+
+@pytest.mark.story("SCRUM-55")
+async def test_tc55_ac3_09_a_period_that_has_already_ended_is_refused(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # Nothing can be booked into a slot that is already over, so answering with a list of
+    # venues tells the coordinator something untrue. Same rule, and same wording, as the
+    # elapsed-closure refusal in SCRUM-62.
+    make_venue(db, name="Hall A")
+
+    response = await search_as(
+        make_client,
+        make_user("coordinator"),
+        start_at="2020-03-01T02:00:00+00:00",
+        end_at="2020-03-01T06:00:00+00:00",
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == [{"field": "end_at", "reason": "must be in the future"}]
+
+
+@pytest.mark.story("SCRUM-55")
+async def test_tc55_ac3_10_a_period_running_now_is_still_searchable(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # The rule is on the end, not the start: a slot that has already begun but has not
+    # finished is a legitimate thing to look for.
+    make_venue(db, name="Hall A")
+    now = datetime.now(UTC)
+
+    response = await search_as(
+        make_client,
+        make_user("coordinator"),
+        start_at=(now - timedelta(hours=1)).isoformat(),
+        end_at=(now + timedelta(hours=1)).isoformat(),
+    )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.story("SCRUM-55")
+@pytest.mark.parametrize("capacity", [0, -50])
+async def test_tc55_ac2_06_a_capacity_below_one_is_refused(
+    db: Session, make_user: MakeUser, make_client: MakeClient, capacity: int
+) -> None:
+    # The form already says min=1; without this the API silently accepted -50 and returned
+    # every venue, which reads as "the filter did nothing" rather than "that is not a size".
+    make_venue(db, name="Hall A")
+
+    response = await search_as(make_client, make_user("coordinator"), minimum_capacity=capacity)
+
+    assert response.status_code == 422

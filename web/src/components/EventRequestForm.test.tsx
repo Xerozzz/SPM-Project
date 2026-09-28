@@ -13,7 +13,7 @@ afterEach(() => {
 function renderForm() {
   localStorage.setItem(
     'connectsphere.token',
-    JSON.stringify({ token: 'token', roles: ['organiser'] }),
+    JSON.stringify({ token: 'token', userId: 'user-1', roles: ['organiser'] }),
   )
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(

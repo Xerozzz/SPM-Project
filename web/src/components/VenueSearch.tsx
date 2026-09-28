@@ -23,10 +23,29 @@ function toTimeInput(value: Date): string {
   return `${hours}:${minutes}`
 }
 
+/**
+ * The slot the form opens on: the next full hour, rolled forward to the next morning when
+ * that would land outside the hours any venue keeps.
+ *
+ * The previous default was simply "one hour from now", which meant that from late evening
+ * until early morning the form opened on a period every venue is closed for, so the first
+ * search always returned nothing and the empty-state copy blamed the filters. The window
+ * below is deliberately narrower than any seeded venue's hours so the default always has a
+ * chance of matching; the coordinator can still type any period they like.
+ */
+const EARLIEST_HOUR = 9
+const LATEST_START_HOUR = 17
+
 function defaultSearchPeriod(): { date: string; start: string; end: string } {
-  const now = new Date()
-  now.setMinutes(0, 0, 0)
-  const start = new Date(now.getTime() + 60 * 60 * 1000)
+  const start = new Date()
+  start.setMinutes(0, 0, 0)
+  start.setHours(start.getHours() + 1)
+  if (start.getHours() >= LATEST_START_HOUR) {
+    start.setDate(start.getDate() + 1)
+    start.setHours(EARLIEST_HOUR)
+  } else if (start.getHours() < EARLIEST_HOUR) {
+    start.setHours(EARLIEST_HOUR)
+  }
   const end = new Date(start.getTime() + 60 * 60 * 1000)
   return { date: toDateInput(start), start: toTimeInput(start), end: toTimeInput(end) }
 }

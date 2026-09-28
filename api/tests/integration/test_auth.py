@@ -103,3 +103,19 @@ async def test_login_endpoint_returns_401_not_500_for_an_over_long_password(
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Invalid email or password"}
+
+
+@pytest.mark.story("SCRUM-27")
+async def test_sign_in_returns_the_user_id(make_user: MakeUser, make_client: MakeClient) -> None:
+    # The UI needs it to tell "assigned to me" from "assigned to another coordinator".
+    # Roles alone cannot, which is why the review screen was offering Approve and Reject
+    # on requests the API then refused with 403.
+    user = make_user(Role.COORDINATOR)
+
+    async with make_client(None) as client:
+        response = await client.post(
+            "/api/auth/login", json={"email": user.email, "password": PASSWORD}
+        )
+
+    assert response.status_code == 200
+    assert response.json()["user_id"] == str(user.id)

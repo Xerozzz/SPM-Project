@@ -13,7 +13,7 @@ import ClarificationThread from './ClarificationThread'
 
 /** SCRUM-31: coordinator review is a decision only; it does not start planning work. */
 export default function EventRequestReview() {
-  const { token } = useAuth()
+  const { token, userId } = useAuth()
   const client = useQueryClient()
   const [reason, setReason] = useState<Record<string, string>>({})
   const [outcome, setOutcome] = useState<string | null>(null)
@@ -60,6 +60,7 @@ export default function EventRequestReview() {
           onApprove={() => approve.mutate(request.id)}
           onReject={() => reject.mutate({ id: request.id, reason: reason[request.id] ?? '' })}
           pending={approve.isPending || reject.isPending}
+          isMine={request.coordinator_id !== null && request.coordinator_id === userId}
         />
       ))}
       {outcome && (
@@ -83,6 +84,7 @@ function ReviewCard({
   onApprove,
   onReject,
   pending,
+  isMine,
 }: {
   request: EventRequest
   reason: string
@@ -90,6 +92,8 @@ function ReviewCard({
   onApprove: () => void
   onReject: () => void
   pending: boolean
+  /** Whether the signed-in coordinator is the one this request is assigned to. */
+  isMine: boolean
 }) {
   return (
     <article className="mt-4 rounded border border-slate-200 p-3">
@@ -138,7 +142,12 @@ function ReviewCard({
         className="mt-1 w-full rounded border border-slate-300 p-2 text-sm"
       />
       <div className="mt-3 flex gap-2">
-        {request.status_permits.includes('approve') && (
+        {!isMine && (
+          <p className="text-sm text-slate-500">
+            Assigned to another coordinator, so this one is yours to read, not to decide.
+          </p>
+        )}
+        {isMine && request.status_permits.includes('approve') && (
           <button
             type="button"
             onClick={onApprove}
@@ -148,7 +157,7 @@ function ReviewCard({
             Approve
           </button>
         )}
-        {request.status_permits.includes('reject') && (
+        {isMine && request.status_permits.includes('reject') && (
           <button
             type="button"
             onClick={onReject}

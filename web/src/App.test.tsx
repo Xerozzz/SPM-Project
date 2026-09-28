@@ -75,7 +75,7 @@ test('invalid credentials show a generic error', async () => {
 test('sign-out returns to the sign-in page', async () => {
   localStorage.setItem(
     'connectsphere.token',
-    JSON.stringify({ token: 'token', roles: ['attendee'] }),
+    JSON.stringify({ token: 'token', userId: 'user-1', roles: ['attendee'] }),
   )
   vi.spyOn(globalThis, 'fetch').mockResolvedValue(
     new Response(JSON.stringify({ status: 'ok' }), {

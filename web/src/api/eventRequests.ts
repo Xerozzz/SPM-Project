@@ -2,8 +2,7 @@
  * Event request API calls for organisers. Mirrors api/schemas/event_requests.py.
  */
 
-export type EventStatus =
-  'draft' | 'submitted' | 'approved' | 'rejected'
+export type EventStatus = 'draft' | 'submitted' | 'approved' | 'rejected'
 
 export type EventAction = 'edit' | 'submit' | 'approve' | 'reject'
 
@@ -40,6 +39,8 @@ export interface EventRequest {
   submitted_at: string | null
   /** What the status allows, regardless of who is asking (SCRUM-35). Not an authorisation. */
   status_permits: EventAction[]
+  /** The assigned coordinator (SCRUM-34). Compare with the viewer's id for "may I decide?". */
+  coordinator_id: string | null
   decided_by_id: string | null
   decided_at: string | null
   rejection_reason: string | null
@@ -102,12 +103,7 @@ export class SubmissionRejectedError extends EventRequestValidationError {
 }
 
 function parseValidationProblems(body: unknown): FieldProblem[] | null {
-  if (
-    !body ||
-    typeof body !== 'object' ||
-    !('detail' in body) ||
-    !Array.isArray(body.detail)
-  ) {
+  if (!body || typeof body !== 'object' || !('detail' in body) || !Array.isArray(body.detail)) {
     return null
   }
 
