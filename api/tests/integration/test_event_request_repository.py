@@ -22,7 +22,7 @@ def test_get_returns_the_row_or_none(db: Session, make_user: MakeUser) -> None:
 
 
 @pytest.mark.story("SCRUM-46")
-def test_get_for_update_queries_when_row_is_already_in_identity_map(
+def test_get_for_update_locks_a_row_already_in_the_identity_map(
     db: Session, make_user: MakeUser
 ) -> None:
     draft = make_draft(db, make_user("organiser"))
