@@ -1,5 +1,6 @@
 """Auth request/response models — the public contract for F1 sign-in."""
 
+import uuid
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -15,9 +16,13 @@ class LoginRequest(BaseModel):
 
 
 class LoginResponse(BaseModel):
-    """JWT plus the role claims the UI uses for gating."""
+    """JWT plus the identity and role claims the UI uses for gating."""
 
     access_token: str
+    # The signed-in user's id. The UI needs it to tell "assigned to me" from "assigned to
+    # another coordinator": roles alone cannot, so the review screen was offering Approve
+    # and Reject on requests the API then refused with 403.
+    user_id: uuid.UUID
     roles: list[str]
     # A real field, not a @property: a property is invisible to serialisation, so the UI's
     # LoginResponse type promised a token_type the API never actually sent. It is the OAuth2

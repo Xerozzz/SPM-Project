@@ -75,7 +75,7 @@ test('invalid credentials show a generic error', async () => {
 test('sign-out returns to the sign-in page', async () => {
   localStorage.setItem(
     'connectsphere.token',
-    JSON.stringify({ token: 'token', roles: ['attendee'] }),
+    JSON.stringify({ token: 'token', userId: 'user-1', roles: ['attendee'] }),
   )
   vi.spyOn(globalThis, 'fetch').mockResolvedValue(
     new Response(JSON.stringify({ status: 'ok' }), {
@@ -91,4 +91,39 @@ test('sign-out returns to the sign-in page', async () => {
     expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
   })
   expect(localStorage.getItem('connectsphere.token')).toBeNull()
+})
+
+test('a session stored before user ids existed is treated as signed out', async () => {
+  // Without the userId guard in readStored, such a session survives with userId undefined.
+  // Nothing then equals request.coordinator_id, so every Approve and Reject button vanishes
+  // permanently and silently. Signing the user out once is the recoverable failure.
+  localStorage.setItem(
+    'connectsphere.token',
+    JSON.stringify({ token: 'token', roles: ['coordinator'] }),
+  )
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    new Response(JSON.stringify({ status: 'ok' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  )
+  renderApp()
+
+  expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+})
+
+test('a stored session carrying a user id is kept', async () => {
+  localStorage.setItem(
+    'connectsphere.token',
+    JSON.stringify({ token: 'token', userId: 'user-1', roles: ['attendee'] }),
+  )
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    new Response(JSON.stringify({ status: 'ok' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  )
+  renderApp()
+
+  expect(await screen.findByRole('button', { name: 'Sign out' })).toBeInTheDocument()
 })

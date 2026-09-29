@@ -11,9 +11,21 @@ import { useAuth } from '../auth/useAuth'
 import { hasReviewNote } from '../validation/eventRequestReview'
 import ClarificationThread from './ClarificationThread'
 
+/**
+ * Whose request this is, from the viewer's side. `status_permits` cannot answer it: it
+ * describes the status and says so in its own docstring, while the API additionally requires
+ * the assigned coordinator (require_event_access(DECIDE)).
+ */
+type Assignment = 'mine' | 'someone-else' | 'unassigned'
+
+function assignmentOf(request: EventRequest, userId: string | null): Assignment {
+  if (request.coordinator_id === null) return 'unassigned'
+  return request.coordinator_id === userId ? 'mine' : 'someone-else'
+}
+
 /** SCRUM-31: coordinator review is a decision only; it does not start planning work. */
 export default function EventRequestReview() {
-  const { token } = useAuth()
+  const { token, userId } = useAuth()
   const client = useQueryClient()
   const [reason, setReason] = useState<Record<string, string>>({})
   const [outcome, setOutcome] = useState<string | null>(null)
@@ -60,6 +72,7 @@ export default function EventRequestReview() {
           onApprove={() => approve.mutate(request.id)}
           onReject={() => reject.mutate({ id: request.id, reason: reason[request.id] ?? '' })}
           pending={approve.isPending || reject.isPending}
+          assignment={assignmentOf(request, userId)}
         />
       ))}
       {outcome && (
@@ -83,6 +96,7 @@ function ReviewCard({
   onApprove,
   onReject,
   pending,
+  assignment,
 }: {
   request: EventRequest
   reason: string
@@ -90,6 +104,8 @@ function ReviewCard({
   onApprove: () => void
   onReject: () => void
   pending: boolean
+  /** Who may decide this request, from the viewer's point of view. */
+  assignment: Assignment
 }) {
   return (
     <article className="mt-4 rounded border border-slate-200 p-3">
@@ -138,7 +154,14 @@ function ReviewCard({
         className="mt-1 w-full rounded border border-slate-300 p-2 text-sm"
       />
       <div className="mt-3 flex gap-2">
-        {request.status_permits.includes('approve') && (
+        {assignment !== 'mine' && (
+          <p className="text-sm text-slate-500">
+            {assignment === 'someone-else'
+              ? 'Assigned to another coordinator, so this one is yours to read, not to decide.'
+              : 'Not assigned to a coordinator yet, so there is nobody to decide it.'}
+          </p>
+        )}
+        {assignment === 'mine' && request.status_permits.includes('approve') && (
           <button
             type="button"
             onClick={onApprove}
@@ -148,7 +171,7 @@ function ReviewCard({
             Approve
           </button>
         )}
-        {request.status_permits.includes('reject') && (
+        {assignment === 'mine' && request.status_permits.includes('reject') && (
           <button
             type="button"
             onClick={onReject}

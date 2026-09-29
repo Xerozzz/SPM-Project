@@ -6,7 +6,7 @@ inline role check (AGENTS.md section 3).
 """
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -52,7 +52,7 @@ def search(
     db: Db,
     start_at: datetime,
     end_at: datetime,
-    minimum_capacity: int | None = None,
+    minimum_capacity: Annotated[int | None, Query(ge=1)] = None,
     location: str | None = None,
     accessibility: Annotated[list[str] | None, Query()] = None,
     facility: Annotated[list[str] | None, Query()] = None,
@@ -82,14 +82,23 @@ def _search_period_problems(start_at: datetime, end_at: datetime) -> list[dict[s
     A naive datetime (no offset) parses fine but has no instant behind it, so the
     domain raises ValueError; report it here in the same FieldProblem shape the
     catalogue uses (SCRUM-59/SCRUM-62) instead of letting it become a 500.
+
+    A period that has already ended is refused for the same reason SCRUM-62 refuses an
+    elapsed closure: nothing can be booked into it, so answering with a list of venues
+    tells the coordinator something untrue. The rule is on the end, not the start, so a
+    slot that is already running can still be searched for.
     """
     problems: list[dict[str, str]] = []
     if start_at.tzinfo is None:
         problems.append({"field": "start_at", "reason": "must be given in UTC"})
     if end_at.tzinfo is None:
         problems.append({"field": "end_at", "reason": "must be given in UTC"})
-    if not problems and end_at <= start_at:
+    if problems:
+        return problems
+    if end_at <= start_at:
         problems.append({"field": "end_at", "reason": "must be after the start time"})
+    elif end_at <= datetime.now(UTC):
+        problems.append({"field": "end_at", "reason": "must be in the future"})
     return problems
 
 

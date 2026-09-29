@@ -5,6 +5,8 @@
 export interface LoginResponse {
   access_token: string
   token_type: string
+  /** The signed-in user's id, so the UI can tell "assigned to me" from "assigned to someone else". */
+  user_id: string
   roles: string[]
 }
 

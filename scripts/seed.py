@@ -3,9 +3,11 @@
 every start, so a fresh `docker compose up` is immediately usable.
 
 - One supplied user per role (SCRUM-27, F1). Never modified once created.
-- Two sample event requests for organiser@example.com (SCRUM-46): one complete draft
-  and one with gaps, so both the happy path and the field-error path can be demonstrated.
-  These are *reset to Draft on every run* — they are demo data, not user data.
+- Four sample event requests for organiser@example.com (SCRUM-46): one complete draft, one
+  with gaps so the field-error path can be demonstrated, one driven all the way to Approved
+  so the venue booking flow (SCRUM-38) is reachable from a clean clone, and one left at
+  Submitted so the coordinator review screen has something in it.
+  These are *recreated on every run* — they are demo data, not user data.
 - Three venues for the catalogue (SCRUM-59), one of them deactivated so the selectable
   list and the staff list visibly differ. Inserted only when missing, like the users.
 """
@@ -22,6 +24,7 @@ from models.user import User
 from models.venue import Venue
 from repositories import event_requests as event_requests_repo
 from repositories import users as users_repo
+from services import event_requests as event_requests_service
 
 _PRIMARY_ORG_ID = uuid.UUID("00000000-0000-4000-8000-000000000010")
 
@@ -49,11 +52,15 @@ _SEED_USERS: list[tuple[str, str, list[Role], uuid.UUID]] = [
 
 # Fixed ids, so the samples can be found and replaced no matter what an organiser has
 # renamed them to in the meantime. The rows are demo data: they are deleted and recreated
-# on every seed run, which is also why the seed never assigns a status — a fresh row is a
-# draft by construction, and only domain/event_status.py may move it from there.
+# on every seed run, which is also why the seed never writes a status directly — a fresh row
+# is a draft by construction, and only domain/event_status.py may move it from there. The
+# approved sample below gets there by calling the same services the UI calls, not by setting
+# the column, so the seed cannot drift from the state machine.
 _SAMPLE_IDS = (
     uuid.UUID("00000000-0000-4000-8000-000000000001"),
     uuid.UUID("00000000-0000-4000-8000-000000000002"),
+    uuid.UUID("00000000-0000-4000-8000-000000000003"),
+    uuid.UUID("00000000-0000-4000-8000-000000000004"),
 )
 
 
@@ -88,7 +95,45 @@ def _sample_event_requests() -> list[tuple[uuid.UUID, dict[str, object]]]:
         "layout_requirement": None,
         "registration_requirement": None,
     }
-    return [(_SAMPLE_IDS[0], orientation_day), (_SAMPLE_IDS[1], hackathon)]
+    # Complete, and taken all the way to Approved by _approve_sample below, because
+    # SCRUM-38 only lets a Coordinator book a venue for an APPROVED event. Without this a
+    # clean clone cannot reach that flow at all.
+    careers_fair: dict[str, object] = {
+        "name": "Careers Fair",
+        "purpose": "Connect final-year students with employers",
+        "description": "Employer booths, on-the-day interviews and two panel sessions.",
+        "start_at": start + timedelta(days=21),
+        "end_at": start + timedelta(days=21, hours=6),
+        "expected_attendance": 180,
+        "venue_requirement": "Auditorium-type venue",
+        "accessibility_requirement": "Step-free access",
+        "equipment_requirement": "Projector-type requirement",
+        "layout_requirement": "Theatre style",
+        "registration_requirement": "Open registration, capped at 180",
+    }
+    # Submitted but not decided. Round-robin assignment (SCRUM-34) hands this one to the
+    # *second* coordinator, because the careers fair above already took the first, so a
+    # clean clone shows both halves of the review screen: one request you may decide and
+    # one that is somebody else's to decide.
+    alumni_dinner: dict[str, object] = {
+        "name": "Alumni Dinner",
+        "purpose": "Reconnect alumni with the faculty",
+        "description": "Seated dinner with an after-dinner speaker.",
+        "start_at": start + timedelta(days=35),
+        "end_at": start + timedelta(days=35, hours=4),
+        "expected_attendance": 150,
+        "venue_requirement": "Auditorium-type venue",
+        "accessibility_requirement": "Step-free access",
+        "equipment_requirement": "Microphone-type requirement",
+        "layout_requirement": "Banquet style",
+        "registration_requirement": "Invitation only",
+    }
+    return [
+        (_SAMPLE_IDS[0], orientation_day),
+        (_SAMPLE_IDS[1], hackathon),
+        (_SAMPLE_IDS[2], careers_fair),
+        (_SAMPLE_IDS[3], alumni_dinner),
+    ]
 
 
 _SEED_VENUES: tuple[dict[str, object], ...] = (
@@ -189,6 +234,23 @@ def _seed_event_requests(db: Session) -> None:
                 **fields,
             ),
         )
+    db.flush()
+    _approve_sample(db, organiser.id, _SAMPLE_IDS[2])
+    event_requests_service.submit(db, _SAMPLE_IDS[3], organiser.id, datetime.now(UTC))
+
+
+def _approve_sample(db: Session, organiser_id: uuid.UUID, request_id: uuid.UUID) -> None:
+    """Drive one sample to Approved through the same services the UI calls.
+
+    Submitting assigns a coordinator (SCRUM-34 round-robin), and only that coordinator may
+    approve, so this also leaves a correctly assigned request behind rather than a row that
+    happens to say "approved". Nothing here writes `status`.
+    """
+    now = datetime.now(UTC)
+    submitted = event_requests_service.submit(db, request_id, organiser_id, now)
+    if submitted.coordinator_id is None:
+        return
+    event_requests_service.approve(db, request_id, submitted.coordinator_id, now)
 
 
 def main() -> None:

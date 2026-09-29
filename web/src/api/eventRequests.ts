@@ -40,6 +40,8 @@ export interface EventRequest {
   submitted_at: string | null
   /** What the status allows, regardless of who is asking (SCRUM-35). Not an authorisation. */
   status_permits: EventAction[]
+  /** The assigned coordinator (SCRUM-34). Compare with the viewer's id for "may I decide?". */
+  coordinator_id: string | null
   decided_by_id: string | null
   decided_at: string | null
   rejection_reason: string | null

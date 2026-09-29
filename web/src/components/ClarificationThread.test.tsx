@@ -29,7 +29,7 @@ function clarification(id: string, message: string, kind: 'request' | 'response'
 }
 
 function renderThread(mode: 'coordinator' | 'organiser', fetcher: typeof fetch) {
-  localStorage.setItem('connectsphere.token', JSON.stringify({ token: 'token', roles: [mode] }))
+  localStorage.setItem('connectsphere.token', JSON.stringify({ token: 'token', userId: 'user-1', roles: [mode] }))
   vi.spyOn(globalThis, 'fetch').mockImplementation(fetcher)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(

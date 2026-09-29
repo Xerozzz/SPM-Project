@@ -26,4 +26,4 @@ def sign_in(db: Session, email: str, password: str) -> LoginResponse:
     if not verify_password(password, user.password_hash):
         raise InvalidCredentialsError
     token = create_access_token(str(user.id), list(user.roles))
-    return LoginResponse(access_token=token, roles=list(user.roles))
+    return LoginResponse(access_token=token, user_id=user.id, roles=list(user.roles))
