@@ -1,6 +1,7 @@
 """Venue booking request contracts (SCRUM-38)."""
 
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
@@ -25,5 +26,9 @@ class SuitabilityRead(BaseModel):
 
 
 class VenueBookingSubmissionRead(BaseModel):
+    id: uuid.UUID
+    venue_id: uuid.UUID
+    start_at: datetime
+    end_at: datetime
     status: BookingStatus
     suitability: SuitabilityRead

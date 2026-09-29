@@ -52,6 +52,10 @@ def submit_venue_booking(
             status.HTTP_409_CONFLICT, "A pending booking request already exists"
         ) from exc
     return VenueBookingSubmissionRead(
+        id=booking.id,
+        venue_id=booking.venue_id,
+        start_at=booking.start_at,
+        end_at=booking.end_at,
         status=booking.status,
         suitability=SuitabilityRead.model_validate(suitability),
     )

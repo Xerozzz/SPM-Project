@@ -43,6 +43,13 @@ EQUIPMENT_REQUIREMENTS: frozenset[str] = frozenset(
     }
 )
 
+EQUIPMENT_REQUIREMENT_FACILITIES: dict[str, str] = {
+    "Projector-type requirement": "Projector",
+    "Microphone-type requirement": "Microphone",
+    "PA system-type requirement": "PA system",
+    "Display screen-type requirement": "Display screen",
+}
+
 
 @dataclass(frozen=True)
 class EventRequestFields:

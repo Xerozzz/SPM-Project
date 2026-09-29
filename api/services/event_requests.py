@@ -60,6 +60,11 @@ def list_for_review(db: Session) -> list[EventRequest]:
     return repo.list_submitted(db)
 
 
+def list_bookable_for_coordinator(db: Session, coordinator_id: uuid.UUID) -> list[EventRequest]:
+    """Approved requests assigned to this coordinator for venue booking."""
+    return repo.list_bookable_for_coordinator(db, coordinator_id)
+
+
 def create(
     db: Session, organiser_id: uuid.UUID, fields: EventRequestFields, now: datetime
 ) -> EventRequest:

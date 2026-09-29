@@ -48,6 +48,19 @@ def list_submitted(db: Session) -> list[EventRequest]:
     return list(db.scalars(statement))
 
 
+def list_bookable_for_coordinator(db: Session, coordinator_id: uuid.UUID) -> list[EventRequest]:
+    """Approved requests assigned to this coordinator for venue booking."""
+    statement = (
+        select(EventRequest)
+        .where(
+            EventRequest.status == EventStatus.APPROVED,
+            EventRequest.coordinator_id == coordinator_id,
+        )
+        .order_by(EventRequest.start_at.asc(), EventRequest.id.asc())
+    )
+    return list(db.scalars(statement))
+
+
 def list_drafts_for_organisation(db: Session, organisation_id: uuid.UUID) -> list[EventRequest]:
     """Drafts created by organisers in this organisation, newest first."""
     statement = (

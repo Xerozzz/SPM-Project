@@ -29,12 +29,11 @@ class VenueBooking(Base):
     venue_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("venues.id"), nullable=False, index=True
     )
-    # Nullable for legacy SCRUM-55 search-fixture rows; SCRUM-38 writes both links.
-    event_request_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("event_requests.id")
+    event_request_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("event_requests.id"), nullable=False, index=True
     )
-    requested_by_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id")
+    requested_by_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
     start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

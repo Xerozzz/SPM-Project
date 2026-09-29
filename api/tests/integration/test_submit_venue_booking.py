@@ -40,7 +40,49 @@ def bookings(db: Session) -> list[VenueBooking]:
 
 
 @pytest.mark.story("SCRUM-38")
-async def test_pending_request_keeps_advisory_suitability_and_rejected_history(
+async def test_coordinator_can_list_own_approved_bookable_events(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    coordinator = make_user("coordinator")
+    other = make_user("coordinator")
+    own = approved_event(db, make_user("organiser"), coordinator, name="Own approved")
+    approved_event(db, make_user("organiser"), other, name="Someone else's approved")
+    submitted = make_draft(db, make_user("organiser"), coordinator_id=coordinator.id)
+    submitted.status = EventStatus.SUBMITTED
+    db.flush()
+
+    async with make_client(coordinator) as client:
+        response = await client.get("/api/event-requests/bookable")
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()] == [str(own.id)]
+
+
+@pytest.mark.story("SCRUM-38")
+async def test_successful_submission_creates_pending_booking_with_id(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    coordinator = make_user("coordinator")
+    event = approved_event(db, make_user("organiser"), coordinator)
+    venue = make_venue(db)
+
+    async with make_client(coordinator) as client:
+        created = await submit(client, event, venue.id)
+
+    assert created.status_code == 201
+    body = created.json()
+    row = bookings(db)[0]
+    assert body["id"] == str(row.id)
+    assert body["venue_id"] == str(row.venue_id)
+    assert datetime.fromisoformat(body["start_at"]) == row.start_at
+    assert datetime.fromisoformat(body["end_at"]) == row.end_at
+    assert body["status"] == "pending"
+    assert (row.event_request_id, row.requested_by_id) == (event.id, coordinator.id)
+    assert (row.start_at, row.end_at) == (event.start_at, event.end_at)
+
+
+@pytest.mark.story("SCRUM-38")
+async def test_suitability_warning_remains_advisory(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     coordinator = make_user("coordinator")
@@ -59,34 +101,81 @@ async def test_pending_request_keeps_advisory_suitability_and_rejected_history(
             params={"venue_id": str(venue.id)},
         )
         created = await submit(client, event, venue.id)
-        duplicate = await submit(client, event, venue.id)
-        original = bookings(db)[0]
-        original.status = BookingStatus.REJECTED
-        db.flush()
-        resubmitted = await submit(client, event, venue.id)
 
     suitability = preview.json()
+    assert preview.status_code == 200
     assert suitability["mismatch_codes"] == ["CAPACITY_EXCEEDED"]
     assert suitability["unavailable_facilities"] == ["Projector"]
     assert suitability["venue_accessibility"] == ["Step-free access"]
     assert suitability["venue_layouts"] == ["theatre", "classroom"]
-    assert created.status_code == resubmitted.status_code == 201
-    assert created.json() == {"status": "pending", "suitability": suitability}
+    assert created.status_code == 201
+    assert created.json()["suitability"] == suitability
+
+
+@pytest.mark.story("SCRUM-38")
+async def test_duplicate_pending_request_is_rejected(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    coordinator = make_user("coordinator")
+    event = approved_event(db, make_user("organiser"), coordinator)
+    venue = make_venue(db)
+
+    async with make_client(coordinator) as client:
+        first = await submit(client, event, venue.id)
+        duplicate = await submit(client, event, venue.id)
+
+    assert first.status_code == 201
     assert duplicate.status_code == 409
-    assert event.status is EventStatus.APPROVED
-    assert (original.event_request_id, original.requested_by_id) == (event.id, coordinator.id)
-    assert (original.start_at, original.end_at) == (event.start_at, event.end_at)
+    assert duplicate.json()["detail"] == "A pending booking request already exists"
+    assert [row.status for row in bookings(db)] == [BookingStatus.PENDING]
+
+
+@pytest.mark.story("SCRUM-38")
+async def test_rejected_request_is_retained_and_resubmission_creates_pending_row(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    coordinator = make_user("coordinator")
+    event = approved_event(db, make_user("organiser"), coordinator)
+    venue = make_venue(db)
+
+    async with make_client(coordinator) as client:
+        original_response = await submit(client, event, venue.id)
+
+        # SCRUM-40 has not introduced the rejection action yet, so arrange the state
+        # directly and prove SCRUM-38 keeps that history when a new request is submitted.
+        original = bookings(db)[0]
+        original.status = BookingStatus.REJECTED
+        db.flush()
+
+        resubmitted = await submit(client, event, venue.id)
+
+    assert original_response.status_code == resubmitted.status_code == 201
     rows = bookings(db)
     assert [row.status for row in rows] == [BookingStatus.REJECTED, BookingStatus.PENDING]
     assert rows[0].id != rows[1].id
 
 
 @pytest.mark.story("SCRUM-38")
-async def test_unauthorised_or_invalid_submission_creates_no_booking(
+async def test_unassigned_coordinator_is_forbidden(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    assigned = make_user("coordinator")
+    other = make_user("coordinator")
+    event = approved_event(db, make_user("organiser"), assigned)
+    venue = make_venue(db)
+
+    async with make_client(other) as client:
+        response = await submit(client, event, venue.id)
+
+    assert response.status_code == 403
+    assert bookings(db) == []
+
+
+@pytest.mark.story("SCRUM-38")
+async def test_invalid_or_missing_requirements_create_no_booking(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     coordinator = make_user("coordinator")
-    valid = approved_event(db, make_user("organiser"), coordinator)
     start = datetime.now(UTC) + timedelta(days=10)
     invalid = approved_event(
         db,
@@ -96,22 +185,79 @@ async def test_unauthorised_or_invalid_submission_creates_no_booking(
         start_at=start,
         end_at=start - timedelta(hours=1),
     )
-    inactive = make_venue(db, is_active=False)
+    venue = make_venue(db)
 
-    async with make_client(make_user("coordinator")) as other:
-        refused = await submit(other, valid, inactive.id)
     async with make_client(coordinator) as client:
-        fields = await submit(client, invalid, uuid.uuid4())
-        inactive_response = await submit(client, valid, inactive.id)
-        missing = await client.post(f"/api/event-requests/{valid.id}/venue-bookings", json={})
+        invalid_response = await submit(client, invalid, venue.id)
+        missing_body = await client.post(
+            f"/api/event-requests/{invalid.id}/venue-bookings", json={}
+        )
 
-    assert refused.status_code == 403
-    assert {item["field"] for item in fields.json()["detail"]} == {
+    assert invalid_response.status_code == 422
+    assert {item["field"] for item in invalid_response.json()["detail"]} == {
         "venue_requirement",
         "end_at",
-        "venue_id",
     }
-    assert inactive_response.json()["detail"][0]["field"] == "venue_id"
-    assert missing.status_code == 422
-    assert missing.json()["detail"][0]["loc"][-1] == "venue_id"
+    assert missing_body.status_code == 422
+    assert missing_body.json()["detail"][0]["loc"][-1] == "venue_id"
     assert bookings(db) == []
+
+
+@pytest.mark.story("SCRUM-38")
+async def test_inactive_or_missing_venue_is_rejected(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    coordinator = make_user("coordinator")
+    event = approved_event(db, make_user("organiser"), coordinator)
+    inactive = make_venue(db, is_active=False)
+
+    async with make_client(coordinator) as client:
+        inactive_response = await submit(client, event, inactive.id)
+        missing_response = await submit(client, event, uuid.uuid4())
+
+    assert inactive_response.status_code == 422
+    assert inactive_response.json()["detail"] == [
+        {"field": "venue_id", "reason": "must identify an active venue"}
+    ]
+    assert missing_response.status_code == 422
+    assert missing_response.json()["detail"] == [
+        {"field": "venue_id", "reason": "does not identify a venue"}
+    ]
+    assert bookings(db) == []
+
+
+@pytest.mark.story("SCRUM-38")
+async def test_suitability_endpoint_returns_422_for_invalid_request(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    coordinator = make_user("coordinator")
+    event = approved_event(db, make_user("organiser"), coordinator, expected_attendance=None)
+    venue = make_venue(db)
+
+    async with make_client(coordinator) as client:
+        response = await client.get(
+            f"/api/event-requests/{event.id}/venue-bookings/suitability",
+            params={"venue_id": str(venue.id)},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == [{"field": "expected_attendance", "reason": "is required"}]
+    assert bookings(db) == []
+
+
+@pytest.mark.story("SCRUM-38")
+async def test_successful_submission_does_not_confirm_booking_or_event(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    coordinator = make_user("coordinator")
+    event = approved_event(db, make_user("organiser"), coordinator)
+    venue = make_venue(db)
+
+    async with make_client(coordinator) as client:
+        response = await submit(client, event, venue.id)
+
+    assert response.status_code == 201
+    db.refresh(event)
+    row = bookings(db)[0]
+    assert event.status is EventStatus.APPROVED
+    assert row.status is BookingStatus.PENDING

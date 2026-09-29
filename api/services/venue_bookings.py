@@ -5,7 +5,12 @@ from datetime import datetime
 
 from core.database import Session
 from domain import venue_suitability
-from domain.event_request import EventRequestFields, field_names, validate_event_request
+from domain.event_request import (
+    EQUIPMENT_REQUIREMENT_FACILITIES,
+    EventRequestFields,
+    field_names,
+    validate_event_request,
+)
 from domain.validation import FieldProblem
 from domain.venue_booking import BookingStatus
 from models.event_request import EventRequest
@@ -30,11 +35,16 @@ def evaluate(
 ) -> venue_suitability.SuitabilityResult:
     venue = _validated_venue(db, event, venue_id, now)
     assert event.expected_attendance is not None
-    equipment = event.equipment_requirement or ""
+    equipment = event.equipment_requirement
+    required_facilities = (
+        [EQUIPMENT_REQUIREMENT_FACILITIES[equipment]] if equipment is not None else []
+    )
+    # `venue_requirement` is retained as event context, but Venue has no comparable
+    # venue-type field yet. SCRUM-38 therefore cannot include it in suitability scoring.
     return venue_suitability.evaluate_suitability(
         venue_suitability.SuitabilityEvent(
             expected_attendance=event.expected_attendance,
-            required_facilities=[equipment.removesuffix("-type requirement")],
+            required_facilities=required_facilities,
             accessibility_need=event.accessibility_requirement,
             layout_need=event.layout_requirement,
         ),
