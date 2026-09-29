@@ -1,5 +1,4 @@
-"""Availability queries for venue search (SCRUM-55). The only layer that reads the
-booking and unavailability tables (ADR-0003)."""
+"""Venue booking and unavailability persistence (SCRUM-55/SCRUM-38)."""
 
 import uuid
 from datetime import datetime
@@ -40,3 +39,19 @@ def venue_ids_with_unavailability_overlap(
         start_at < VenueUnavailability.ends_at,
     )
     return set(db.scalars(statement))
+
+
+def pending_for_event(db: Session, event_request_id: uuid.UUID) -> VenueBooking | None:
+    """Return the event's current pending request, if any."""
+    statement = select(VenueBooking).where(
+        VenueBooking.event_request_id == event_request_id,
+        VenueBooking.status == BookingStatus.PENDING,
+    )
+    return db.scalars(statement).first()
+
+
+def save_booking(db: Session, booking: VenueBooking) -> VenueBooking:
+    db.add(booking)
+    db.commit()
+    db.refresh(booking)
+    return booking

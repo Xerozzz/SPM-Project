@@ -3,6 +3,8 @@
 import uuid
 
 import pytest
+from sqlalchemy import event
+from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
 from models.event_request import EventRequest
@@ -17,6 +19,35 @@ def test_get_returns_the_row_or_none(db: Session, make_user: MakeUser) -> None:
 
     assert repo.get(db, draft.id) is draft
     assert repo.get(db, uuid.uuid4()) is None
+
+
+@pytest.mark.story("SCRUM-46")
+def test_get_for_update_locks_a_row_already_in_the_identity_map(
+    db: Session, make_user: MakeUser
+) -> None:
+    draft = make_draft(db, make_user("organiser"))
+    assert db.get(EventRequest, draft.id) is draft
+    statements: list[str] = []
+
+    def record_statement(
+        connection: Connection,
+        cursor: object,
+        statement: str,
+        parameters: object,
+        context: object,
+        executemany: bool,
+    ) -> None:
+        del connection, cursor, parameters, context, executemany
+        statements.append(statement)
+
+    connection = db.connection()
+    event.listen(connection, "before_cursor_execute", record_statement)
+    try:
+        assert repo.get_for_update(db, draft.id) is draft
+    finally:
+        event.remove(connection, "before_cursor_execute", record_statement)
+
+    assert any("FOR UPDATE" in statement.upper() for statement in statements)
 
 
 @pytest.mark.story("SCRUM-46")

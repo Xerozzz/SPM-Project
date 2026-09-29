@@ -113,6 +113,13 @@ def list_drafts(user: Organiser, db: Db) -> list[EventRequestRead]:
     return [EventRequestRead.model_validate(row) for row in rows]
 
 
+@router.get("/bookable", response_model=list[EventRequestRead])
+def list_bookable_events(user: Coordinator, db: Db) -> list[EventRequestRead]:
+    """Approved assigned requests this coordinator may submit for venue booking."""
+    rows = service.list_bookable_for_coordinator(db, _coordinator_id(user))
+    return [EventRequestRead.model_validate(row) for row in rows]
+
+
 @router.get("/{request_id}", response_model=EventRequestRead)
 def get_event_request(request: ViewableEventRequest) -> EventRequestRead:
     """Return an event request visible to the signed-in user."""

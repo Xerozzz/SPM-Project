@@ -14,3 +14,4 @@ class BookingStatus(StrEnum):
 
     CONFIRMED = "confirmed"
     PENDING = "pending"
+    REJECTED = "rejected"

@@ -20,12 +20,12 @@ def get(db: Session, request_id: uuid.UUID) -> EventRequest | None:
 def get_for_update(db: Session, request_id: uuid.UUID) -> EventRequest | None:
     """Return the request with this id, locked until the transaction ends.
 
-    SELECT ... FOR UPDATE makes a second caller wait for the first to commit, then hands
-    it the *committed* row — so two simultaneous submissions serialise: the second one
-    sees status SUBMITTED and the state machine refuses it. Correctness comes from the
-    database, not from a check-then-act in Python (same reasoning as ADR-0002).
+    `with_for_update` issues SELECT ... FOR UPDATE even if the request is already in the
+    identity map. `populate_existing` refreshes that in-memory object from the locked
+    read, so a caller that waited for another transaction sees its committed changes.
+    Together they serialise simultaneous submissions without a check-then-act race.
     """
-    return db.get(EventRequest, request_id, with_for_update=True)
+    return db.get(EventRequest, request_id, with_for_update=True, populate_existing=True)
 
 
 def list_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventRequest]:
@@ -44,6 +44,19 @@ def list_submitted(db: Session) -> list[EventRequest]:
         select(EventRequest)
         .where(EventRequest.status == EventStatus.SUBMITTED)
         .order_by(EventRequest.submitted_at.asc(), EventRequest.id.asc())
+    )
+    return list(db.scalars(statement))
+
+
+def list_bookable_for_coordinator(db: Session, coordinator_id: uuid.UUID) -> list[EventRequest]:
+    """Approved requests assigned to this coordinator for venue booking."""
+    statement = (
+        select(EventRequest)
+        .where(
+            EventRequest.status == EventStatus.APPROVED,
+            EventRequest.coordinator_id == coordinator_id,
+        )
+        .order_by(EventRequest.start_at.asc(), EventRequest.id.asc())
     )
     return list(db.scalars(statement))
 

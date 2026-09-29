@@ -1,6 +1,6 @@
 # ADR-0014: Keep a search-only venue_bookings table until booking allocation lands
 
-- **Status:** Proposed
+- **Status:** Superseded by ADR-0015
 - **Date:** 2026-09-26
 - **Deciders:** ConnectSphere team
 - **Related stories:** SCRUM-55, SCRUM-41, SCRUM-62

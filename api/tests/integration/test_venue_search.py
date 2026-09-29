@@ -17,6 +17,7 @@ in UTC, converting to SGT only for the operating-hours check.
 Each test names its Test Case ID.
 """
 
+import uuid
 from collections.abc import Callable
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
@@ -26,7 +27,11 @@ import httpx
 import pytest
 from sqlalchemy.orm import Session
 
+from domain.event_status import EventStatus
+from domain.roles import Role
 from domain.venue_booking import BookingStatus
+from models.event_request import EventRequest
+from models.organisation import Organisation
 from models.user import User
 from models.venue import Venue
 from models.venue_booking import VenueBooking
@@ -91,30 +96,56 @@ def _sgt(day: date, at: time) -> datetime:
     return datetime.combine(day, at, tzinfo=_SGT)
 
 
-def make_confirmed_booking(db: Session, venue: Venue, day: date, start: time, end: time) -> None:
-    """A confirmed hold on the venue for [start, end) SGT on day (TC-55-AC4-*)."""
+def _make_booking(
+    db: Session, venue: Venue, day: date, start: time, end: time, status: BookingStatus
+) -> None:
+    org = Organisation(name=f"Booking fixture organisation {uuid.uuid4()}")
+    db.add(org)
+    db.flush()
+    organiser = User(
+        email=f"{uuid.uuid4()}@example.com",
+        password_hash="test",
+        roles=[Role.ORGANISER.value],
+        organisation_id=org.id,
+    )
+    coordinator = User(
+        email=f"{uuid.uuid4()}@example.com",
+        password_hash="test",
+        roles=[Role.COORDINATOR.value],
+        organisation_id=org.id,
+    )
+    db.add_all([organiser, coordinator])
+    db.flush()
+    event = EventRequest(
+        organiser_id=organiser.id,
+        status=EventStatus.APPROVED,
+        start_at=_sgt(day, start),
+        end_at=_sgt(day, end),
+        coordinator_id=coordinator.id,
+    )
+    db.add(event)
+    db.flush()
     db.add(
         VenueBooking(
+            event_request_id=event.id,
             venue_id=venue.id,
+            requested_by_id=coordinator.id,
             start_at=_sgt(day, start),
             end_at=_sgt(day, end),
-            status=BookingStatus.CONFIRMED,
+            status=status,
         )
     )
     db.flush()
+
+
+def make_confirmed_booking(db: Session, venue: Venue, day: date, start: time, end: time) -> None:
+    """A confirmed hold on the venue for [start, end) SGT on day (TC-55-AC4-*)."""
+    _make_booking(db, venue, day, start, end, BookingStatus.CONFIRMED)
 
 
 def make_pending_request(db: Session, venue: Venue, day: date, start: time, end: time) -> None:
     """A pending (not confirmed) request overlapping the slot (TC-55-AC6-01)."""
-    db.add(
-        VenueBooking(
-            venue_id=venue.id,
-            start_at=_sgt(day, start),
-            end_at=_sgt(day, end),
-            status=BookingStatus.PENDING,
-        )
-    )
-    db.flush()
+    _make_booking(db, venue, day, start, end, BookingStatus.PENDING)
 
 
 def make_unavailability_block(db: Session, venue: Venue, day: date, start: time, end: time) -> None:
