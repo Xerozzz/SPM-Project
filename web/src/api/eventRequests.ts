@@ -2,8 +2,7 @@
  * Event request API calls for organisers. Mirrors api/schemas/event_requests.py.
  */
 
-export type EventStatus =
-  'draft' | 'submitted' | 'approved' | 'rejected'
+export type EventStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'confirmed'
 
 export type EventAction = 'edit' | 'submit' | 'approve' | 'reject'
 
@@ -84,6 +83,26 @@ export interface FieldProblem {
   reason: string
 }
 
+export interface VenueSuitability {
+  mismatch_codes: string[]
+  expected_attendance: number
+  venue_capacity: number
+  unavailable_facilities: string[]
+  accessibility_need: string | null
+  venue_accessibility: string[]
+  layout_need: string | null
+  venue_layouts: string[]
+}
+
+export interface VenueBookingSubmission {
+  id: string
+  venue_id: string
+  start_at: string
+  end_at: string
+  status: 'pending'
+  suitability: VenueSuitability
+}
+
 /** Thrown when the API answers 422 with field-level validation problems. */
 export class EventRequestValidationError extends Error {
   readonly problems: FieldProblem[]
@@ -104,12 +123,7 @@ export class SubmissionRejectedError extends EventRequestValidationError {
 }
 
 function parseValidationProblems(body: unknown): FieldProblem[] | null {
-  if (
-    !body ||
-    typeof body !== 'object' ||
-    !('detail' in body) ||
-    !Array.isArray(body.detail)
-  ) {
+  if (!body || typeof body !== 'object' || !('detail' in body) || !Array.isArray(body.detail)) {
     return null
   }
 
@@ -160,6 +174,12 @@ export async function listMyEventRequests(token: string): Promise<EventRequest[]
 export async function listRequestsForReview(token: string): Promise<EventRequest[]> {
   const response = await fetch('/api/event-requests/reviewable', { headers: authHeaders(token) })
   if (!response.ok) throw new Error(`Could not load submitted requests (${response.status})`)
+  return (await response.json()) as EventRequest[]
+}
+
+export async function listBookableEventRequests(token: string): Promise<EventRequest[]> {
+  const response = await fetch('/api/event-requests/bookable', { headers: authHeaders(token) })
+  if (!response.ok) throw new Error(`Could not load bookable requests (${response.status})`)
   return (await response.json()) as EventRequest[]
 }
 
@@ -265,6 +285,42 @@ export async function rejectEventRequest(
   })
   if (!response.ok) throw new Error(`Rejection failed (${response.status})`)
   return (await response.json()) as EventRequest
+}
+
+async function readBookingResponse<T>(response: Response): Promise<T> {
+  if (response.status === 422) {
+    const problems = parseValidationProblems(await response.json())
+    if (problems) throw new EventRequestValidationError(problems)
+  }
+  if (!response.ok) throw new Error(`Booking request failed (${response.status})`)
+  return (await response.json()) as T
+}
+
+export async function getVenueSuitability(
+  token: string,
+  eventId: string,
+  venueId: string,
+): Promise<VenueSuitability> {
+  const query = new URLSearchParams({ venue_id: venueId })
+  return readBookingResponse(
+    await fetch(`/api/event-requests/${eventId}/venue-bookings/suitability?${query}`, {
+      headers: authHeaders(token),
+    }),
+  )
+}
+
+export async function submitVenueBooking(
+  token: string,
+  eventId: string,
+  venueId: string,
+): Promise<VenueBookingSubmission> {
+  return readBookingResponse(
+    await fetch(`/api/event-requests/${eventId}/venue-bookings`, {
+      method: 'POST',
+      headers: jsonHeaders(token),
+      body: JSON.stringify({ venue_id: venueId }),
+    }),
+  )
 }
 
 /** Human-readable field names, in the order the ticket lists them. */

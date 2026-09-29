@@ -39,10 +39,12 @@ function signInAsCoordinator() {
   )
 }
 
-function renderReview(requests: unknown[]) {
+function renderReview(reviewable: unknown[], bookable: unknown[] = []) {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const key = `${init?.method ?? 'GET'} ${String(input)}`
-    if (key === 'GET /api/event-requests/reviewable') return json(requests)
+    if (key === 'GET /api/event-requests/reviewable') return json(reviewable)
+    if (key === 'GET /api/event-requests/bookable') return json(bookable)
+    if (key === 'GET /api/venues') return json([])
     if (key.endsWith('/clarifications')) return json([])
     if (key === 'POST /api/event-requests/req-1/approve') {
       return json({ ...submitted, status: 'approved' })
@@ -93,4 +95,80 @@ test('an unassigned request offers no decision buttons either', async () => {
   expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
   // Not the same sentence as "assigned to another coordinator": nobody is assigned here.
   expect(screen.getByText(/Not assigned to a coordinator yet/)).toBeInTheDocument()
+})
+
+test('coordinator events include submitted and approved bookable requests', async () => {
+  signInAsCoordinator()
+  const approved = {
+    ...submitted,
+    id: 'req-2',
+    name: 'Awards Night',
+    status: 'approved',
+    status_permits: [],
+  }
+  renderReview([submitted], [approved])
+
+  expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
+  expect(screen.getByText('Awards Night')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Venue booking request' })).toBeInTheDocument()
+})
+
+test('approved event previews advisory warnings and submits a pending booking request', async () => {
+  signInAsCoordinator()
+  const approved = { ...submitted, status: 'approved', status_permits: [] }
+  const suitability = {
+    mismatch_codes: ['CAPACITY_EXCEEDED'],
+    expected_attendance: 200,
+    venue_capacity: 100,
+    unavailable_facilities: ['Projector'],
+    accessibility_need: 'Step-free access',
+    venue_accessibility: ['Lift access'],
+    layout_need: 'Theatre',
+    venue_layouts: ['classroom'],
+  }
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const key = `${init?.method ?? 'GET'} ${String(input)}`
+    if (key === 'GET /api/event-requests/reviewable') return json([])
+    if (key === 'GET /api/event-requests/bookable') return json([approved])
+    if (key === 'GET /api/venues') {
+      return json([{ id: 'venue-1', name: 'Small Hall', is_active: true }])
+    }
+    if (key.includes('/venue-bookings/suitability?venue_id=venue-1')) return json(suitability)
+    if (key === 'POST /api/event-requests/req-1/venue-bookings') {
+      return json({
+        id: 'booking-1',
+        venue_id: 'venue-1',
+        start_at: approved.start_at,
+        end_at: approved.end_at,
+        status: 'pending',
+        suitability,
+      })
+    }
+    throw new Error(`unexpected request ${key}`)
+  })
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={client}>
+      <AuthProvider>
+        <EventRequestReview />
+      </AuthProvider>
+    </QueryClientProvider>,
+  )
+
+  await screen.findByRole('option', { name: 'Small Hall' })
+  fireEvent.change(screen.getByLabelText('Active venue'), {
+    target: { value: 'venue-1' },
+  })
+  expect(await screen.findByText(/Capacity mismatch/)).toBeInTheDocument()
+  expect(screen.getByText('Missing facilities: Projector')).toBeInTheDocument()
+  expect(screen.getByText('Venue accessibility: Lift access')).toBeInTheDocument()
+  expect(screen.getByText('Supported layouts: classroom')).toBeInTheDocument()
+  const submit = screen.getByRole('button', { name: 'Submit booking request' })
+  expect(submit).toBeEnabled()
+  fireEvent.click(submit)
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    'Booking request submitted. Status: pending.',
+  )
+  expect(screen.getByText(/Capacity mismatch/)).toBeInTheDocument()
 })
