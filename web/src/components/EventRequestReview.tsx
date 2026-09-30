@@ -4,12 +4,14 @@ import { useState } from 'react'
 import {
   approveEventRequest,
   type EventRequest,
+  listBookableEventRequests,
   listRequestsForReview,
   rejectEventRequest,
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
 import { hasReviewNote } from '../validation/eventRequestReview'
 import ClarificationThread from './ClarificationThread'
+import VenueBookingRequest from './VenueBookingRequest'
 
 /**
  * Whose request this is, from the viewer's side. `status_permits` cannot answer it: it
@@ -29,10 +31,18 @@ export default function EventRequestReview() {
   const client = useQueryClient()
   const [reason, setReason] = useState<Record<string, string>>({})
   const [outcome, setOutcome] = useState<string | null>(null)
-  const queryKey = ['event-requests', 'reviewable', token]
+  const queryKey = ['event-requests', 'coordinator', token]
   const requests = useQuery({
     queryKey,
-    queryFn: () => listRequestsForReview(token ?? ''),
+    queryFn: async () => {
+      const [reviewable, bookable] = await Promise.all([
+        listRequestsForReview(token ?? ''),
+        listBookableEventRequests(token ?? ''),
+      ])
+      return [
+        ...new Map([...reviewable, ...bookable].map((request) => [request.id, request])).values(),
+      ]
+    },
     enabled: token !== null,
   })
   const refresh = () => void client.invalidateQueries({ queryKey })
@@ -53,7 +63,7 @@ export default function EventRequestReview() {
   })
   return (
     <section className="mt-6 rounded-lg border border-slate-200 p-4">
-      <h2 className="font-medium">Submitted event requests</h2>
+      <h2 className="font-medium">Coordinator events</h2>
       {requests.isPending && <p className="mt-2 text-sm">Loading…</p>}
       {requests.isError && (
         <p role="alert" className="mt-2 text-sm text-red-600">
@@ -61,7 +71,7 @@ export default function EventRequestReview() {
         </p>
       )}
       {requests.data?.length === 0 && (
-        <p className="mt-2 text-sm text-slate-500">No requests are awaiting review.</p>
+        <p className="mt-2 text-sm text-slate-500">No coordinator events are available.</p>
       )}
       {requests.data?.map((request) => (
         <ReviewCard
@@ -182,7 +192,10 @@ function ReviewCard({
           </button>
         )}
       </div>
-      <ClarificationThread eventRequestId={request.id} mode="coordinator" />
+      {request.status === 'submitted' && (
+        <ClarificationThread eventRequestId={request.id} mode="coordinator" />
+      )}
+      {request.status === 'approved' && <VenueBookingRequest event={request} />}
     </article>
   )
 }
