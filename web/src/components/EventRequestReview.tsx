@@ -39,9 +39,7 @@ export default function EventRequestReview() {
         listRequestsForReview(token ?? ''),
         listBookableEventRequests(token ?? ''),
       ])
-      return [
-        ...new Map([...reviewable, ...bookable].map((request) => [request.id, request])).values(),
-      ]
+      return [...reviewable, ...bookable]
     },
     enabled: token !== null,
   })
@@ -192,10 +190,10 @@ function ReviewCard({
           </button>
         )}
       </div>
-      {request.status === 'submitted' && (
-        <ClarificationThread eventRequestId={request.id} mode="coordinator" />
+      <ClarificationThread eventRequestId={request.id} mode="coordinator" />
+      {assignment === 'mine' && request.status === 'approved' && (
+        <VenueBookingRequest event={request} />
       )}
-      {request.status === 'approved' && <VenueBookingRequest event={request} />}
     </article>
   )
 }

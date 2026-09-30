@@ -28,7 +28,7 @@ export default function VenueBookingRequest({ event }: { event: EventRequest }) 
     mutationFn: () => submitVenueBooking(token ?? '', event.id, venueId),
   })
   const result = submit.data?.suitability ?? suitability.data
-  const error = venues.error ?? submit.error ?? suitability.error
+  const error = submit.error ?? suitability.error ?? venues.error
 
   return (
     <div className="mt-3 border-t border-slate-200 pt-3">
@@ -69,7 +69,7 @@ export default function VenueBookingRequest({ event }: { event: EventRequest }) 
       </button>
       {submit.data && (
         <p role="status" className="mt-2 bg-green-50 p-2 text-sm text-green-800">
-          Booking request submitted. Status: pending.
+          Booking request submitted. Status: {submit.data.status}.
         </p>
       )}
     </div>
