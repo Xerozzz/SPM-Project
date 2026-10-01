@@ -1,7 +1,7 @@
 """Venue booking approval conflicts (SCRUM-73): pure, no I/O, no database."""
 
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -115,6 +115,19 @@ def test_earliest_clashing_booking_is_named_whatever_the_input_order() -> None:
     assert raised.value.booking == earlier
 
 
+@pytest.mark.story("SCRUM-73")
+def test_equal_start_clashing_bookings_name_the_lowest_id_whatever_the_input_order() -> None:
+    low = BookedPeriod(id=UUID(int=1), status=BookingStatus.CONFIRMED, start_at=_START, end_at=_END)
+    high = BookedPeriod(
+        id=UUID(int=2), status=BookingStatus.CONFIRMED, start_at=_START, end_at=_END
+    )
+
+    for order in ([low, high], [high, low]):
+        with pytest.raises(ConflictingBookingError) as raised:
+            ensure_no_conflict(_START, _END, order, [])
+        assert raised.value.booking == low
+
+
 # ------------------------------------------------------------------ closures (AC3, AC5)
 
 
@@ -143,6 +156,19 @@ def test_earliest_clashing_unavailability_is_named_whatever_the_input_order() ->
         ensure_no_conflict(_START, _END, [], [later, earlier])
 
     assert raised.value.period == earlier
+
+
+@pytest.mark.story("SCRUM-73")
+def test_equal_start_clashing_unavailabilities_name_the_lowest_id_whatever_the_input_order() -> (
+    None
+):
+    low = UnavailablePeriod(id=UUID(int=1), starts_at=_START, ends_at=_END)
+    high = UnavailablePeriod(id=UUID(int=2), starts_at=_START, ends_at=_END)
+
+    for order in ([low, high], [high, low]):
+        with pytest.raises(VenueUnavailableError) as raised:
+            ensure_no_conflict(_START, _END, [], order)
+        assert raised.value.period == low
 
 
 @pytest.mark.story("SCRUM-73")

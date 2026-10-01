@@ -63,21 +63,29 @@ def other_bookings_overlapping(db: Session, booking: VenueBooking) -> list[Venue
     re-applies the same rule. The booking itself is excluded so re-checking a booking
     never reports it as conflicting with itself.
     """
-    statement = select(VenueBooking).where(
-        VenueBooking.venue_id == booking.venue_id,
-        VenueBooking.id != booking.id,
-        VenueBooking.start_at < booking.end_at,
-        booking.start_at < VenueBooking.end_at,
+    statement = (
+        select(VenueBooking)
+        .where(
+            VenueBooking.venue_id == booking.venue_id,
+            VenueBooking.id != booking.id,
+            VenueBooking.start_at < booking.end_at,
+            booking.start_at < VenueBooking.end_at,
+        )
+        .order_by(VenueBooking.start_at, VenueBooking.id)
     )
     return list(db.scalars(statement))
 
 
 def unavailabilities_overlapping(db: Session, booking: VenueBooking) -> list[VenueUnavailability]:
     """Closures on `booking`'s venue overlapping its period, half-open (SCRUM-73 AC3/AC5)."""
-    statement = select(VenueUnavailability).where(
-        VenueUnavailability.venue_id == booking.venue_id,
-        VenueUnavailability.starts_at < booking.end_at,
-        booking.start_at < VenueUnavailability.ends_at,
+    statement = (
+        select(VenueUnavailability)
+        .where(
+            VenueUnavailability.venue_id == booking.venue_id,
+            VenueUnavailability.starts_at < booking.end_at,
+            booking.start_at < VenueUnavailability.ends_at,
+        )
+        .order_by(VenueUnavailability.starts_at, VenueUnavailability.id)
     )
     return list(db.scalars(statement))
 

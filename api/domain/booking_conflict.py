@@ -69,9 +69,9 @@ def ensure_no_conflict(
 
     Only a CONFIRMED booking blocks (AC4: pending, rejected and cancelled never do),
     using the same status rule as venue search. Adjacent periods do not overlap (AC2,
-    AC5). When several things clash, the earliest-starting one is named so the result
-    does not depend on the order the caller happened to load rows in. Bookings are
-    checked before closures: a clash with another event is the more actionable message.
+    AC5). When several things clash, the earliest-starting one is named, ties broken by
+    lowest id, so the result does not depend on input order. Bookings are checked
+    before closures: a clash with another event is the more actionable message.
     """
     clashing_bookings = [
         booking
@@ -80,7 +80,7 @@ def ensure_no_conflict(
         and intervals_overlap(start_at, end_at, booking.start_at, booking.end_at)
     ]
     if clashing_bookings:
-        raise ConflictingBookingError(min(clashing_bookings, key=lambda b: b.start_at))
+        raise ConflictingBookingError(min(clashing_bookings, key=lambda b: (b.start_at, b.id)))
 
     clashing_closures = [
         period
@@ -88,4 +88,4 @@ def ensure_no_conflict(
         if intervals_overlap(start_at, end_at, period.starts_at, period.ends_at)
     ]
     if clashing_closures:
-        raise VenueUnavailableError(min(clashing_closures, key=lambda p: p.starts_at))
+        raise VenueUnavailableError(min(clashing_closures, key=lambda p: (p.starts_at, p.id)))
