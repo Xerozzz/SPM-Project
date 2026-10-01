@@ -1,10 +1,12 @@
-"""Submit pending venue booking requests for approved events (SCRUM-38)."""
+"""Submit pending venue booking requests for approved events (SCRUM-38), and check
+whether one can be approved without a conflict (SCRUM-73)."""
 
 import uuid
 from datetime import datetime
 
 from core.database import Session
 from domain import venue_suitability
+from domain.booking_conflict import BookedPeriod, UnavailablePeriod, ensure_no_conflict
 from domain.event_request import (
     EQUIPMENT_REQUIREMENT_FACILITIES,
     EventRequestFields,
@@ -28,6 +30,10 @@ class InvalidBookingRequestError(Exception):
 
 class PendingBookingExistsError(Exception):
     pass
+
+
+class BookingNotFoundError(Exception):
+    """No venue booking has that id."""
 
 
 def evaluate(
@@ -75,6 +81,29 @@ def submit(
         status=BookingStatus.PENDING,
     )
     return booking_repo.save_booking(db, booking), suitability
+
+
+def check_approvable(db: Session, booking_id: uuid.UUID) -> VenueBooking:
+    """SCRUM-73: raise a `domain.booking_conflict.BookingConflictError` naming whatever
+    blocks approving this booking, or return it if nothing does.
+
+    Conflict detection only. It does not change the booking's status (SCRUM-40 owns the
+    approve action and calls this first) and it does not lock: two simultaneous approvals
+    can both pass, which SCRUM-74's exclusion constraint closes (ADR-0002, ADR-0016).
+    """
+    booking = booking_repo.get_booking(db, booking_id)
+    if booking is None:
+        raise BookingNotFoundError
+    others = [
+        BookedPeriod(id=row.id, status=row.status, start_at=row.start_at, end_at=row.end_at)
+        for row in booking_repo.other_bookings_overlapping(db, booking)
+    ]
+    closures = [
+        UnavailablePeriod(id=row.id, starts_at=row.starts_at, ends_at=row.ends_at)
+        for row in booking_repo.unavailabilities_overlapping(db, booking)
+    ]
+    ensure_no_conflict(booking.start_at, booking.end_at, others, closures)
+    return booking
 
 
 def _validated_venue(db: Session, event: EventRequest, venue_id: uuid.UUID, now: datetime) -> Venue:

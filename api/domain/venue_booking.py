@@ -15,3 +15,6 @@ class BookingStatus(StrEnum):
     CONFIRMED = "confirmed"
     PENDING = "pending"
     REJECTED = "rejected"
+    # SCRUM-73 AC4: named so the conflict rule can prove a cancelled hold never blocks.
+    # Nothing sets it yet; no migration needed (status is a non-native VARCHAR enum).
+    CANCELLED = "cancelled"
