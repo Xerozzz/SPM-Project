@@ -28,6 +28,7 @@ someone else made two weeks ago.
 | [0015](0015-venue-booking-requests.md) | Adopt venue_bookings for pending venue requests | Proposed |
 | [0016](0016-application-booking-conflict-check-before-constraint.md) | Ship the application booking-conflict check before the exclusion constraint | Superseded by ADR-0017 |
 | [0017](0017-venue-booking-approval-concurrency.md) | Enforce booking approval with the exclusion constraint and a booking-row lock | Proposed |
+| [0018](0018-venue-booking-decisions.md) | Store the Venue Staff decision on the venue booking row | Proposed |
 
 ## When to write one
 
