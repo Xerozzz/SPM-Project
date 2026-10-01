@@ -15,6 +15,15 @@ from models.venue_unavailability import VenueUnavailability
 MakeUser = Callable[..., User]
 MakeClient = Callable[[User | None], httpx.AsyncClient]
 
+# Relative to now, not a fixed date: closures that have already ended are rejected, so a
+# hard-coded day stops being valid once it passes.
+_DAY = (datetime.now(UTC) + timedelta(days=30)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def at(day_offset: int, hour: int) -> str:
+    """`hour`:00 UTC on `_DAY` + `day_offset`, formatted as the API returns it."""
+    return (_DAY + timedelta(days=day_offset, hours=hour)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
 
 def make_venue(db: Session, *, is_active: bool = True) -> Venue:
     venue = Venue(
@@ -35,8 +44,8 @@ def make_venue(db: Session, *, is_active: bool = True) -> Venue:
 
 def body(**overrides: object) -> dict[str, object]:
     values: dict[str, object] = {
-        "starts_at": "2026-10-01T09:00:00Z",
-        "ends_at": "2026-10-01T11:00:00Z",
+        "starts_at": at(0, 9),
+        "ends_at": at(0, 11),
         "reason": "Air-conditioning maintenance",
     }
     values.update(overrides)
@@ -54,7 +63,7 @@ async def test_venue_staff_create_and_list_an_unavailability(
 
     assert created.status_code == 201
     assert created.json()["reason"] == "Air-conditioning maintenance"
-    assert created.json()["starts_at"] == "2026-10-01T09:00:00Z"
+    assert created.json()["starts_at"] == at(0, 9)
     assert [record["id"] for record in listed.json()] == [created.json()["id"]]
     assert db.get(VenueUnavailability, uuid.UUID(created.json()["id"])) is not None
 
@@ -68,12 +77,12 @@ async def test_venue_staff_edit_a_record_without_creating_another(
         created = await client.post(f"/api/venues/{venue.id}/unavailabilities", json=body())
         updated = await client.put(
             f"/api/venues/{venue.id}/unavailabilities/{created.json()['id']}",
-            json=body(ends_at="2026-10-01T12:00:00Z", reason="Extended maintenance"),
+            json=body(ends_at=at(0, 12), reason="Extended maintenance"),
         )
 
     assert updated.status_code == 200
     assert updated.json()["reason"] == "Extended maintenance"
-    assert updated.json()["ends_at"] == "2026-10-01T12:00:00Z"
+    assert updated.json()["ends_at"] == at(0, 12)
     assert len(db.query(VenueUnavailability).all()) == 1
 
 
@@ -89,8 +98,8 @@ async def test_venue_staff_delete_a_record(
         second = await client.post(
             url,
             json=body(
-                starts_at="2026-10-02T09:00:00Z",
-                ends_at="2026-10-02T11:00:00Z",
+                starts_at=at(1, 9),
+                ends_at=at(1, 11),
             ),
         )
         deleted = await client.delete(f"{url}/{first.json()['id']}")
@@ -132,7 +141,7 @@ async def test_create_rejects_an_inactive_venue_and_invalid_period(
         )
         invalid_response = await client.post(
             f"/api/venues/{active.id}/unavailabilities",
-            json=body(ends_at="2026-10-01T09:00:00Z"),
+            json=body(ends_at=at(0, 9)),
         )
 
     assert inactive_response.status_code == 409
