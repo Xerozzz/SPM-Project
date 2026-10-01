@@ -1,11 +1,12 @@
-"""Submit pending venue booking requests for approved events (SCRUM-38), and check
-whether one can be approved without a conflict (SCRUM-73)."""
+"""Submit pending venue booking requests for approved events (SCRUM-38), check
+whether one can be approved without a conflict (SCRUM-73), and approve it safely under
+concurrency (SCRUM-74, which also absorbs SCRUM-40's approve action — see ADR-0017)."""
 
 import uuid
 from datetime import datetime
 
 from core.database import Session
-from domain import venue_suitability
+from domain import venue_booking, venue_suitability
 from domain.booking_conflict import BookedPeriod, UnavailablePeriod, ensure_no_conflict
 from domain.event_request import (
     EQUIPMENT_REQUIREMENT_FACILITIES,
@@ -87,13 +88,36 @@ def check_approvable(db: Session, booking_id: uuid.UUID) -> VenueBooking:
     """SCRUM-73: raise a `domain.booking_conflict.BookingConflictError` naming whatever
     blocks approving this booking, or return it if nothing does.
 
-    Conflict detection only. It does not change the booking's status (SCRUM-40 owns the
-    approve action and calls this first) and it does not lock: two simultaneous approvals
-    can both pass, which SCRUM-74's exclusion constraint closes (ADR-0002, ADR-0016).
+    A read-only preview: it neither locks nor changes status. `approve` runs the same
+    check on a locked row, and the exclusion constraint backs it up (ADR-0002, ADR-0017).
     """
     booking = booking_repo.get_booking(db, booking_id)
     if booking is None:
         raise BookingNotFoundError
+    _ensure_no_conflict(db, booking)
+    return booking
+
+
+def approve(db: Session, booking_id: uuid.UUID) -> VenueBooking:
+    """SCRUM-74 (absorbs SCRUM-40's approve action): confirm a pending booking request.
+
+    1. Lock the booking row, so two staff approving the same request take turns and the
+       second is refused by the status transition (checked first, so a booking that is
+       not pending is reported as such rather than as a conflict).
+    2. Run the SCRUM-73 check, for a named, friendly refusal in the common case.
+    3. Commit. If an overlapping request was approved concurrently and the check raced,
+       the exclusion constraint refuses the commit (ConcurrentBookingConflictError).
+    """
+    booking = booking_repo.get_booking_for_update(db, booking_id)
+    if booking is None:
+        raise BookingNotFoundError
+    confirmed = venue_booking.approve(booking.status)
+    _ensure_no_conflict(db, booking)
+    booking.status = confirmed
+    return booking_repo.save_confirmed_booking(db, booking)
+
+
+def _ensure_no_conflict(db: Session, booking: VenueBooking) -> None:
     others = [
         BookedPeriod(id=row.id, status=row.status, start_at=row.start_at, end_at=row.end_at)
         for row in booking_repo.other_bookings_overlapping(db, booking)
@@ -103,7 +127,6 @@ def check_approvable(db: Session, booking_id: uuid.UUID) -> VenueBooking:
         for row in booking_repo.unavailabilities_overlapping(db, booking)
     ]
     ensure_no_conflict(booking.start_at, booking.end_at, others, closures)
-    return booking
 
 
 def _validated_venue(db: Session, event: EventRequest, venue_id: uuid.UUID, now: datetime) -> Venue:

@@ -3,7 +3,10 @@
 Search (AC4/AC6) treats only `confirmed` rows as blocking: a pending request never
 excludes a venue. The half-open overlap rule itself lives in domain/venue_search.py;
 the repository issues the overlap query with bound parameters, never string SQL.
-SCRUM-38 writes pending requests; SCRUM-41 still owns confirmation and conflicts.
+SCRUM-38 writes pending requests; SCRUM-74 confirms them. Migration 0012 adds the
+ADR-0002 exclusion constraint `venue_bookings_no_confirmed_overlap`: no two confirmed
+rows for one venue may overlap. It is declared only in the migration, because Alembic
+autogenerate does not reflect EXCLUDE constraints.
 """
 
 import uuid

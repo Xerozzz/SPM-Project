@@ -1,11 +1,14 @@
-"""Venue booking and unavailability persistence (SCRUM-55/SCRUM-38/SCRUM-73)."""
+"""Venue booking and unavailability persistence (SCRUM-55/SCRUM-38/SCRUM-73/SCRUM-74)."""
 
 import uuid
 from datetime import datetime
 
+from psycopg.errors import ExclusionViolation
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from domain.booking_conflict import ConcurrentBookingConflictError
 from domain.venue_booking import BookingStatus
 from models.venue_booking import VenueBooking
 from models.venue_unavailability import VenueUnavailability
@@ -55,6 +58,17 @@ def get_booking(db: Session, booking_id: uuid.UUID) -> VenueBooking | None:
     return db.get(VenueBooking, booking_id)
 
 
+def get_booking_for_update(db: Session, booking_id: uuid.UUID) -> VenueBooking | None:
+    """Return the booking with this id, locked until the transaction ends (SCRUM-74).
+
+    Locks the booking row only, never the venue (ADR-0002 rejected per-venue locking): two
+    approvals of the *same* request serialise here, and the second sees the first's status.
+    Overlapping *different* requests are kept apart by the exclusion constraint instead.
+    Same pattern as repositories.event_requests.get_for_update.
+    """
+    return db.get(VenueBooking, booking_id, with_for_update=True, populate_existing=True)
+
+
 def other_bookings_overlapping(db: Session, booking: VenueBooking) -> list[VenueBooking]:
     """Every other booking on the same venue overlapping `booking`'s period (SCRUM-73).
 
@@ -95,3 +109,20 @@ def save_booking(db: Session, booking: VenueBooking) -> VenueBooking:
     db.commit()
     db.refresh(booking)
     return booking
+
+
+def save_confirmed_booking(db: Session, booking: VenueBooking) -> VenueBooking:
+    """Commit a newly confirmed booking, translating the ADR-0002 exclusion constraint.
+
+    If another overlapping booking on this venue was confirmed and committed after our
+    friendly check ran, `venue_bookings_no_confirmed_overlap` refuses this commit. Only
+    that violation becomes a domain conflict; any other integrity error is a bug and is
+    re-raised unchanged.
+    """
+    try:
+        return save_booking(db, booking)
+    except IntegrityError as exc:
+        db.rollback()
+        if isinstance(exc.orig, ExclusionViolation):
+            raise ConcurrentBookingConflictError from exc
+        raise

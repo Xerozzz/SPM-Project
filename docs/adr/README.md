@@ -26,7 +26,8 @@ someone else made two weeks ago.
 | [0013](0013-venue-unavailability-before-booking.md) | Record venue unavailability before booking allocation exists | Proposed |
 | [0014](0014-venue-bookings-search-scaffolding.md) | Keep a search-only venue_bookings table until booking allocation lands | Superseded by ADR-0015 |
 | [0015](0015-venue-booking-requests.md) | Adopt venue_bookings for pending venue requests | Proposed |
-| [0016](0016-application-booking-conflict-check-before-constraint.md) | Ship the application booking-conflict check before the exclusion constraint | Proposed |
+| [0016](0016-application-booking-conflict-check-before-constraint.md) | Ship the application booking-conflict check before the exclusion constraint | Superseded by ADR-0017 |
+| [0017](0017-venue-booking-approval-concurrency.md) | Enforce booking approval with the exclusion constraint and a booking-row lock | Proposed |
 
 ## When to write one
 

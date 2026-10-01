@@ -1,6 +1,6 @@
 # ADR-0016: Ship the application booking-conflict check before the exclusion constraint
 
-- **Status:** Proposed
+- **Status:** Superseded by ADR-0017
 - **Date:** 2026-10-01
 - **Deciders:** ConnectSphere team
 - **Related stories:** SCRUM-73, SCRUM-74, SCRUM-40, SCRUM-62

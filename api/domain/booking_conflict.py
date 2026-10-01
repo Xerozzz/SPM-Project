@@ -7,8 +7,8 @@ them blocks approval, and names the one that does.
 The half-open [start, end) overlap rule is `domain.venue_search.intervals_overlap`,
 reused rather than restated, so venue search and booking approval cannot disagree about
 whether back-to-back periods clash. This check gives a friendly, named refusal; the
-database exclusion constraint from ADR-0002 is deferred to SCRUM-74 — see
-docs/adr/0016-application-booking-conflict-check-before-constraint.md.
+database exclusion constraint from ADR-0002 (SCRUM-74, ADR-0017) is what guarantees it
+under concurrency, and `ConcurrentBookingConflictError` is how its violation is reported.
 """
 
 from collections.abc import Iterable
@@ -49,6 +49,14 @@ class ConflictingBookingError(BookingConflictError):
     def __init__(self, booking: BookedPeriod) -> None:
         super().__init__(f"conflicts with confirmed booking {booking.id}")
         self.booking = booking
+
+
+class ConcurrentBookingConflictError(BookingConflictError):
+    """SCRUM-74 AC1: the friendly check passed, but another approval for an overlapping
+    period committed first and the database exclusion constraint refused this one."""
+
+    def __init__(self) -> None:
+        super().__init__("conflicts with a booking confirmed at the same time")
 
 
 class VenueUnavailableError(BookingConflictError):
