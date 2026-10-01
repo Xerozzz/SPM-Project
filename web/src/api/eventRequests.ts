@@ -290,7 +290,7 @@ export async function rejectEventRequest(
 }
 
 async function readBookingResponse<T>(response: Response): Promise<T> {
-  const body = (await response.json()) as unknown
+  const body = (await response.json().catch(() => null)) as unknown
   if (response.status === 422) {
     const problems = parseValidationProblems(body)
     if (problems) throw new EventRequestValidationError(problems)

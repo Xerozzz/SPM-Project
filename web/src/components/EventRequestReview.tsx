@@ -39,6 +39,7 @@ export default function EventRequestReview() {
         listRequestsForReview(token ?? ''),
         listBookableEventRequests(token ?? ''),
       ])
+      // Disjoint by construction: /reviewable is SUBMITTED only, /bookable is APPROVED only.
       return [...reviewable, ...bookable]
     },
     enabled: token !== null,
@@ -190,7 +191,11 @@ function ReviewCard({
           </button>
         )}
       </div>
-      <ClarificationThread eventRequestId={request.id} mode="coordinator" />
+      <ClarificationThread
+        eventRequestId={request.id}
+        mode="coordinator"
+        canRequest={assignment === 'mine' && request.status === 'submitted'}
+      />
       {assignment === 'mine' && request.status === 'approved' && (
         <VenueBookingRequest event={request} />
       )}

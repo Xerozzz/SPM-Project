@@ -91,7 +91,7 @@ function renderBookingReview(submission: unknown, status = 200) {
     if (key.endsWith('/clarifications')) return json([])
     if (key.includes('/venue-bookings/suitability?venue_id=venue-1')) return json(suitability)
     if (key === 'POST /api/event-requests/req-1/venue-bookings') {
-      return json(submission, status)
+      return submission instanceof Response ? submission : json(submission, status)
     }
     throw new Error(`unexpected request ${key}`)
   })
@@ -111,6 +111,7 @@ test('coordinator reviews a request assigned to them and approves it', async () 
 
   expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
   expect(screen.getByText('Auditorium')).toBeInTheDocument()
+  expect(screen.getByLabelText('Clarification request')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
   expect(await screen.findByRole('status')).toHaveTextContent(
     '“Orientation Day” has been approved.',
@@ -165,6 +166,8 @@ test('approved event assigned to another coordinator hides the booking UI', asyn
   expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
   expect(screen.queryByRole('heading', { name: 'Venue booking request' })).not.toBeInTheDocument()
   expect(screen.getByRole('region', { name: 'Clarification history' })).toBeInTheDocument()
+  expect(await screen.findByText('No clarification messages yet.')).toBeInTheDocument()
+  expect(screen.queryByLabelText('Clarification request')).not.toBeInTheDocument()
 })
 
 test('approved event previews advisory warnings and submits a pending booking request', async () => {
@@ -209,4 +212,18 @@ test('booking conflict shows the backend detail', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'A pending booking request already exists.',
   )
+})
+
+test('booking failure with a non-JSON body shows the generic status error', async () => {
+  signInAsCoordinator()
+  renderBookingReview(new Response(null, { status: 500 }))
+
+  await screen.findByRole('option', { name: 'Small Hall' })
+  fireEvent.change(screen.getByLabelText('Active venue'), {
+    target: { value: 'venue-1' },
+  })
+  await screen.findByText(/Capacity mismatch/)
+  fireEvent.click(screen.getByRole('button', { name: 'Submit booking request' }))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Booking request failed (500)')
 })
