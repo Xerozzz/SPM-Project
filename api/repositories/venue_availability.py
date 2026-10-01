@@ -1,4 +1,4 @@
-"""Venue booking and unavailability persistence (SCRUM-55/SCRUM-38)."""
+"""Venue booking and unavailability persistence (SCRUM-55/SCRUM-38/SCRUM-73)."""
 
 import uuid
 from datetime import datetime
@@ -48,6 +48,46 @@ def pending_for_event(db: Session, event_request_id: uuid.UUID) -> VenueBooking 
         VenueBooking.status == BookingStatus.PENDING,
     )
     return db.scalars(statement).first()
+
+
+def get_booking(db: Session, booking_id: uuid.UUID) -> VenueBooking | None:
+    """Return the booking with this id, or None."""
+    return db.get(VenueBooking, booking_id)
+
+
+def other_bookings_overlapping(db: Session, booking: VenueBooking) -> list[VenueBooking]:
+    """Every other booking on the same venue overlapping `booking`'s period (SCRUM-73).
+
+    Any status: whether a status blocks is the domain's decision (domain.booking_conflict),
+    not the query's. The half-open bounds only narrow the rows loaded; the domain
+    re-applies the same rule. The booking itself is excluded so re-checking a booking
+    never reports it as conflicting with itself.
+    """
+    statement = (
+        select(VenueBooking)
+        .where(
+            VenueBooking.venue_id == booking.venue_id,
+            VenueBooking.id != booking.id,
+            VenueBooking.start_at < booking.end_at,
+            booking.start_at < VenueBooking.end_at,
+        )
+        .order_by(VenueBooking.start_at, VenueBooking.id)
+    )
+    return list(db.scalars(statement))
+
+
+def unavailabilities_overlapping(db: Session, booking: VenueBooking) -> list[VenueUnavailability]:
+    """Closures on `booking`'s venue overlapping its period, half-open (SCRUM-73 AC3/AC5)."""
+    statement = (
+        select(VenueUnavailability)
+        .where(
+            VenueUnavailability.venue_id == booking.venue_id,
+            VenueUnavailability.starts_at < booking.end_at,
+            booking.start_at < VenueUnavailability.ends_at,
+        )
+        .order_by(VenueUnavailability.starts_at, VenueUnavailability.id)
+    )
+    return list(db.scalars(statement))
 
 
 def save_booking(db: Session, booking: VenueBooking) -> VenueBooking:
