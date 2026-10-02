@@ -13,6 +13,11 @@ check, but only one commit can satisfy this constraint.
 The range is an expression over the existing columns rather than a new `period` column,
 so no data is copied and start_at/end_at stay the single source of truth. Nothing set a
 booking to confirmed before this revision, so existing rows cannot violate it.
+The application never wrote a confirmed row before this revision, but a
+developer database may: confirming bookings by hand was the only way to test
+SCRUM-55's AC4. If this revision fails locally (the api container never
+starts, because docker-compose chains `alembic upgrade head && uvicorn`),
+clear venue_bookings or run `docker compose down -v`.
 
 Revision ID: 0012
 Revises: 0011
