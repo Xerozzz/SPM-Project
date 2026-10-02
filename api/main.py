@@ -57,6 +57,7 @@ def create_app() -> FastAPI:
     app.include_router(event_clarifications.router, prefix="/api")
     app.include_router(event_requests.router, prefix="/api")
     app.include_router(venue_bookings.router, prefix="/api")
+    app.include_router(venue_bookings.decisions, prefix="/api")
     app.include_router(venues.router, prefix="/api")
     app.include_router(venue_unavailabilities.router, prefix="/api")
 

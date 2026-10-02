@@ -18,3 +18,21 @@ class BookingStatus(StrEnum):
     # SCRUM-73 AC4: named so the conflict rule can prove a cancelled hold never blocks.
     # Nothing sets it yet; no migration needed (status is a non-native VARCHAR enum).
     CANCELLED = "cancelled"
+
+
+class InvalidBookingTransitionError(Exception):
+    """The booking is not in a status that allows the requested change."""
+
+    def __init__(self, current: BookingStatus, target: BookingStatus) -> None:
+        super().__init__(f"cannot move a venue booking from {current} to {target}")
+        self.current = current
+        self.target = target
+
+
+def approve(current: BookingStatus) -> BookingStatus:
+    """SCRUM-74 (absorbing SCRUM-40's approve action): only a pending request can be
+    confirmed. A second approval of the same booking, after the row lock has made it wait
+    for the first, sees CONFIRMED here and is refused."""
+    if current is not BookingStatus.PENDING:
+        raise InvalidBookingTransitionError(current, BookingStatus.CONFIRMED)
+    return BookingStatus.CONFIRMED

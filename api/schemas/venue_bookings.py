@@ -1,4 +1,4 @@
-"""Venue booking request contracts (SCRUM-38)."""
+"""Venue booking request contracts (SCRUM-38, SCRUM-74)."""
 
 import uuid
 from datetime import datetime
@@ -32,3 +32,15 @@ class VenueBookingSubmissionRead(BaseModel):
     end_at: datetime
     status: BookingStatus
     suitability: SuitabilityRead
+
+
+class VenueBookingRead(BaseModel):
+    """A booking after a decision (SCRUM-74 approve)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    venue_id: uuid.UUID
+    start_at: datetime
+    end_at: datetime
+    status: BookingStatus
