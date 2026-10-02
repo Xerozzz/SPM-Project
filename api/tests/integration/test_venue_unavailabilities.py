@@ -2,7 +2,7 @@
 
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -33,10 +33,30 @@ def make_venue(db: Session, *, is_active: bool = True) -> Venue:
     return venue
 
 
+# Closure periods are anchored to the run date rather than written as literals. SCRUM-62
+# refuses a period whose end has already passed, so a fixed date turns this whole file red
+# the morning it goes by: these were written as 1 Oct 2026 and failed on 2 Oct 2026.
+_PLUS_8 = timezone(timedelta(hours=8))
+_ANCHOR = (datetime.now(UTC) + timedelta(days=30)).replace(
+    hour=9, minute=0, second=0, microsecond=0
+)
+
+
+def _utc(hours: int = 0, days: int = 0) -> str:
+    """An instant relative to the anchor, in the `...Z` form the API echoes back."""
+    return (_ANCHOR + timedelta(days=days, hours=hours)).isoformat().replace("+00:00", "Z")
+
+
+def _sgt(hours: int = 0) -> str:
+    """The same instant as `_utc(hours)`, written with a +08:00 offset: timezone-aware but
+    not UTC, which is what the non-UTC refusal needs."""
+    return (_ANCHOR + timedelta(hours=hours)).astimezone(_PLUS_8).isoformat()
+
+
 def body(**overrides: object) -> dict[str, object]:
     values: dict[str, object] = {
-        "starts_at": "2026-10-01T09:00:00Z",
-        "ends_at": "2026-10-01T11:00:00Z",
+        "starts_at": _utc(0),
+        "ends_at": _utc(2),
         "reason": "Air-conditioning maintenance",
     }
     values.update(overrides)
@@ -54,7 +74,7 @@ async def test_venue_staff_create_and_list_an_unavailability(
 
     assert created.status_code == 201
     assert created.json()["reason"] == "Air-conditioning maintenance"
-    assert created.json()["starts_at"] == "2026-10-01T09:00:00Z"
+    assert created.json()["starts_at"] == _utc(0)
     assert [record["id"] for record in listed.json()] == [created.json()["id"]]
     assert db.get(VenueUnavailability, uuid.UUID(created.json()["id"])) is not None
 
@@ -68,12 +88,12 @@ async def test_venue_staff_edit_a_record_without_creating_another(
         created = await client.post(f"/api/venues/{venue.id}/unavailabilities", json=body())
         updated = await client.put(
             f"/api/venues/{venue.id}/unavailabilities/{created.json()['id']}",
-            json=body(ends_at="2026-10-01T12:00:00Z", reason="Extended maintenance"),
+            json=body(ends_at=_utc(3), reason="Extended maintenance"),
         )
 
     assert updated.status_code == 200
     assert updated.json()["reason"] == "Extended maintenance"
-    assert updated.json()["ends_at"] == "2026-10-01T12:00:00Z"
+    assert updated.json()["ends_at"] == _utc(3)
     assert len(db.query(VenueUnavailability).all()) == 1
 
 
@@ -89,8 +109,8 @@ async def test_venue_staff_delete_a_record(
         second = await client.post(
             url,
             json=body(
-                starts_at="2026-10-02T09:00:00Z",
-                ends_at="2026-10-02T11:00:00Z",
+                starts_at=_utc(0, days=1),
+                ends_at=_utc(2, days=1),
             ),
         )
         deleted = await client.delete(f"{url}/{first.json()['id']}")
@@ -132,7 +152,7 @@ async def test_create_rejects_an_inactive_venue_and_invalid_period(
         )
         invalid_response = await client.post(
             f"/api/venues/{active.id}/unavailabilities",
-            json=body(ends_at="2026-10-01T09:00:00Z"),
+            json=body(ends_at=_utc(0)),
         )
 
     assert inactive_response.status_code == 409
@@ -170,8 +190,8 @@ async def test_create_rejects_aware_non_utc_datetimes(
         response = await client.post(
             f"/api/venues/{venue.id}/unavailabilities",
             json=body(
-                starts_at="2026-10-01T17:00:00+08:00",
-                ends_at="2026-10-01T19:00:00+08:00",
+                starts_at=_sgt(0),
+                ends_at=_sgt(2),
             ),
         )
 
