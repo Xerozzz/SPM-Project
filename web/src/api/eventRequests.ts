@@ -94,12 +94,14 @@ export interface VenueSuitability {
   venue_layouts: string[]
 }
 
+export type BookingStatus = 'pending' | 'confirmed' | 'rejected'
+
 export interface VenueBookingSubmission {
   id: string
   venue_id: string
   start_at: string
   end_at: string
-  status: 'pending'
+  status: BookingStatus
   suitability: VenueSuitability
 }
 
@@ -288,12 +290,19 @@ export async function rejectEventRequest(
 }
 
 async function readBookingResponse<T>(response: Response): Promise<T> {
+  const body = (await response.json().catch(() => null)) as unknown
   if (response.status === 422) {
-    const problems = parseValidationProblems(await response.json())
+    const problems = parseValidationProblems(body)
     if (problems) throw new EventRequestValidationError(problems)
   }
-  if (!response.ok) throw new Error(`Booking request failed (${response.status})`)
-  return (await response.json()) as T
+  if (!response.ok) {
+    const detail =
+      body && typeof body === 'object' && 'detail' in body && typeof body.detail === 'string'
+        ? body.detail
+        : `Booking request failed (${response.status})`
+    throw new Error(detail)
+  }
+  return body as T
 }
 
 export async function getVenueSuitability(
