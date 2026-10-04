@@ -1,5 +1,6 @@
 /**
- * SCRUM-54: the venue availability calendar. Mirrors api/schemas/venue_calendar.py.
+ * SCRUM-54: the venue availability calendar. SCRUM-76: whether one venue is free.
+ * Mirrors api/schemas/venue_calendar.py.
  */
 
 export type CalendarStatus = 'confirmed' | 'pending' | 'unavailable'
@@ -37,6 +38,29 @@ export function formatSingaporeTime(value: string): string {
   return new Date(value).toLocaleString('en-SG', { timeZone: 'Asia/Singapore' })
 }
 
+/** SCRUM-76: the verdict for one venue and period, with the entries behind it. */
+export interface VenueAvailability {
+  venue_id: string
+  start_at: string
+  end_at: string
+  available: boolean
+  entries: CalendarEntry[]
+}
+
+async function readCalendarResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const body: unknown = await response.json().catch(() => null)
+    const detail =
+      body && typeof body === 'object' && 'detail' in body && Array.isArray(body.detail)
+        ? (body.detail as { field: string; reason: string }[])
+            .map((problem) => `${problem.field} ${problem.reason}`)
+            .join(', ')
+        : `status ${response.status}`
+    throw new Error(`Could not load the calendar (${detail})`)
+  }
+  return (await response.json()) as T
+}
+
 export async function getVenueCalendar(
   token: string,
   firstDay: string,
@@ -48,18 +72,27 @@ export async function getVenueCalendar(
     end_at: singaporeDayEnd(lastDay),
   })
   if (venueId) params.set('venue_id', venueId)
-  const response = await fetch(`/api/venue-calendar?${params}`, {
-    headers: { Authorization: `Bearer ${token}` },
+  return readCalendarResponse(
+    await fetch(`/api/venue-calendar?${params}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  )
+}
+
+export async function getVenueAvailability(
+  token: string,
+  venueId: string,
+  firstDay: string,
+  lastDay: string,
+): Promise<VenueAvailability> {
+  const params = new URLSearchParams({
+    venue_id: venueId,
+    start_at: singaporeDayStart(firstDay),
+    end_at: singaporeDayEnd(lastDay),
   })
-  if (!response.ok) {
-    const body: unknown = await response.json().catch(() => null)
-    const detail =
-      body && typeof body === 'object' && 'detail' in body && Array.isArray(body.detail)
-        ? (body.detail as { field: string; reason: string }[])
-            .map((problem) => `${problem.field} ${problem.reason}`)
-            .join(', ')
-        : `status ${response.status}`
-    throw new Error(`Could not load the calendar (${detail})`)
-  }
-  return (await response.json()) as CalendarEntry[]
+  return readCalendarResponse(
+    await fetch(`/api/venue-calendar/availability?${params}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  )
 }

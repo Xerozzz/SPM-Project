@@ -4,6 +4,7 @@ import { useState } from 'react'
 import {
   CALENDAR_LABELS,
   formatSingaporeTime,
+  getVenueAvailability,
   getVenueCalendar,
   type CalendarStatus,
 } from '../api/venueCalendar'
@@ -25,6 +26,7 @@ function singaporeDate(days = 0): string {
 /**
  * SCRUM-54: Coordinators and Venue Staff see confirmed bookings, pending requests and
  * unavailability across a date range, for every venue or one chosen venue.
+ * SCRUM-76: with one venue chosen, it also says whether the venue is free for the range.
  */
 export default function VenueCalendar() {
   const { token } = useAuth()
@@ -40,6 +42,12 @@ export default function VenueCalendar() {
     queryKey: ['venue-calendar', token, venueId, firstDay, lastDay],
     queryFn: () => getVenueCalendar(token ?? '', firstDay, lastDay, venueId || null),
     enabled: token !== null && firstDay !== '' && lastDay !== '',
+  })
+
+  const availability = useQuery({
+    queryKey: ['venue-availability', token, venueId, firstDay, lastDay],
+    queryFn: () => getVenueAvailability(token ?? '', venueId, firstDay, lastDay),
+    enabled: token !== null && venueId !== '' && firstDay !== '' && lastDay !== '',
   })
 
   return (
@@ -80,6 +88,18 @@ export default function VenueCalendar() {
           />
         </label>
       </div>
+      {availability.data && (
+        <p
+          role="status"
+          className={`mt-3 rounded p-2 text-sm font-medium ${
+            availability.data.available ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+          }`}
+        >
+          {availability.data.available
+            ? 'This venue is free for the whole range. Pending requests do not block it.'
+            : 'This venue is not available for all of this range.'}
+        </p>
+      )}
       {calendar.isPending && <p className="mt-2 text-sm">Loading…</p>}
       {calendar.isError && (
         <p role="alert" className="mt-2 text-sm text-red-600">

@@ -1,4 +1,4 @@
-"""Venue availability calendar (SCRUM-54)."""
+"""Venue availability calendar (SCRUM-54) and availability check (SCRUM-76)."""
 
 import uuid
 from dataclasses import dataclass
@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from domain import venue_calendar
 from domain.validation import FieldProblem
 from repositories import venue_calendar as repo
+from services import venues
 
 
 class InvalidCalendarRangeError(Exception):
@@ -50,3 +51,29 @@ def entries(
         for u, v in repo.unavailabilities_in_range(db, start_at, end_at, venue_id)
     ]
     return sorted(bookings + closures, key=lambda entry: (entry.start_at, str(entry.id)))
+
+
+@dataclass(frozen=True)
+class Availability:
+    """SCRUM-76: whether one venue is free for a period, and what is there."""
+
+    venue_id: uuid.UUID
+    start_at: datetime
+    end_at: datetime
+    available: bool
+    entries: list[CalendarEntry]
+
+
+def availability(
+    db: Session, venue_id: uuid.UUID, start_at: datetime, end_at: datetime
+) -> Availability:
+    """AC1 to AC3: unavailable if a confirmed booking or a closure overlaps the period.
+    Pending requests are still listed (AC2) but do not make the venue unavailable.
+    A deactivated venue is never available, the same as in venue search (ADR-0012)."""
+    venue = venues.get(db, venue_id)
+    found = entries(db, start_at, end_at, venue_id)
+    blocked = any(venue_calendar.entry_blocks(entry.kind, entry.status) for entry in found)
+    available = venue.is_active and not blocked
+    return Availability(
+        venue_id, start_at.astimezone(UTC), end_at.astimezone(UTC), available, found
+    )

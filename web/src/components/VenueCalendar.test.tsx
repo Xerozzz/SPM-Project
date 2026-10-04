@@ -7,7 +7,7 @@ import { singaporeDayEnd, singaporeDayStart } from '../api/venueCalendar'
 import { AuthProvider } from '../auth/context'
 import VenueCalendar from './VenueCalendar'
 
-// SCRUM-54: the venue availability calendar.
+// SCRUM-54: the venue availability calendar. SCRUM-76: the free or not free verdict.
 
 beforeEach(() => {
   localStorage.setItem(
@@ -98,4 +98,29 @@ test('a refused range shows the reason', async () => {
 test('a day range covers whole Singapore days', () => {
   expect(singaporeDayStart('2030-03-04')).toBe('2030-03-03T16:00:00.000Z')
   expect(singaporeDayEnd('2030-03-04')).toBe('2030-03-04T16:00:00.000Z')
+})
+
+test('SCRUM-76: no verdict until one venue is chosen', async () => {
+  const spy = renderCalendar(() => json([]))
+
+  await screen.findByText('Nothing is booked or blocked in this range.')
+
+  expect(screen.queryByRole('status')).toBeNull()
+  expect(spy.mock.calls.some(([input]) => String(input).includes('availability'))).toBe(false)
+})
+
+test.each([
+  [true, 'This venue is free for the whole range'],
+  [false, 'This venue is not available for all of this range'],
+])('SCRUM-76: the verdict for a chosen venue (available: %s)', async (available, message) => {
+  renderCalendar((url) =>
+    url.includes('availability')
+      ? json({ venue_id: 'v-1', start_at: '', end_at: '', available, entries: [] })
+      : json([]),
+  )
+
+  await screen.findByRole('option', { name: 'Hall A' })
+  fireEvent.change(screen.getByLabelText('Venue'), { target: { value: 'v-1' } })
+
+  expect(await screen.findByRole('status')).toHaveTextContent(message)
 })

@@ -1,4 +1,4 @@
-"""Venue availability calendar rules (SCRUM-54). Pure, no database.
+"""Venue availability calendar rules (SCRUM-54, SCRUM-76). Pure, no database.
 
 The calendar shows what is holding a venue across a date range: confirmed bookings,
 pending requests and recorded unavailability blocks. Rejected and cancelled requests
@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 
 from domain.validation import FieldProblem
 from domain.venue_booking import BookingStatus
+from domain.venue_search import booking_blocks_availability
 
 # Longest range one request may ask for, about three months. Keeps one response small.
 MAX_RANGE = timedelta(days=93)
@@ -35,3 +36,14 @@ def range_problems(start_at: datetime, end_at: datetime) -> list[FieldProblem]:
     if end_at - start_at > MAX_RANGE:
         return [FieldProblem("end_at", f"must be within {MAX_RANGE.days} days of the start")]
     return []
+
+
+def entry_blocks(kind: str, status: str) -> bool:
+    """SCRUM-76: does this calendar entry make the venue unavailable?
+
+    A closure always does. A booking does only if it is confirmed (AC1), never while
+    pending (AC2), using the same rule as venue search so the two cannot disagree.
+    """
+    if kind == "unavailability":
+        return True
+    return booking_blocks_availability(BookingStatus(status))
