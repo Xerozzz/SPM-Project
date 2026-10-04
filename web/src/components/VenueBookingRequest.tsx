@@ -1,37 +1,67 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import {
   EventRequestValidationError,
   getVenueSuitability,
+  listVenueBookings,
   submitVenueBooking,
   type EventRequest,
+  type VenueBooking,
   type VenueSuitability,
 } from '../api/eventRequests'
-import { listVenues } from '../api/venues'
+import { listVenues, type Venue } from '../api/venues'
 import { useAuth } from '../auth/useAuth'
 
 export default function VenueBookingRequest({ event }: { event: EventRequest }) {
   const { token } = useAuth()
+  const queryClient = useQueryClient()
   const [venueId, setVenueId] = useState('')
+  const venueBookings = useQuery({
+    queryKey: ['venue-bookings', event.id],
+    queryFn: () => listVenueBookings(token ?? '', event.id),
+    enabled: token !== null,
+  })
   const venues = useQuery({
     queryKey: ['venues'],
     queryFn: () => listVenues(token ?? ''),
-    enabled: token !== null,
+    enabled: token !== null && venueBookings.isSuccess,
   })
   const suitability = useQuery({
     queryKey: ['venue-suitability', event.id, venueId],
     queryFn: () => getVenueSuitability(token ?? '', event.id, venueId),
-    enabled: token !== null && venueId !== '',
+    enabled: token !== null && venueBookings.isSuccess && venueId !== '',
   })
   const submit = useMutation({
     mutationFn: () => submitVenueBooking(token ?? '', event.id, venueId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['venue-bookings', event.id] })
+    },
   })
   const result = submit.data?.suitability ?? suitability.data
   const error = submit.error ?? suitability.error ?? venues.error
 
+  if (venueBookings.isPending) {
+    return (
+      <div className="mt-3 border-t border-slate-200 pt-3 text-sm text-slate-600">
+        Loading venue booking requests…
+      </div>
+    )
+  }
+
+  if (venueBookings.isError) {
+    return (
+      <div role="alert" className="mt-3 border-t border-slate-200 pt-3 text-sm text-red-700">
+        Could not load existing venue booking requests: {venueBookings.error.message}
+      </div>
+    )
+  }
+
   return (
     <div className="mt-3 border-t border-slate-200 pt-3">
+      {venueBookings.data.length > 0 && (
+        <ExistingVenueBookings bookings={venueBookings.data} venues={venues.data ?? []} />
+      )}
       <h4 className="font-medium">Venue booking request</h4>
       <label className="mt-2 grid gap-1 text-sm">
         Active venue
@@ -72,6 +102,43 @@ export default function VenueBookingRequest({ event }: { event: EventRequest }) 
           Booking request submitted. Status: {submit.data.status}.
         </p>
       )}
+    </div>
+  )
+}
+
+function ExistingVenueBookings({
+  bookings,
+  venues,
+}: {
+  bookings: VenueBooking[]
+  venues: Venue[]
+}) {
+  const venueNames = new Map(venues.map((venue) => [venue.id, venue.name]))
+  return (
+    <div className="mb-3 text-sm">
+      <h4 className="font-medium">Existing venue booking requests</h4>
+      <ul className="mt-2 space-y-2 text-slate-600">
+        {bookings.map((booking) => (
+          <li key={booking.id} className="rounded border border-slate-200 p-2">
+            <dl>
+              <div>
+                <dt className="inline font-medium">Status: </dt>
+                <dd className="inline">{booking.status}</dd>
+              </div>
+              <div>
+                <dt className="inline font-medium">Selected venue: </dt>
+                <dd className="inline">{venueNames.get(booking.venue_id) ?? booking.venue_id}</dd>
+              </div>
+              <div>
+                <dt className="inline font-medium">When: </dt>
+                <dd className="inline">
+                  {booking.start_at} to {booking.end_at}
+                </dd>
+              </div>
+            </dl>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
