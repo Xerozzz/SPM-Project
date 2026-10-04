@@ -1,4 +1,8 @@
-"""Venue Staff endpoints to review and decide venue booking requests (SCRUM-40)."""
+"""Venue Staff endpoints to review and reject venue booking requests (SCRUM-40).
+
+Approve is on the same /venue-bookings prefix but lives in routers/venue_bookings.py
+(the `decisions` router from SCRUM-74, ADR-0017). Both are registered in main.py.
+"""
 
 import uuid
 from datetime import UTC, datetime
@@ -20,6 +24,10 @@ VenueStaff = Annotated[dict[str, object], Depends(require_role(Role.VENUE_STAFF)
 Db = Annotated[Session, Depends(get_db)]
 
 
+def _user_id(user: dict[str, object]) -> uuid.UUID:
+    return uuid.UUID(str(user["sub"]))
+
+
 @router.get("", response_model=list[VenueBookingDecisionRead])
 def list_booking_requests(user: VenueStaff, db: Db) -> list[VenueBookingDecisionRead]:
     del user
@@ -30,9 +38,8 @@ def list_booking_requests(user: VenueStaff, db: Db) -> list[VenueBookingDecision
 def reject_booking_request(
     booking_id: uuid.UUID, body: VenueBookingReject, user: VenueStaff, db: Db
 ) -> VenueBookingDecisionRead:
-    decider_id = uuid.UUID(str(user["sub"]))
     try:
-        row = service.reject(db, booking_id, decider_id, body.reason, datetime.now(UTC))
+        row = service.reject(db, booking_id, _user_id(user), body.reason, datetime.now(UTC))
     except service.BookingRequestNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Venue booking request not found") from exc
     except InvalidBookingTransitionError as exc:
