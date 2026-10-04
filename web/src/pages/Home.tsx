@@ -5,6 +5,7 @@ import { useAuth } from '../auth/useAuth'
 import MyEventRequests from '../components/MyEventRequests'
 import EventRequestForm from '../components/EventRequestForm'
 import EventRequestReview from '../components/EventRequestReview'
+import VenueCalendar from '../components/VenueCalendar'
 import VenueCatalogue from '../components/VenueCatalogue'
 import VenueSearch from '../components/VenueSearch'
 
@@ -45,6 +46,9 @@ export default function HomePage() {
 
       {/* SCRUM-59: Venue Staff maintain the catalogue; coordinators read it for planning. */}
       {(hasRole('venue_staff') || hasRole('coordinator')) && <VenueCatalogue />}
+
+      {/* SCRUM-54: what holds each venue across a date range. */}
+      {(hasRole('venue_staff') || hasRole('coordinator')) && <VenueCalendar />}
 
       <section className="mt-6 rounded-lg border border-slate-200 p-4">
         <h2 className="font-medium">API health</h2>

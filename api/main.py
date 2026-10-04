@@ -17,6 +17,7 @@ from routers import (
     event_clarifications,
     event_requests,
     venue_bookings,
+    venue_calendar,
     venue_unavailabilities,
     venues,
 )
@@ -60,6 +61,7 @@ def create_app() -> FastAPI:
     app.include_router(venue_bookings.decisions, prefix="/api")
     app.include_router(venues.router, prefix="/api")
     app.include_router(venue_unavailabilities.router, prefix="/api")
+    app.include_router(venue_calendar.router, prefix="/api")
 
     return app
 
