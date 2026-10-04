@@ -1,6 +1,8 @@
+import type { EventRequest } from './eventRequests'
+
 /**
  * SCRUM-54: the venue availability calendar. SCRUM-76: whether one venue is free.
- * Mirrors api/schemas/venue_calendar.py.
+ * SCRUM-77: one entry in full. Mirrors api/schemas/venue_calendar.py.
  */
 
 export type CalendarStatus = 'confirmed' | 'pending' | 'unavailable'
@@ -95,4 +97,42 @@ export async function getVenueAvailability(
       headers: { Authorization: `Bearer ${token}` },
     }),
   )
+}
+
+/** SCRUM-77: one calendar entry in full. */
+export interface CalendarEntryDetails {
+  kind: 'booking' | 'unavailability'
+  id: string
+  venue_id: string
+  venue_name: string
+  venue_location: string
+  start_at: string
+  end_at: string
+  status: string
+  reason: string | null
+  event_request_id: string | null
+}
+
+export async function getCalendarEntry(
+  token: string,
+  entry: Pick<CalendarEntry, 'kind' | 'id'>,
+): Promise<CalendarEntryDetails> {
+  const path = entry.kind === 'booking' ? 'bookings' : 'unavailabilities'
+  return readCalendarResponse(
+    await fetch(`/api/venue-calendar/${path}/${entry.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  )
+}
+
+/**
+ * SCRUM-77 AC2 and AC3: the event behind a booking, or null when this user may not see
+ * it. The event request endpoint decides that with require_event_access(VIEW).
+ */
+export async function getEntryEvent(token: string, eventId: string): Promise<EventRequest | null> {
+  const response = await fetch(`/api/event-requests/${eventId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (response.status === 403 || response.status === 404) return null
+  return readCalendarResponse(response)
 }

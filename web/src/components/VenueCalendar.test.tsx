@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import type { CalendarEntry } from '../api/venueCalendar'
@@ -8,6 +8,7 @@ import { AuthProvider } from '../auth/context'
 import VenueCalendar from './VenueCalendar'
 
 // SCRUM-54: the venue availability calendar. SCRUM-76: the free or not free verdict.
+// SCRUM-77: opening an entry.
 
 beforeEach(() => {
   localStorage.setItem(
@@ -123,4 +124,79 @@ test.each([
   fireEvent.change(screen.getByLabelText('Venue'), { target: { value: 'v-1' } })
 
   expect(await screen.findByRole('status')).toHaveTextContent(message)
+})
+
+const DETAILS = {
+  kind: 'booking',
+  id: 'b-1',
+  venue_id: 'v-1',
+  venue_name: 'Hall A',
+  venue_location: 'Level 2',
+  start_at: '2030-03-04T01:00:00Z',
+  end_at: '2030-03-04T03:00:00Z',
+  status: 'confirmed',
+  reason: null,
+  event_request_id: 'e-1',
+}
+
+test('SCRUM-77 AC1 and AC2: a booking shows its details and the event', async () => {
+  renderCalendar((url) => {
+    if (url.startsWith('/api/venue-calendar/bookings/')) return json(DETAILS)
+    if (url.startsWith('/api/event-requests/'))
+      return json({ id: 'e-1', name: 'Orientation Day', expected_attendance: 150 })
+    return json([ENTRY])
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: /Confirmed booking/ }))
+
+  const panel = await screen.findByRole('article', { name: 'Entry details' })
+  expect(await within(panel).findByText('Hall A, Level 2')).toBeInTheDocument()
+  expect(within(panel).getByText('Confirmed booking')).toBeInTheDocument()
+  expect(await within(panel).findByText('Orientation Day')).toBeInTheDocument()
+})
+
+test('SCRUM-77 AC3: without access to the event, the entry still shows', async () => {
+  renderCalendar((url) => {
+    if (url.startsWith('/api/venue-calendar/bookings/')) return json(DETAILS)
+    if (url.startsWith('/api/event-requests/')) return json({ detail: 'Forbidden' }, 403)
+    return json([ENTRY])
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: /Confirmed booking/ }))
+
+  const panel = await screen.findByRole('article', { name: 'Entry details' })
+  expect(await within(panel).findByText(/do not have access/)).toBeInTheDocument()
+  expect(within(panel).getByText('Hall A, Level 2')).toBeInTheDocument()
+  expect(within(panel).queryByText('Orientation Day')).toBeNull()
+})
+
+test('SCRUM-77 AC1: a closure shows its reason', async () => {
+  renderCalendar((url) => {
+    if (url.startsWith('/api/venue-calendar/unavailabilities/'))
+      return json({
+        ...DETAILS,
+        kind: 'unavailability',
+        id: 'u-1',
+        status: 'unavailable',
+        reason: 'Repairs',
+        event_request_id: null,
+      })
+    return json([{ ...ENTRY, id: 'u-1', kind: 'unavailability', status: 'unavailable' }])
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: /Unavailable/ }))
+
+  expect(await screen.findByText('Repairs')).toBeInTheDocument()
+})
+
+test('SCRUM-77: changing the range closes the open entry', async () => {
+  renderCalendar((url) =>
+    url.startsWith('/api/venue-calendar/bookings/') ? json(DETAILS) : json([ENTRY]),
+  )
+
+  fireEvent.click(await screen.findByRole('button', { name: /Confirmed booking/ }))
+  await screen.findByRole('article', { name: 'Entry details' })
+  fireEvent.change(screen.getByLabelText('To'), { target: { value: '2030-12-31' } })
+
+  expect(screen.queryByRole('article', { name: 'Entry details' })).toBeNull()
 })

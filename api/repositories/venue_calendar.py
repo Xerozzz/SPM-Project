@@ -1,4 +1,4 @@
-"""Reads for the venue availability calendar (SCRUM-54)."""
+"""Reads for the venue availability calendar (SCRUM-54, SCRUM-77)."""
 
 import uuid
 from collections.abc import Iterable
@@ -50,3 +50,23 @@ def unavailabilities_in_range(
     if venue_id is not None:
         statement = statement.where(VenueUnavailability.venue_id == venue_id)
     return list(db.execute(statement).tuples())
+
+
+def booking_with_venue(db: Session, booking_id: uuid.UUID) -> tuple[VenueBooking, Venue] | None:
+    statement = (
+        select(VenueBooking, Venue)
+        .join(Venue, Venue.id == VenueBooking.venue_id)
+        .where(VenueBooking.id == booking_id)
+    )
+    return db.execute(statement).tuples().first()
+
+
+def unavailability_with_venue(
+    db: Session, unavailability_id: uuid.UUID
+) -> tuple[VenueUnavailability, Venue] | None:
+    statement = (
+        select(VenueUnavailability, Venue)
+        .join(Venue, Venue.id == VenueUnavailability.venue_id)
+        .where(VenueUnavailability.id == unavailability_id)
+    )
+    return db.execute(statement).tuples().first()
