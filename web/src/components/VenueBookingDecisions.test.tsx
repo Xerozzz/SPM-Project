@@ -7,6 +7,7 @@ import { AuthProvider } from '../auth/context'
 import VenueBookingDecisions from './VenueBookingDecisions'
 
 // SCRUM-40: the Venue Staff panel for reviewing and rejecting booking requests.
+// SCRUM-75: the same panel shows clashes and approves.
 
 beforeEach(() => {
   localStorage.setItem(
@@ -39,6 +40,7 @@ const PENDING: VenueBookingDecision = {
   decided_by_id: null,
   decided_at: null,
   decision_reason: null,
+  conflict: null,
 }
 
 function json(body: unknown, status = 200) {
@@ -130,4 +132,77 @@ test('shows each decided request by its own status', async () => {
   expect(await screen.findByText('Confirmed')).toBeInTheDocument()
   expect(screen.getByText('Cancelled')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull()
+})
+
+test('SCRUM-75 AC1: a clash is shown and Approve is disabled', async () => {
+  renderPanel(async () =>
+    json([
+      {
+        ...PENDING,
+        conflict: {
+          kind: 'unavailability',
+          id: 'closure-1',
+          start_at: '2030-01-01T00:00:00Z',
+          end_at: '2030-01-01T08:00:00Z',
+          message: 'venue is unavailable for period closure-1',
+        },
+      },
+    ]),
+  )
+
+  expect(await screen.findByText(/The venue is closed from/)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Reject' })).toBeEnabled()
+})
+
+test('SCRUM-75 AC2: approving calls the approve route and shows it confirmed', async () => {
+  let approved = false
+  const spy = renderPanel(async (_input, init) => {
+    if (init?.method === 'POST') {
+      approved = true
+      return json({ id: 'booking-1', status: 'confirmed' })
+    }
+    return json([approved ? { ...PENDING, status: 'confirmed' } : PENDING])
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
+
+  expect(await screen.findByRole('status')).toHaveTextContent('approved')
+  expect(await screen.findByText('Confirmed')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
+  const post = spy.mock.calls.find(([, init]) => init?.method === 'POST')
+  expect(post?.[0]).toBe('/api/venue-bookings/booking-1/approve')
+})
+
+test('SCRUM-75 AC3: a refused approval shows why', async () => {
+  renderPanel(async (_input, init) =>
+    init?.method === 'POST'
+      ? json({ detail: 'conflicts with confirmed booking b-9' }, 409)
+      : json([PENDING]),
+  )
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Could not approve: conflicts with confirmed booking b-9',
+  )
+})
+
+test('SCRUM-75: an old refusal goes away when the next decision is tried', async () => {
+  let attempts = 0
+  renderPanel(async (_input, init) => {
+    if (init?.method === 'POST') {
+      attempts += 1
+      return attempts === 1
+        ? json({ detail: 'conflicts with confirmed booking b-9' }, 409)
+        : json({ ...PENDING, status: 'rejected' })
+    }
+    return json([PENDING])
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not approve')
+  fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
+
+  await waitFor(() => expect(screen.queryByText(/Could not approve/)).toBeNull())
 })

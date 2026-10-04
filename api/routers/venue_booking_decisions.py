@@ -1,4 +1,5 @@
-"""Venue Staff endpoints to review and reject venue booking requests (SCRUM-40).
+"""Venue Staff endpoints to review and reject venue booking requests (SCRUM-40), with
+what would block approving each one (SCRUM-75).
 
 Approve is on the same /venue-bookings prefix but lives in routers/venue_bookings.py
 (the `decisions` router from SCRUM-74, ADR-0017). Both are registered in main.py.
@@ -31,7 +32,8 @@ def _user_id(user: dict[str, object]) -> uuid.UUID:
 @router.get("", response_model=list[VenueBookingDecisionRead])
 def list_booking_requests(user: VenueStaff, db: Db) -> list[VenueBookingDecisionRead]:
     del user
-    return [VenueBookingDecisionRead.from_context(*row) for row in service.list_requests(db)]
+    items = service.list_requests(db)
+    return [VenueBookingDecisionRead.from_context(*row, conflict) for row, conflict in items]
 
 
 @router.post("/{booking_id}/reject", response_model=VenueBookingDecisionRead)

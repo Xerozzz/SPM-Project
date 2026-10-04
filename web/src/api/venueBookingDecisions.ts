@@ -1,5 +1,6 @@
 /**
  * SCRUM-40: Venue Staff read booking requests and reject them.
+ * SCRUM-75: they also see what would block approval, and approve.
  * Mirrors schemas/venue_booking_decisions.py on the API.
  */
 
@@ -11,6 +12,15 @@ export const STATUS_LABELS: Record<BookingStatus, string> = {
   confirmed: 'Confirmed',
   rejected: 'Rejected',
   cancelled: 'Cancelled',
+}
+
+/** SCRUM-75 AC1: what the SCRUM-73 check says would block approval. */
+export interface BookingConflict {
+  kind: 'booking' | 'unavailability'
+  id: string
+  start_at: string
+  end_at: string
+  message: string
 }
 
 export interface VenueBookingDecision {
@@ -32,6 +42,17 @@ export interface VenueBookingDecision {
   decided_by_id: string | null
   decided_at: string | null
   decision_reason: string | null
+  conflict: BookingConflict | null
+}
+
+/** What Venue Staff are told about a clash, in plain words, in Singapore time. */
+export function describeConflict(conflict: BookingConflict): string {
+  const sgt = (value: string) =>
+    new Date(value).toLocaleString('en-SG', { timeZone: 'Asia/Singapore' })
+  const period = `${sgt(conflict.start_at)} to ${sgt(conflict.end_at)}`
+  return conflict.kind === 'booking'
+    ? `Clashes with a confirmed booking from ${period}.`
+    : `The venue is closed from ${period}.`
 }
 
 /** Longest reason the API accepts (MAX_REASON_LENGTH in domain/venue_booking_decision.py). */
@@ -65,6 +86,19 @@ export async function rejectVenueBookingRequest(
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(reason.trim() ? { reason } : {}),
+    }),
+  )
+}
+
+/** SCRUM-75: approve through the SCRUM-74 route. The list is reloaded afterwards. */
+export async function approveVenueBookingRequest(
+  token: string,
+  id: string,
+): Promise<{ id: string; status: BookingStatus }> {
+  return readDecisionResponse(
+    await fetch(`/api/venue-bookings/${id}/approve`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
     }),
   )
 }

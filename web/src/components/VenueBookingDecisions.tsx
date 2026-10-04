@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import {
+  approveVenueBookingRequest,
+  describeConflict,
   listVenueBookingRequests,
   MAX_REASON_LENGTH,
   rejectVenueBookingRequest,
@@ -10,7 +12,8 @@ import {
 } from '../api/venueBookingDecisions'
 import { useAuth } from '../auth/useAuth'
 
-/** SCRUM-40: Venue Staff review pending booking requests and reject them. */
+/** SCRUM-40: Venue Staff review pending booking requests and reject them.
+ * SCRUM-75: they also see any clash and approve requests that have none. */
 export default function VenueBookingDecisions() {
   const { token } = useAuth()
   const client = useQueryClient()
@@ -30,6 +33,14 @@ export default function VenueBookingDecisions() {
       void client.invalidateQueries({ queryKey })
     },
   })
+  const approve = useMutation({
+    mutationFn: (id: string) => approveVenueBookingRequest(token ?? '', id),
+    onSuccess: () => {
+      setOutcome('The request has been approved.')
+      void client.invalidateQueries({ queryKey })
+    },
+  })
+  const busy = reject.isPending || approve.isPending
   const pending = requests.data?.filter((booking) => booking.status === 'pending') ?? []
   const decided = requests.data?.filter((booking) => booking.status !== 'pending') ?? []
 
@@ -48,6 +59,11 @@ export default function VenueBookingDecisions() {
       {pending.map((booking) => (
         <article key={booking.id} className="mt-4 rounded border border-slate-200 p-3">
           <BookingDetails booking={booking} />
+          {booking.conflict && (
+            <p className="mt-2 rounded bg-amber-50 p-2 text-sm text-amber-800">
+              {describeConflict(booking.conflict)} It cannot be approved.
+            </p>
+          )}
           <label className="mt-3 block text-sm font-medium" htmlFor={`reason-${booking.id}`}>
             Reason for the Coordinator (optional)
           </label>
@@ -58,14 +74,30 @@ export default function VenueBookingDecisions() {
             onChange={(event) => setReasons({ ...reasons, [booking.id]: event.target.value })}
             className="mt-1 w-full rounded border border-slate-300 p-2 text-sm"
           />
-          <button
-            type="button"
-            onClick={() => reject.mutate({ id: booking.id, reason: reasons[booking.id] ?? '' })}
-            disabled={reject.isPending}
-            className="mt-2 rounded bg-red-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-          >
-            Reject
-          </button>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                reject.reset()
+                approve.mutate(booking.id)
+              }}
+              disabled={busy || booking.conflict !== null}
+              className="rounded bg-green-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+            >
+              Approve
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                approve.reset()
+                reject.mutate({ id: booking.id, reason: reasons[booking.id] ?? '' })
+              }}
+              disabled={busy}
+              className="rounded bg-red-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+            >
+              Reject
+            </button>
+          </div>
         </article>
       ))}
       {outcome && (
@@ -76,6 +108,11 @@ export default function VenueBookingDecisions() {
       {reject.isError && (
         <p role="alert" className="mt-4 text-sm text-red-600">
           {reject.error.message}
+        </p>
+      )}
+      {approve.isError && (
+        <p role="alert" className="mt-4 text-sm text-red-600">
+          Could not approve: {approve.error.message}
         </p>
       )}
       {decided.length > 0 && (
