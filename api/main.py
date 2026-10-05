@@ -16,6 +16,7 @@ from routers import (
     auth,
     event_clarifications,
     event_requests,
+    venue_booking_decisions,
     venue_bookings,
     venue_unavailabilities,
     venues,
@@ -57,7 +58,10 @@ def create_app() -> FastAPI:
     app.include_router(event_clarifications.router, prefix="/api")
     app.include_router(event_requests.router, prefix="/api")
     app.include_router(venue_bookings.router, prefix="/api")
+    # Venue Staff decisions share /venue-bookings: approve is venue_bookings.decisions
+    # (SCRUM-74), list and reject are venue_booking_decisions (SCRUM-40).
     app.include_router(venue_bookings.decisions, prefix="/api")
+    app.include_router(venue_booking_decisions.router, prefix="/api")
     app.include_router(venues.router, prefix="/api")
     app.include_router(venue_unavailabilities.router, prefix="/api")
 
