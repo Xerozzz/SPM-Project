@@ -40,10 +40,9 @@ for now.
 
 **Good**
 - Every decided request shows its decider, UTC time and reason, the same way event review decisions do (ADR-0011).
-- Approve can fill the same columns later (SCRUM-75) without another migration.
+- Approve fills the same columns (SCRUM-75), passed into the SCRUM-74 approve service and stored in the same commit, so no second migration was needed.
 
 **Bad / accepted trade-offs**
-- Until SCRUM-75, an approved booking has no decider or time stored, because the approve action from SCRUM-74 does not set them yet.
 - Any Venue Staff member can decide a booking for any venue. Limiting this to the responsible Venue Coordinator needs a later story.
 
 **What this makes harder to change later**

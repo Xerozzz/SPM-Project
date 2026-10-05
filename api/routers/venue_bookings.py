@@ -32,6 +32,10 @@ Db = Annotated[Session, Depends(get_db)]
 VenueStaff = Annotated[dict[str, object], Depends(require_role(Role.VENUE_STAFF))]
 
 
+def _user_id(user: dict[str, object]) -> uuid.UUID:
+    return uuid.UUID(str(user["sub"]))
+
+
 def _validation_error(exc: service.InvalidBookingRequestError) -> HTTPException:
     problems = [FieldProblemRead(field=p.field, reason=p.reason) for p in exc.problems]
     return HTTPException(422, [p.model_dump() for p in problems])
@@ -73,10 +77,11 @@ def submit_venue_booking(
 
 
 @decisions.post("/{booking_id}/approve", response_model=VenueBookingRead)
-def approve_venue_booking(booking_id: uuid.UUID, _: VenueStaff, db: Db) -> VenueBookingRead:
-    """SCRUM-74 AC1/AC2: venue staff only; an overlapping or non-pending request is 409."""
+def approve_venue_booking(booking_id: uuid.UUID, user: VenueStaff, db: Db) -> VenueBookingRead:
+    """SCRUM-74 AC1/AC2: venue staff only; an overlapping or non-pending request is 409.
+    SCRUM-75 AC2: records which staff member approved, and when."""
     try:
-        booking = service.approve(db, booking_id)
+        booking = service.approve(db, booking_id, _user_id(user), datetime.now(UTC))
     except service.BookingNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Venue booking not found") from exc
     except (BookingConflictError, InvalidBookingTransitionError) as exc:

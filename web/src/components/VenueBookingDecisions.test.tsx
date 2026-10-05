@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import type { VenueBookingDecision } from '../api/venueBookingDecisions'
@@ -7,6 +7,7 @@ import { AuthProvider } from '../auth/context'
 import VenueBookingDecisions from './VenueBookingDecisions'
 
 // SCRUM-40: the Venue Staff panel for reviewing and rejecting booking requests.
+// SCRUM-75: the same panel shows clashes and approves.
 
 beforeEach(() => {
   localStorage.setItem(
@@ -39,6 +40,7 @@ const PENDING: VenueBookingDecision = {
   decided_by_id: null,
   decided_at: null,
   decision_reason: null,
+  conflict: null,
 }
 
 function json(body: unknown, status = 200) {
@@ -119,6 +121,21 @@ test('a refused decision shows the API message', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('already rejected')
 })
 
+test('a refused decision shows its message on the request it belongs to', async () => {
+  const other = { ...PENDING, id: 'booking-2', event_name: 'Careers Fair' }
+  renderPanel(async (input, init) =>
+    init?.method === 'POST' && String(input).includes('booking-2')
+      ? json({ detail: 'This booking request is already rejected' }, 409)
+      : json([PENDING, other]),
+  )
+
+  const cards = await screen.findAllByRole('article')
+  fireEvent.click(within(cards[1]).getByRole('button', { name: 'Reject' }))
+
+  expect(await within(cards[1]).findByRole('alert')).toHaveTextContent('already rejected')
+  expect(within(cards[0]).queryByRole('alert')).toBeNull()
+})
+
 test('shows each decided request by its own status', async () => {
   renderPanel(async () =>
     json([
@@ -130,4 +147,117 @@ test('shows each decided request by its own status', async () => {
   expect(await screen.findByText('Confirmed')).toBeInTheDocument()
   expect(screen.getByText('Cancelled')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull()
+})
+
+test('SCRUM-75 AC1: a clash is shown and Approve is disabled', async () => {
+  renderPanel(async () =>
+    json([
+      {
+        ...PENDING,
+        conflict: {
+          kind: 'unavailability',
+          id: 'closure-1',
+          start_at: '2030-01-01T00:00:00Z',
+          end_at: '2030-01-01T08:00:00Z',
+          message: 'venue is unavailable for period closure-1',
+        },
+      },
+    ]),
+  )
+
+  // The clash period must be in Singapore time whatever zone the browser is in.
+  const sgt = (value: string) =>
+    new Date(value).toLocaleString('en-SG', { timeZone: 'Asia/Singapore' })
+  expect(
+    await screen.findByText(
+      `The venue is closed from ${sgt('2030-01-01T00:00:00Z')} to ${sgt('2030-01-01T08:00:00Z')}. It cannot be approved.`,
+    ),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Reject' })).toBeEnabled()
+})
+
+test('SCRUM-75 AC2: approving calls the approve route and shows it confirmed', async () => {
+  let approved = false
+  const spy = renderPanel(async (_input, init) => {
+    if (init?.method === 'POST') {
+      approved = true
+      return json({ id: 'booking-1', status: 'confirmed' })
+    }
+    return json([approved ? { ...PENDING, status: 'confirmed' } : PENDING])
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
+
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    'The request for Hall A has been approved.',
+  )
+  expect(await screen.findByText('Confirmed')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
+  const post = spy.mock.calls.find(([, init]) => init?.method === 'POST')
+  expect(post?.[0]).toBe('/api/venue-bookings/booking-1/approve')
+})
+
+test('SCRUM-75 AC3: a refused approval shows why', async () => {
+  renderPanel(async (_input, init) =>
+    init?.method === 'POST'
+      ? json({ detail: 'conflicts with confirmed booking b-9' }, 409)
+      : json([PENDING]),
+  )
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Could not approve: conflicts with confirmed booking b-9',
+  )
+})
+
+test('SCRUM-75: an old refusal goes away when the next decision is tried', async () => {
+  let attempts = 0
+  renderPanel(async (_input, init) => {
+    if (init?.method === 'POST') {
+      attempts += 1
+      return attempts === 1
+        ? json({ detail: 'conflicts with confirmed booking b-9' }, 409)
+        : json({ ...PENDING, status: 'rejected' })
+    }
+    return json([PENDING])
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not approve')
+  fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
+
+  await waitFor(() => expect(screen.queryByText(/Could not approve/)).toBeNull())
+})
+
+test('SCRUM-75: a refused approval shows its message on the request it belongs to', async () => {
+  const other = { ...PENDING, id: 'booking-2', event_name: 'Careers Fair' }
+  renderPanel(async (input, init) =>
+    init?.method === 'POST' && String(input).includes('booking-2')
+      ? json({ detail: 'conflicts with confirmed booking b-9' }, 409)
+      : json([PENDING, other]),
+  )
+
+  const cards = await screen.findAllByRole('article')
+  fireEvent.click(within(cards[1]).getByRole('button', { name: 'Approve' }))
+
+  expect(await within(cards[1]).findByRole('alert')).toHaveTextContent('Could not approve')
+  expect(within(cards[0]).queryByRole('alert')).toBeNull()
+})
+
+test('SCRUM-75: an old rejection error goes away when Approve is tried', async () => {
+  renderPanel(async (input, init) => {
+    if (init?.method === 'POST' && String(input).endsWith('/reject')) {
+      return json({ detail: 'This booking request is already rejected' }, 409)
+    }
+    if (init?.method === 'POST') return json({ ...PENDING, status: 'confirmed' })
+    return json([PENDING])
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Reject' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('already rejected')
+  fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+
+  await waitFor(() => expect(screen.queryByText(/already rejected/)).toBeNull())
 })
