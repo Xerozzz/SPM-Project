@@ -98,21 +98,21 @@ export default function VenueBookingDecisions() {
               Reject
             </button>
           </div>
+          {reject.isError && reject.variables?.id === booking.id && (
+            <p role="alert" className="mt-2 text-sm text-red-600">
+              {reject.error.message}
+            </p>
+          )}
+          {approve.isError && approve.variables === booking.id && (
+            <p role="alert" className="mt-2 text-sm text-red-600">
+              Could not approve: {approve.error.message}
+            </p>
+          )}
         </article>
       ))}
       {outcome && (
         <p role="status" className="mt-4 rounded bg-green-50 p-3 text-sm text-green-800">
           {outcome}
-        </p>
-      )}
-      {reject.isError && (
-        <p role="alert" className="mt-4 text-sm text-red-600">
-          {reject.error.message}
-        </p>
-      )}
-      {approve.isError && (
-        <p role="alert" className="mt-4 text-sm text-red-600">
-          Could not approve: {approve.error.message}
         </p>
       )}
       {decided.length > 0 && (

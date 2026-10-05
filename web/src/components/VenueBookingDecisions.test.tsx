@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import type { VenueBookingDecision } from '../api/venueBookingDecisions'
@@ -119,6 +119,21 @@ test('a refused decision shows the API message', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Reject' }))
 
   expect(await screen.findByRole('alert')).toHaveTextContent('already rejected')
+})
+
+test('a refused decision shows its message on the request it belongs to', async () => {
+  const other = { ...PENDING, id: 'booking-2', event_name: 'Careers Fair' }
+  renderPanel(async (input, init) =>
+    init?.method === 'POST' && String(input).includes('booking-2')
+      ? json({ detail: 'This booking request is already rejected' }, 409)
+      : json([PENDING, other]),
+  )
+
+  const cards = await screen.findAllByRole('article')
+  fireEvent.click(within(cards[1]).getByRole('button', { name: 'Reject' }))
+
+  expect(await within(cards[1]).findByRole('alert')).toHaveTextContent('already rejected')
+  expect(within(cards[0]).queryByRole('alert')).toBeNull()
 })
 
 test('shows each decided request by its own status', async () => {
