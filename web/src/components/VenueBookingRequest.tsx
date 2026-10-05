@@ -38,6 +38,7 @@ export default function VenueBookingRequest({ event }: { event: EventRequest }) 
       void queryClient.invalidateQueries({ queryKey: ['venue-bookings', event.id] })
     },
   })
+  const hasPendingBooking = venueBookings.data?.some((booking) => booking.status === 'pending')
   const result = submit.data?.suitability ?? suitability.data
   const error = submit.error ?? suitability.error ?? venues.error
 
@@ -62,19 +63,66 @@ export default function VenueBookingRequest({ event }: { event: EventRequest }) 
       {venueBookings.data.length > 0 && (
         <ExistingVenueBookings bookings={venueBookings.data} venues={venues.data ?? []} />
       )}
+      {hasPendingBooking ? (
+        <p className="text-sm text-slate-600">
+          A request for this event is already pending. Submit another once it has been decided.
+        </p>
+      ) : (
+        <VenueBookingForm
+          venueId={venueId}
+          onVenueChange={(value) => {
+            setVenueId(value)
+            submit.reset()
+          }}
+          venues={venues.data ?? []}
+          result={result}
+          error={error}
+          isSuitabilityPending={suitability.isPending}
+          isSubmitPending={submit.isPending}
+          hasSubmitted={submit.data !== undefined}
+          onSubmit={() => submit.mutate()}
+          submittedStatus={submit.data?.status}
+        />
+      )}
+    </div>
+  )
+}
+
+function VenueBookingForm({
+  venueId,
+  onVenueChange,
+  venues,
+  result,
+  error,
+  isSuitabilityPending,
+  isSubmitPending,
+  hasSubmitted,
+  onSubmit,
+  submittedStatus,
+}: {
+  venueId: string
+  onVenueChange: (value: string) => void
+  venues: Venue[]
+  result: VenueSuitability | undefined
+  error: Error | null
+  isSuitabilityPending: boolean
+  isSubmitPending: boolean
+  hasSubmitted: boolean
+  onSubmit: () => void
+  submittedStatus: string | undefined
+}) {
+  return (
+    <>
       <h4 className="font-medium">Venue booking request</h4>
       <label className="mt-2 grid gap-1 text-sm">
         Active venue
         <select
           value={venueId}
-          onChange={(change) => {
-            setVenueId(change.target.value)
-            submit.reset()
-          }}
+          onChange={(change) => onVenueChange(change.target.value)}
           className="rounded border border-slate-300 px-2 py-1.5"
         >
           <option value="">Select a venue</option>
-          {venues.data?.map((venue) => (
+          {venues.map((venue) => (
             <option key={venue.id} value={venue.id}>
               {venue.name}
             </option>
@@ -91,18 +139,18 @@ export default function VenueBookingRequest({ event }: { event: EventRequest }) 
       )}
       <button
         type="button"
-        disabled={!venueId || suitability.isPending || submit.isPending || !!submit.data}
-        onClick={() => submit.mutate()}
+        disabled={!venueId || isSuitabilityPending || isSubmitPending || hasSubmitted}
+        onClick={onSubmit}
         className="mt-3 rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
       >
         Submit booking request
       </button>
-      {submit.data && (
+      {submittedStatus && (
         <p role="status" className="mt-2 bg-green-50 p-2 text-sm text-green-800">
-          Booking request submitted. Status: {submit.data.status}.
+          Booking request submitted. Status: {submittedStatus}.
         </p>
       )}
-    </div>
+    </>
   )
 }
 
@@ -132,7 +180,7 @@ function ExistingVenueBookings({
               <div>
                 <dt className="inline font-medium">When: </dt>
                 <dd className="inline">
-                  {booking.start_at} to {booking.end_at}
+                  {formatBookingTime(booking.start_at)} to {formatBookingTime(booking.end_at)}
                 </dd>
               </div>
             </dl>
@@ -141,6 +189,10 @@ function ExistingVenueBookings({
       </ul>
     </div>
   )
+}
+
+function formatBookingTime(value: string) {
+  return new Date(value).toLocaleString()
 }
 
 function Suitability({ result }: { result: VenueSuitability }) {

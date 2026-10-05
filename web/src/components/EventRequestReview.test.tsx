@@ -55,6 +55,12 @@ const rejectedBooking = {
   status: 'rejected',
 }
 
+function bookingPeriod(booking: { start_at: string; end_at: string }) {
+  return `${new Date(booking.start_at).toLocaleString()} to ${new Date(
+    booking.end_at,
+  ).toLocaleString()}`
+}
+
 afterEach(() => {
   localStorage.clear()
   vi.restoreAllMocks()
@@ -202,7 +208,7 @@ test('coordinator events include submitted and approved bookable requests', asyn
 // SCRUM-71: coordinators see retained venue booking requests, while submission
 // behaviour stays owned by SCRUM-38.
 
-test('pending venue bookings are displayed without hiding the submission form', async () => {
+test('pending venue booking history suppresses the submission form', async () => {
   signInAsCoordinator()
   renderExistingBookingReview([pendingBooking])
 
@@ -210,9 +216,16 @@ test('pending venue bookings are displayed without hiding the submission form', 
     await screen.findByRole('heading', { name: 'Existing venue booking requests' }),
   ).toBeInTheDocument()
   expect(screen.getByText('pending')).toBeInTheDocument()
-  expect(await within(screen.getByRole('listitem')).findByText('Small Hall')).toBeInTheDocument()
-  expect(screen.getByRole('heading', { name: 'Venue booking request' })).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Submit booking request' })).toBeInTheDocument()
+  const bookingRecord = screen.getByRole('listitem')
+  expect(await within(bookingRecord).findByText('Small Hall')).toBeInTheDocument()
+  expect(within(bookingRecord).getByText(bookingPeriod(pendingBooking))).toBeInTheDocument()
+  expect(
+    screen.getByText(
+      'A request for this event is already pending. Submit another once it has been decided.',
+    ),
+  ).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: 'Venue booking request' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Submit booking request' })).not.toBeInTheDocument()
 })
 
 test('multiple venue bookings are displayed as independent records', async () => {
@@ -225,8 +238,10 @@ test('multiple venue bookings are displayed as independent records', async () =>
   expect(screen.getByText('pending')).toBeInTheDocument()
   const bookingRecords = screen.getAllByRole('listitem')
   expect(await within(bookingRecords[0]).findByText('Small Hall')).toBeInTheDocument()
+  expect(within(bookingRecords[0]).getByText(bookingPeriod(pendingBooking))).toBeInTheDocument()
   expect(screen.getByText('rejected')).toBeInTheDocument()
   expect(screen.getByText('venue-2')).toBeInTheDocument()
+  expect(within(bookingRecords[1]).getByText(bookingPeriod(rejectedBooking))).toBeInTheDocument()
   expect(bookingRecords).toHaveLength(2)
 })
 
@@ -264,6 +279,7 @@ test('rejected-only venue booking history keeps the normal submission form avail
     await screen.findByRole('heading', { name: 'Existing venue booking requests' }),
   ).toBeInTheDocument()
   expect(screen.getByText('rejected')).toBeInTheDocument()
+  expect(screen.getByText(bookingPeriod(rejectedBooking))).toBeInTheDocument()
   expect(await screen.findByRole('heading', { name: 'Venue booking request' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Submit booking request' })).toBeInTheDocument()
 })
@@ -302,7 +318,12 @@ test('reloading the review fetches and displays the pending venue booking again'
   expect(
     await screen.findByRole('heading', { name: 'Existing venue booking requests' }),
   ).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Submit booking request' })).toBeInTheDocument()
+  expect(
+    screen.getByText(
+      'A request for this event is already pending. Submit another once it has been decided.',
+    ),
+  ).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Submit booking request' })).not.toBeInTheDocument()
   await waitFor(() => {
     const bookingReads = fetcher.mock.calls.filter(([input, init]) => {
       const key = `${init?.method ?? 'GET'} ${String(input)}`
