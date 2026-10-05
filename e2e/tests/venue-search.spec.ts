@@ -51,8 +51,9 @@ test('TC-55-AC1-01: a coordinator can provide every supported search criterion',
   await page.getByLabel('Room layout').selectOption('theatre')
   await page.getByRole('button', { name: 'Search venues' }).click()
 
-  // The system accepts every criterion and shows Hall A in the results.
-  await expect(page.getByRole('listitem').filter({ hasText: 'Hall A' })).toBeVisible()
+  // Scope the assertion to search results so Hall A in the venue catalogue cannot satisfy it.
+  const venueSearch = page.getByRole('region', { name: 'Venue search' })
+  await expect(venueSearch.getByRole('listitem').filter({ hasText: /^Hall A ·/ })).toBeVisible()
 })
 
 test('TC-55-AC7-01: no-match guidance suggests adjusting filters', async ({ page }) => {
