@@ -6,7 +6,14 @@ import pytest
 
 from domain.validation import FieldProblem
 from domain.venue_booking import BookingStatus
-from domain.venue_calendar import MAX_RANGE, SHOWN_BOOKING_STATUSES, range_problems
+from domain.venue_calendar import (
+    MAX_RANGE,
+    SHOWN_BOOKING_STATUSES,
+    EntryKind,
+    EntryStatus,
+    entry_blocks,
+    range_problems,
+)
 
 _START = datetime(2026, 11, 2, tzinfo=UTC)
 
@@ -50,3 +57,18 @@ def test_times_without_a_timezone_are_refused() -> None:
 @pytest.mark.story("SCRUM-54")
 def test_only_confirmed_and_pending_bookings_are_shown() -> None:
     assert {BookingStatus.CONFIRMED, BookingStatus.PENDING} == SHOWN_BOOKING_STATUSES
+
+
+@pytest.mark.story("SCRUM-76")
+@pytest.mark.parametrize(
+    ("kind", "status", "blocks"),
+    [
+        ("unavailability", "unavailable", True),
+        ("booking", "confirmed", True),
+        ("booking", "pending", False),
+    ],
+)
+def test_only_closures_and_confirmed_bookings_make_a_venue_unavailable(
+    kind: EntryKind, status: EntryStatus, blocks: bool
+) -> None:
+    assert entry_blocks(kind, status) is blocks
