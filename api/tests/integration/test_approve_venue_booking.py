@@ -159,9 +159,9 @@ def test_constraint_refuses_an_overlap_the_friendly_check_missed(
     second = _booking(db, coordinator, venue, _START + _HOUR, _END + _HOUR)
     monkeypatch.setattr(service, "_ensure_no_conflict", lambda db, booking: None)
 
-    service.approve(db, first.id)
+    service.approve(db, first.id, coordinator.id, datetime.now(UTC))
     with pytest.raises(ConcurrentBookingConflictError):
-        service.approve(db, second.id)
+        service.approve(db, second.id, coordinator.id, datetime.now(UTC))
 
     assert _confirmed_count(db) == 1
 
@@ -268,7 +268,7 @@ def _delete_committed(committed: _Committed) -> None:
         session.close()
 
 
-def _race(booking_ids: list[uuid.UUID]) -> tuple[list[str], int]:
+def _race(booking_ids: list[uuid.UUID], decided_by_id: uuid.UUID) -> tuple[list[str], int]:
     """Approve each booking on its own thread and session, released together."""
     start_together = threading.Barrier(len(booking_ids))
     outcomes: list[str] = []
@@ -277,7 +277,7 @@ def _race(booking_ids: list[uuid.UUID]) -> tuple[list[str], int]:
         session = SessionLocal()
         try:
             start_together.wait()
-            service.approve(session, booking_id)
+            service.approve(session, booking_id, decided_by_id, datetime.now(UTC))
             outcomes.append("approved")
         except BookingConflictError:
             outcomes.append("conflict")
@@ -312,7 +312,7 @@ def test_simultaneous_overlapping_approvals_yield_exactly_one_success(attempt: i
     del attempt  # the run number only exists to repeat the race
     committed = _committed_requests(2)
     try:
-        outcomes, confirmed = _race(committed.booking_ids)
+        outcomes, confirmed = _race(committed.booking_ids, committed.user_id)
 
         assert sorted(outcomes) == ["approved", "conflict"]
         assert confirmed == 1
@@ -330,7 +330,7 @@ def test_simultaneous_approvals_of_the_same_request_yield_exactly_one_success(
     del attempt
     committed = _committed_requests(1)
     try:
-        outcomes, confirmed = _race(committed.booking_ids * 2)
+        outcomes, confirmed = _race(committed.booking_ids * 2, committed.user_id)
 
         assert sorted(outcomes) == ["already decided", "approved"]
         assert confirmed == 1

@@ -165,7 +165,14 @@ test('SCRUM-75 AC1: a clash is shown and Approve is disabled', async () => {
     ]),
   )
 
-  expect(await screen.findByText(/The venue is closed from/)).toBeInTheDocument()
+  // The clash period must be in Singapore time whatever zone the browser is in.
+  const sgt = (value: string) =>
+    new Date(value).toLocaleString('en-SG', { timeZone: 'Asia/Singapore' })
+  expect(
+    await screen.findByText(
+      `The venue is closed from ${sgt('2030-01-01T00:00:00Z')} to ${sgt('2030-01-01T08:00:00Z')}. It cannot be approved.`,
+    ),
+  ).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Reject' })).toBeEnabled()
 })
@@ -182,7 +189,9 @@ test('SCRUM-75 AC2: approving calls the approve route and shows it confirmed', a
 
   fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
 
-  expect(await screen.findByRole('status')).toHaveTextContent('approved')
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    'The request for Hall A has been approved.',
+  )
   expect(await screen.findByText('Confirmed')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
   const post = spy.mock.calls.find(([, init]) => init?.method === 'POST')
@@ -220,4 +229,35 @@ test('SCRUM-75: an old refusal goes away when the next decision is tried', async
   fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
 
   await waitFor(() => expect(screen.queryByText(/Could not approve/)).toBeNull())
+})
+
+test('SCRUM-75: a refused approval shows its message on the request it belongs to', async () => {
+  const other = { ...PENDING, id: 'booking-2', event_name: 'Careers Fair' }
+  renderPanel(async (input, init) =>
+    init?.method === 'POST' && String(input).includes('booking-2')
+      ? json({ detail: 'conflicts with confirmed booking b-9' }, 409)
+      : json([PENDING, other]),
+  )
+
+  const cards = await screen.findAllByRole('article')
+  fireEvent.click(within(cards[1]).getByRole('button', { name: 'Approve' }))
+
+  expect(await within(cards[1]).findByRole('alert')).toHaveTextContent('Could not approve')
+  expect(within(cards[0]).queryByRole('alert')).toBeNull()
+})
+
+test('SCRUM-75: an old rejection error goes away when Approve is tried', async () => {
+  renderPanel(async (input, init) => {
+    if (init?.method === 'POST' && String(input).endsWith('/reject')) {
+      return json({ detail: 'This booking request is already rejected' }, 409)
+    }
+    if (init?.method === 'POST') return json({ ...PENDING, status: 'confirmed' })
+    return json([PENDING])
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Reject' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('already rejected')
+  fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+
+  await waitFor(() => expect(screen.queryByText(/already rejected/)).toBeNull())
 })

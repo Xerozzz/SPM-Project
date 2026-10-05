@@ -34,9 +34,11 @@ export default function VenueBookingDecisions() {
     },
   })
   const approve = useMutation({
-    mutationFn: (id: string) => approveVenueBookingRequest(token ?? '', id),
-    onSuccess: () => {
-      setOutcome('The request has been approved.')
+    mutationFn: (booking: VenueBookingDecision) =>
+      approveVenueBookingRequest(token ?? '', booking.id),
+    // The approve response has no venue name, so it is read off the card that was clicked.
+    onSuccess: (_confirmed, booking) => {
+      setOutcome(`The request for ${booking.venue_name} has been approved.`)
       void client.invalidateQueries({ queryKey })
     },
   })
@@ -79,7 +81,7 @@ export default function VenueBookingDecisions() {
               type="button"
               onClick={() => {
                 reject.reset()
-                approve.mutate(booking.id)
+                approve.mutate(booking)
               }}
               disabled={busy || booking.conflict !== null}
               className="rounded bg-green-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
@@ -103,7 +105,7 @@ export default function VenueBookingDecisions() {
               {reject.error.message}
             </p>
           )}
-          {approve.isError && approve.variables === booking.id && (
+          {approve.isError && approve.variables?.id === booking.id && (
             <p role="alert" className="mt-2 text-sm text-red-600">
               Could not approve: {approve.error.message}
             </p>
