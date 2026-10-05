@@ -6,6 +6,7 @@ import MyEventRequests from '../components/MyEventRequests'
 import EventRequestForm from '../components/EventRequestForm'
 import EventRequestReview from '../components/EventRequestReview'
 import VenueBookingDecisions from '../components/VenueBookingDecisions'
+import VenueCalendar from '../components/VenueCalendar'
 import VenueCatalogue from '../components/VenueCatalogue'
 import VenueSearch from '../components/VenueSearch'
 
@@ -49,6 +50,8 @@ export default function HomePage() {
 
       {/* SCRUM-40: Venue Staff review and decide booking requests. */}
       {hasRole('venue_staff') && <VenueBookingDecisions />}
+      {/* SCRUM-54: what holds each venue across a date range. */}
+      {(hasRole('venue_staff') || hasRole('coordinator')) && <VenueCalendar />}
 
       <section className="mt-6 rounded-lg border border-slate-200 p-4">
         <h2 className="font-medium">API health</h2>
