@@ -110,7 +110,7 @@ test('SCRUM-76: no verdict until one venue is chosen', async () => {
 })
 
 test.each([
-  [true, 'This venue is free for the whole range'],
+  [true, 'No confirmed booking or closure in this range'],
   [false, 'This venue is not available for all of this range'],
 ])('SCRUM-76: the verdict for a chosen venue (available: %s)', async (available, message) => {
   renderCalendar((url) =>

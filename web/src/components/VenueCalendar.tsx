@@ -96,7 +96,7 @@ export default function VenueCalendar() {
           }`}
         >
           {availability.data.available
-            ? 'This venue is free for the whole range. Pending requests do not block it.'
+            ? 'No confirmed booking or closure in this range. Pending requests do not block it. Opening hours are not considered.'
             : 'This venue is not available for all of this range.'}
         </p>
       )}

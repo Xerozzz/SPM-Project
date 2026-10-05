@@ -98,6 +98,21 @@ async def test_with_nothing_in_the_period_the_venue_is_available(
 
 
 @pytest.mark.story("SCRUM-76")
+async def test_a_period_outside_opening_hours_is_still_reported_available(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    venue = make_venue(db)  # open 08:00 to 22:00 Singapore time
+
+    # 17:00 to 18:00 UTC is 01:00 to 02:00 Singapore time, when the venue is shut.
+    async with make_client(make_user("coordinator")) as client:
+        response = await check(client, venue.id, _DAY + 17 * _HOUR, _DAY + 18 * _HOUR)
+
+    # Nothing holds it, so it is available. Opening hours are not considered here.
+    assert response.status_code == 200
+    assert response.json()["available"] is True
+
+
+@pytest.mark.story("SCRUM-76")
 async def test_a_booking_ending_exactly_at_the_start_does_not_block(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:

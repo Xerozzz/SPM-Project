@@ -6,7 +6,14 @@ import pytest
 
 from domain.validation import FieldProblem
 from domain.venue_booking import BookingStatus
-from domain.venue_calendar import MAX_RANGE, SHOWN_BOOKING_STATUSES, entry_blocks, range_problems
+from domain.venue_calendar import (
+    MAX_RANGE,
+    SHOWN_BOOKING_STATUSES,
+    EntryKind,
+    EntryStatus,
+    entry_blocks,
+    range_problems,
+)
 
 _START = datetime(2026, 11, 2, tzinfo=UTC)
 
@@ -62,6 +69,6 @@ def test_only_confirmed_and_pending_bookings_are_shown() -> None:
     ],
 )
 def test_only_closures_and_confirmed_bookings_make_a_venue_unavailable(
-    kind: str, status: str, blocks: bool
+    kind: EntryKind, status: EntryStatus, blocks: bool
 ) -> None:
     assert entry_blocks(kind, status) is blocks

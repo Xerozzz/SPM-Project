@@ -23,7 +23,12 @@ class CalendarEntryRead(BaseModel):
 
 
 class AvailabilityRead(BaseModel):
-    """SCRUM-76: the verdict for one venue and period, with the entries behind it."""
+    """SCRUM-76: the verdict for one venue and period, with the entries behind it.
+
+    `available` is true when no confirmed booking or closure overlaps the period and the
+    venue is active. It says nothing is holding the venue, not that the venue is open:
+    operating hours are not considered here.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 

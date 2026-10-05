@@ -6,6 +6,7 @@ no longer hold anything, so they are left out.
 """
 
 from datetime import datetime, timedelta
+from typing import Literal
 
 from domain.validation import FieldProblem
 from domain.venue_booking import BookingStatus
@@ -16,6 +17,16 @@ MAX_RANGE = timedelta(days=93)
 
 # AC1: the booking statuses that appear on the calendar.
 SHOWN_BOOKING_STATUSES = frozenset({BookingStatus.CONFIRMED, BookingStatus.PENDING})
+
+# The closed vocabularies of a calendar entry, the same Literals the API schema uses.
+EntryKind = Literal["booking", "unavailability"]
+EntryStatus = Literal["confirmed", "pending", "unavailable"]
+
+# AC1: the label each shown booking status gets on the calendar.
+BOOKING_LABELS: dict[BookingStatus, EntryStatus] = {
+    BookingStatus.CONFIRMED: "confirmed",
+    BookingStatus.PENDING: "pending",
+}
 
 
 def range_problems(start_at: datetime, end_at: datetime) -> list[FieldProblem]:
@@ -38,11 +49,13 @@ def range_problems(start_at: datetime, end_at: datetime) -> list[FieldProblem]:
     return []
 
 
-def entry_blocks(kind: str, status: str) -> bool:
+def entry_blocks(kind: EntryKind, status: EntryStatus) -> bool:
     """SCRUM-76: does this calendar entry make the venue unavailable?
 
     A closure always does. A booking does only if it is confirmed (AC1), never while
-    pending (AC2), using the same rule as venue search so the two cannot disagree.
+    pending (AC2). The booking status rule is venue search's booking_blocks_availability,
+    so the two agree on which bookings block. Opening hours are not part of this:
+    venue search also checks them, the availability check does not.
     """
     if kind == "unavailability":
         return True
