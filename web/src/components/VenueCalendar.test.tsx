@@ -111,7 +111,11 @@ test('SCRUM-76: no verdict until one venue is chosen', async () => {
 })
 
 test.each([
-  [true, 'No confirmed booking or closure in this range'],
+  // The whole sentence, so the opening hours disclaimer cannot be trimmed away unnoticed.
+  [
+    true,
+    'No confirmed booking or closure in this range. Pending requests do not block it. Opening hours are not considered.',
+  ],
   [false, 'This venue is not available for all of this range'],
 ])('SCRUM-76: the verdict for a chosen venue (available: %s)', async (available, message) => {
   renderCalendar((url) =>
