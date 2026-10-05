@@ -243,6 +243,9 @@ test('multiple venue bookings are displayed as independent records', async () =>
   expect(screen.getByText('venue-2')).toBeInTheDocument()
   expect(within(bookingRecords[1]).getByText(bookingPeriod(rejectedBooking))).toBeInTheDocument()
   expect(bookingRecords).toHaveLength(2)
+  expect(
+    screen.queryByRole('button', { name: 'Submit booking request' }),
+  ).not.toBeInTheDocument()
 })
 
 test('no existing venue booking keeps the normal submission form available', async () => {
