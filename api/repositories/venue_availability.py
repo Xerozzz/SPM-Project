@@ -53,6 +53,16 @@ def pending_for_event(db: Session, event_request_id: uuid.UUID) -> VenueBooking 
     return db.scalars(statement).first()
 
 
+def list_bookings_for_event(db: Session, event_request_id: uuid.UUID) -> list[VenueBooking]:
+    """Return every booking request retained for one event, oldest first."""
+    statement = (
+        select(VenueBooking)
+        .where(VenueBooking.event_request_id == event_request_id)
+        .order_by(VenueBooking.created_at, VenueBooking.id)
+    )
+    return list(db.scalars(statement))
+
+
 def get_booking(db: Session, booking_id: uuid.UUID) -> VenueBooking | None:
     """Return the booking with this id, or None."""
     return db.get(VenueBooking, booking_id)

@@ -41,6 +41,12 @@ def _validation_error(exc: service.InvalidBookingRequestError) -> HTTPException:
     return HTTPException(422, [p.model_dump() for p in problems])
 
 
+@router.get("/{request_id}/venue-bookings", response_model=list[VenueBookingRead])
+def list_venue_bookings(event: PlanningEvent, db: Db) -> list[VenueBookingRead]:
+    """SCRUM-71: existing booking requests for this assigned approved event."""
+    return [VenueBookingRead.model_validate(row) for row in service.list_for_event(db, event)]
+
+
 @router.get("/{request_id}/venue-bookings/suitability", response_model=SuitabilityRead)
 def venue_suitability(event: PlanningEvent, venue_id: uuid.UUID, db: Db) -> SuitabilityRead:
     try:

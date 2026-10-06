@@ -84,6 +84,11 @@ def submit(
     return booking_repo.save_booking(db, booking), suitability
 
 
+def list_for_event(db: Session, event: EventRequest) -> list[VenueBooking]:
+    """SCRUM-71: read retained booking requests for an approved assigned event."""
+    return booking_repo.list_bookings_for_event(db, event.id)
+
+
 def check_approvable(db: Session, booking_id: uuid.UUID) -> VenueBooking:
     """SCRUM-73: raise a `domain.booking_conflict.BookingConflictError` naming whatever
     blocks approving this booking, or return it if nothing does.
