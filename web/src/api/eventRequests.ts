@@ -94,7 +94,7 @@ export interface VenueSuitability {
   venue_layouts: string[]
 }
 
-export type BookingStatus = 'pending' | 'confirmed' | 'rejected'
+export type BookingStatus = 'pending' | 'confirmed' | 'rejected' | 'cancelled'
 
 export interface VenueBookingSubmission {
   id: string
@@ -103,6 +103,14 @@ export interface VenueBookingSubmission {
   end_at: string
   status: BookingStatus
   suitability: VenueSuitability
+}
+
+export interface VenueBooking {
+  id: string
+  venue_id: string
+  start_at: string
+  end_at: string
+  status: BookingStatus
 }
 
 /** Thrown when the API answers 422 with field-level validation problems. */
@@ -328,6 +336,14 @@ export async function submitVenueBooking(
       method: 'POST',
       headers: jsonHeaders(token),
       body: JSON.stringify({ venue_id: venueId }),
+    }),
+  )
+}
+
+export async function listVenueBookings(token: string, eventId: string): Promise<VenueBooking[]> {
+  return readBookingResponse(
+    await fetch(`/api/event-requests/${eventId}/venue-bookings`, {
+      headers: authHeaders(token),
     }),
   )
 }

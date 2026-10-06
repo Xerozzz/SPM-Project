@@ -84,6 +84,11 @@ def submit(
     return booking_repo.save_booking(db, booking), suitability
 
 
+def list_for_event(db: Session, event: EventRequest) -> list[VenueBooking]:
+    """SCRUM-71: read retained booking requests for an approved assigned event."""
+    return booking_repo.list_bookings_for_event(db, event.id)
+
+
 def check_approvable(db: Session, booking_id: uuid.UUID) -> VenueBooking:
     """SCRUM-73: raise a `domain.booking_conflict.BookingConflictError` naming whatever
     blocks approving this booking, or return it if nothing does.
@@ -98,8 +103,15 @@ def check_approvable(db: Session, booking_id: uuid.UUID) -> VenueBooking:
     return booking
 
 
-def approve(db: Session, booking_id: uuid.UUID) -> VenueBooking:
+def approve(
+    db: Session,
+    booking_id: uuid.UUID,
+    decided_by_id: uuid.UUID,
+    decided_at: datetime,
+) -> VenueBooking:
     """SCRUM-74 (absorbs SCRUM-40's approve action): confirm a pending booking request.
+    SCRUM-75 AC2: who approved and when are stored with the confirmation in the same
+    commit (ADR-0018). Both are required, so no approve path can leave them empty.
 
     1. Lock the booking row, so two staff approving the same request take turns and the
        second is refused by the status transition (checked first, so a booking that is
@@ -114,6 +126,8 @@ def approve(db: Session, booking_id: uuid.UUID) -> VenueBooking:
     confirmed = venue_booking.approve(booking.status)
     _ensure_no_conflict(db, booking)
     booking.status = confirmed
+    booking.decided_by_id = decided_by_id
+    booking.decided_at = decided_at
     return booking_repo.save_confirmed_booking(db, booking)
 
 

@@ -3,9 +3,9 @@
 import uuid
 from datetime import datetime
 
-from psycopg.errors import ExclusionViolation
+from psycopg.errors import DeadlockDetected, ExclusionViolation
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from domain.booking_conflict import ConcurrentBookingConflictError
@@ -51,6 +51,16 @@ def pending_for_event(db: Session, event_request_id: uuid.UUID) -> VenueBooking 
         VenueBooking.status == BookingStatus.PENDING,
     )
     return db.scalars(statement).first()
+
+
+def list_bookings_for_event(db: Session, event_request_id: uuid.UUID) -> list[VenueBooking]:
+    """Return every booking request retained for one event, oldest first."""
+    statement = (
+        select(VenueBooking)
+        .where(VenueBooking.event_request_id == event_request_id)
+        .order_by(VenueBooking.created_at, VenueBooking.id)
+    )
+    return list(db.scalars(statement))
 
 
 def get_booking(db: Session, booking_id: uuid.UUID) -> VenueBooking | None:
@@ -118,11 +128,21 @@ def save_confirmed_booking(db: Session, booking: VenueBooking) -> VenueBooking:
     friendly check ran, `venue_bookings_no_confirmed_overlap` refuses this commit. Only
     that violation becomes a domain conflict; any other integrity error is a bug and is
     re-raised unchanged.
+
+    When two overlapping approvals commit at the same moment, each one's constraint
+    check can wait on the other's row, and Postgres then aborts one of them with a
+    deadlock instead of the exclusion violation. The outcome is the same, one of the
+    two loses, so that deadlock is a conflict too.
     """
     try:
         return save_booking(db, booking)
     except IntegrityError as exc:
         db.rollback()
         if isinstance(exc.orig, ExclusionViolation):
+            raise ConcurrentBookingConflictError from exc
+        raise
+    except OperationalError as exc:
+        db.rollback()
+        if isinstance(exc.orig, DeadlockDetected):
             raise ConcurrentBookingConflictError from exc
         raise

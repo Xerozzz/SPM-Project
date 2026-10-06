@@ -35,6 +35,10 @@ async def submit(
     )
 
 
+async def list_venue_bookings(client: httpx.AsyncClient, event: EventRequest) -> httpx.Response:
+    return await client.get(f"/api/event-requests/{event.id}/venue-bookings")
+
+
 def bookings(db: Session) -> list[VenueBooking]:
     return list(db.scalars(select(VenueBooking).order_by(VenueBooking.created_at)))
 
@@ -79,6 +83,72 @@ async def test_successful_submission_creates_pending_booking_with_id(
     assert body["status"] == "pending"
     assert (row.event_request_id, row.requested_by_id) == (event.id, coordinator.id)
     assert (row.start_at, row.end_at) == (event.start_at, event.end_at)
+
+
+@pytest.mark.story("SCRUM-71")
+async def test_assigned_coordinator_can_retrieve_existing_pending_booking(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    coordinator = make_user("coordinator")
+    event = approved_event(db, make_user("organiser"), coordinator)
+    venue = make_venue(db)
+
+    async with make_client(coordinator) as client:
+        created = await submit(client, event, venue.id)
+        response = await list_venue_bookings(client, event)
+
+    assert created.status_code == 201
+    row = bookings(db)[0]
+    body = response.json()
+    assert response.status_code == 200
+    assert len(body) == 1
+    assert body[0]["id"] == str(row.id)
+    assert body[0]["venue_id"] == str(venue.id)
+    assert datetime.fromisoformat(body[0]["start_at"]) == row.start_at
+    assert datetime.fromisoformat(body[0]["end_at"]) == row.end_at
+    assert body[0]["status"] == "pending"
+
+
+@pytest.mark.story("SCRUM-71")
+async def test_unassigned_coordinator_cannot_retrieve_event_venue_bookings(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    assigned = make_user("coordinator")
+    other = make_user("coordinator")
+    event = approved_event(db, make_user("organiser"), assigned)
+    venue = make_venue(db)
+
+    async with make_client(assigned) as client:
+        created = await submit(client, event, venue.id)
+    async with make_client(other) as client:
+        response = await list_venue_bookings(client, event)
+
+    assert created.status_code == 201
+    assert response.status_code == 403
+
+
+@pytest.mark.story("SCRUM-71")
+async def test_rejected_and_pending_booking_history_are_both_returned(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    coordinator = make_user("coordinator")
+    event = approved_event(db, make_user("organiser"), coordinator)
+    venue = make_venue(db)
+
+    async with make_client(coordinator) as client:
+        original_response = await submit(client, event, venue.id)
+        original = bookings(db)[0]
+        original.status = BookingStatus.REJECTED
+        db.flush()
+
+        resubmitted = await submit(client, event, venue.id)
+        response = await list_venue_bookings(client, event)
+
+    assert original_response.status_code == resubmitted.status_code == 201
+    assert response.status_code == 200
+    rows = bookings(db)
+    assert [item["id"] for item in response.json()] == [str(row.id) for row in rows]
+    assert [item["status"] for item in response.json()] == ["rejected", "pending"]
 
 
 @pytest.mark.story("SCRUM-38")

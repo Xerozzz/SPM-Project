@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { AuthProvider } from '../auth/context'
@@ -39,6 +39,28 @@ const suitability = {
   venue_layouts: ['classroom'],
 }
 
+const pendingBooking = {
+  id: 'booking-1',
+  venue_id: 'venue-1',
+  start_at: approved.start_at,
+  end_at: approved.end_at,
+  status: 'pending',
+}
+
+const rejectedBooking = {
+  id: 'booking-2',
+  venue_id: 'venue-2',
+  start_at: approved.start_at,
+  end_at: approved.end_at,
+  status: 'rejected',
+}
+
+function bookingPeriod(booking: { start_at: string; end_at: string }) {
+  return `${new Date(booking.start_at).toLocaleString()} to ${new Date(
+    booking.end_at,
+  ).toLocaleString()}`
+}
+
 afterEach(() => {
   localStorage.clear()
   vi.restoreAllMocks()
@@ -63,6 +85,7 @@ function renderReview(reviewable: unknown[], bookable: unknown[] = []) {
     const key = `${init?.method ?? 'GET'} ${String(input)}`
     if (key === 'GET /api/event-requests/reviewable') return json(reviewable)
     if (key === 'GET /api/event-requests/bookable') return json(bookable)
+    if (key.startsWith('GET ') && key.endsWith('/venue-bookings')) return json([])
     if (key === 'GET /api/venues') return json([])
     if (key.endsWith('/clarifications')) return json([])
     if (key === 'POST /api/event-requests/req-1/approve') {
@@ -80,11 +103,12 @@ function renderReview(reviewable: unknown[], bookable: unknown[] = []) {
   )
 }
 
-function renderBookingReview(submission: unknown, status = 200) {
+function renderBookingReview(submission: unknown, status = 200, existingBookings: unknown[] = []) {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const key = `${init?.method ?? 'GET'} ${String(input)}`
     if (key === 'GET /api/event-requests/reviewable') return json([])
     if (key === 'GET /api/event-requests/bookable') return json([approved])
+    if (key.startsWith('GET ') && key.endsWith('/venue-bookings')) return json(existingBookings)
     if (key === 'GET /api/venues') {
       return json([{ id: 'venue-1', name: 'Small Hall', is_active: true }])
     }
@@ -97,6 +121,28 @@ function renderBookingReview(submission: unknown, status = 200) {
   })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
+    <QueryClientProvider client={client}>
+      <AuthProvider>
+        <EventRequestReview />
+      </AuthProvider>
+    </QueryClientProvider>,
+  )
+}
+
+function renderExistingBookingReview(existingBookings: unknown[]) {
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const key = `${init?.method ?? 'GET'} ${String(input)}`
+    if (key === 'GET /api/event-requests/reviewable') return json([])
+    if (key === 'GET /api/event-requests/bookable') return json([approved])
+    if (key.startsWith('GET ') && key.endsWith('/venue-bookings')) return json(existingBookings)
+    if (key === 'GET /api/venues') {
+      return json([{ id: 'venue-1', name: 'Small Hall', is_active: true }])
+    }
+    if (key.endsWith('/clarifications')) return json([])
+    throw new Error(`unexpected request ${key}`)
+  })
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
     <QueryClientProvider client={client}>
       <AuthProvider>
         <EventRequestReview />
@@ -156,7 +202,138 @@ test('coordinator events include submitted and approved bookable requests', asyn
   expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
   expect(screen.getByText('Awards Night')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
-  expect(screen.getByRole('heading', { name: 'Venue booking request' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { name: 'Venue booking request' })).toBeInTheDocument()
+})
+
+// SCRUM-71: coordinators see retained venue booking requests, while submission
+// behaviour stays owned by SCRUM-38.
+
+test('pending venue booking history suppresses the submission form', async () => {
+  signInAsCoordinator()
+  renderExistingBookingReview([pendingBooking])
+
+  expect(
+    await screen.findByRole('heading', { name: 'Existing venue booking requests' }),
+  ).toBeInTheDocument()
+  expect(screen.getByText('pending')).toBeInTheDocument()
+  const bookingRecord = screen.getByRole('listitem')
+  expect(await within(bookingRecord).findByText('Small Hall')).toBeInTheDocument()
+  expect(within(bookingRecord).getByText(bookingPeriod(pendingBooking))).toBeInTheDocument()
+  expect(
+    screen.getByText(
+      'A request for this event is already pending. Submit another once it has been decided.',
+    ),
+  ).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: 'Venue booking request' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Submit booking request' })).not.toBeInTheDocument()
+})
+
+test('multiple venue bookings are displayed as independent records', async () => {
+  signInAsCoordinator()
+  renderExistingBookingReview([pendingBooking, rejectedBooking])
+
+  expect(
+    await screen.findByRole('heading', { name: 'Existing venue booking requests' }),
+  ).toBeInTheDocument()
+  expect(screen.getByText('pending')).toBeInTheDocument()
+  const bookingRecords = screen.getAllByRole('listitem')
+  expect(await within(bookingRecords[0]).findByText('Small Hall')).toBeInTheDocument()
+  expect(within(bookingRecords[0]).getByText(bookingPeriod(pendingBooking))).toBeInTheDocument()
+  expect(screen.getByText('rejected')).toBeInTheDocument()
+  expect(screen.getByText('venue-2')).toBeInTheDocument()
+  expect(within(bookingRecords[1]).getByText(bookingPeriod(rejectedBooking))).toBeInTheDocument()
+  expect(bookingRecords).toHaveLength(2)
+  expect(
+    screen.queryByRole('button', { name: 'Submit booking request' }),
+  ).not.toBeInTheDocument()
+})
+
+test('no existing venue booking keeps the normal submission form available', async () => {
+  signInAsCoordinator()
+  renderBookingReview({
+    id: 'booking-1',
+    venue_id: 'venue-1',
+    start_at: approved.start_at,
+    end_at: approved.end_at,
+    status: 'pending',
+    suitability,
+  })
+
+  expect(await screen.findByRole('heading', { name: 'Venue booking request' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Submit booking request' })).toBeInTheDocument()
+})
+
+test('rejected-only venue booking history keeps the normal submission form available', async () => {
+  signInAsCoordinator()
+  renderBookingReview(
+    {
+      id: 'booking-2',
+      venue_id: 'venue-1',
+      start_at: approved.start_at,
+      end_at: approved.end_at,
+      status: 'pending',
+      suitability,
+    },
+    200,
+    [rejectedBooking],
+  )
+
+  expect(
+    await screen.findByRole('heading', { name: 'Existing venue booking requests' }),
+  ).toBeInTheDocument()
+  expect(screen.getByText('rejected')).toBeInTheDocument()
+  expect(screen.getByText(bookingPeriod(rejectedBooking))).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { name: 'Venue booking request' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Submit booking request' })).toBeInTheDocument()
+})
+
+test('reloading the review fetches and displays the pending venue booking again', async () => {
+  signInAsCoordinator()
+  const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const key = `${init?.method ?? 'GET'} ${String(input)}`
+    if (key === 'GET /api/event-requests/reviewable') return json([])
+    if (key === 'GET /api/event-requests/bookable') return json([approved])
+    if (key.startsWith('GET ') && key.endsWith('/venue-bookings')) return json([pendingBooking])
+    if (key === 'GET /api/venues') {
+      return json([{ id: 'venue-1', name: 'Small Hall', is_active: true }])
+    }
+    if (key.endsWith('/clarifications')) return json([])
+    throw new Error(`unexpected request ${key}`)
+  })
+  const mount = () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    return render(
+      <QueryClientProvider client={client}>
+        <AuthProvider>
+          <EventRequestReview />
+        </AuthProvider>
+      </QueryClientProvider>,
+    )
+  }
+  const view = mount()
+
+  expect(
+    await screen.findByRole('heading', { name: 'Existing venue booking requests' }),
+  ).toBeInTheDocument()
+  view.unmount()
+  mount()
+
+  expect(
+    await screen.findByRole('heading', { name: 'Existing venue booking requests' }),
+  ).toBeInTheDocument()
+  expect(
+    screen.getByText(
+      'A request for this event is already pending. Submit another once it has been decided.',
+    ),
+  ).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Submit booking request' })).not.toBeInTheDocument()
+  await waitFor(() => {
+    const bookingReads = fetcher.mock.calls.filter(([input, init]) => {
+      const key = `${init?.method ?? 'GET'} ${String(input)}`
+      return key === 'GET /api/event-requests/req-1/venue-bookings'
+    })
+    expect(bookingReads).toHaveLength(2)
+  })
 })
 
 test('approved event assigned to another coordinator hides the booking UI', async () => {
@@ -195,7 +372,7 @@ test('approved event previews advisory warnings and submits a pending booking re
   expect(await screen.findByRole('status')).toHaveTextContent(
     'Booking request submitted. Status: pending.',
   )
-  expect(screen.getByText(/Capacity mismatch/)).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Venue booking request' })).toBeInTheDocument()
 })
 
 test('booking conflict shows the backend detail', async () => {
