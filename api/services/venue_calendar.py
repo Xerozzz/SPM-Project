@@ -1,4 +1,5 @@
-"""Venue availability calendar (SCRUM-54) and availability check (SCRUM-76)."""
+"""Venue availability calendar (SCRUM-54), availability check (SCRUM-76) and entry
+details (SCRUM-77)."""
 
 import uuid
 from dataclasses import dataclass
@@ -10,6 +11,10 @@ from domain import venue_calendar
 from domain.validation import FieldProblem
 from repositories import venue_calendar as repo
 from services import venues
+
+
+class CalendarEntryNotFoundError(Exception):
+    pass
 
 
 class InvalidCalendarRangeError(Exception):
@@ -87,4 +92,63 @@ def availability(
     available = venue.is_active and not blocked
     return Availability(
         venue_id, start_at.astimezone(UTC), end_at.astimezone(UTC), available, found
+    )
+
+
+@dataclass(frozen=True)
+class EntryDetails:
+    """SCRUM-77 AC1: venue, start, end and status of one entry, and a closure's reason.
+
+    For a booking only the event's id is given. Its details come from the event request
+    endpoint, which applies require_event_access(VIEW), so they are shown only to users
+    allowed to see that event (AC2, AC3).
+    """
+
+    kind: venue_calendar.EntryKind
+    id: uuid.UUID
+    venue_id: uuid.UUID
+    venue_name: str
+    venue_location: str
+    start_at: datetime
+    end_at: datetime
+    status: venue_calendar.DetailsStatus
+    reason: str | None
+    event_request_id: uuid.UUID | None
+
+
+def booking_details(db: Session, booking_id: uuid.UUID) -> EntryDetails:
+    row = repo.booking_with_venue(db, booking_id)
+    if row is None:
+        raise CalendarEntryNotFoundError
+    b, v = row
+    return EntryDetails(
+        "booking",
+        b.id,
+        v.id,
+        v.name,
+        v.location,
+        b.start_at,
+        b.end_at,
+        venue_calendar.DETAILS_LABELS[b.status],
+        None,
+        b.event_request_id,
+    )
+
+
+def unavailability_details(db: Session, unavailability_id: uuid.UUID) -> EntryDetails:
+    row = repo.unavailability_with_venue(db, unavailability_id)
+    if row is None:
+        raise CalendarEntryNotFoundError
+    u, v = row
+    return EntryDetails(
+        "unavailability",
+        u.id,
+        v.id,
+        v.name,
+        v.location,
+        u.starts_at,
+        u.ends_at,
+        "unavailable",
+        u.reason,
+        None,
     )

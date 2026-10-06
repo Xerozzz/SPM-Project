@@ -1,10 +1,12 @@
-"""Venue availability calendar contracts (SCRUM-54, SCRUM-76)."""
+"""Venue availability calendar contracts (SCRUM-54, SCRUM-76, SCRUM-77)."""
 
 import uuid
 from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
+
+from domain.venue_calendar import DetailsStatus
 
 
 class CalendarEntryRead(BaseModel):
@@ -37,3 +39,21 @@ class AvailabilityRead(BaseModel):
     end_at: datetime
     available: bool
     entries: list[CalendarEntryRead]
+
+
+class CalendarEntryDetailsRead(BaseModel):
+    """SCRUM-77: one entry in full. `reason` is set for a closure, `event_request_id`
+    for a booking."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    kind: Literal["booking", "unavailability"]
+    id: uuid.UUID
+    venue_id: uuid.UUID
+    venue_name: str
+    venue_location: str
+    start_at: datetime
+    end_at: datetime
+    status: DetailsStatus
+    reason: str | None
+    event_request_id: uuid.UUID | None

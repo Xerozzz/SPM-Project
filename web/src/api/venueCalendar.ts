@@ -1,6 +1,8 @@
+import type { EventRequest } from './eventRequests'
+
 /**
  * SCRUM-54: the venue availability calendar. SCRUM-76: whether one venue is free.
- * Mirrors api/schemas/venue_calendar.py.
+ * SCRUM-77: one entry in full. Mirrors api/schemas/venue_calendar.py.
  */
 
 export type CalendarStatus = 'confirmed' | 'pending' | 'unavailable'
@@ -20,6 +22,15 @@ export const CALENDAR_LABELS: Record<CalendarStatus, string> = {
   confirmed: 'Confirmed booking',
   pending: 'Pending request',
   unavailable: 'Unavailable',
+}
+
+/** SCRUM-77: an entry opened in full can be any booking, rejected and cancelled included. */
+export type DetailsStatus = CalendarStatus | 'rejected' | 'cancelled'
+
+export const DETAILS_LABELS: Record<DetailsStatus, string> = {
+  ...CALENDAR_LABELS,
+  rejected: 'Rejected request',
+  cancelled: 'Cancelled request',
 }
 
 /** Days are Singapore days, the same assumption venue search makes. */
@@ -95,4 +106,46 @@ export async function getVenueAvailability(
       headers: { Authorization: `Bearer ${token}` },
     }),
   )
+}
+
+/** SCRUM-77: one calendar entry in full. */
+export interface CalendarEntryDetails {
+  kind: 'booking' | 'unavailability'
+  id: string
+  venue_id: string
+  venue_name: string
+  venue_location: string
+  start_at: string
+  end_at: string
+  status: DetailsStatus
+  reason: string | null
+  event_request_id: string | null
+}
+
+export async function getCalendarEntry(
+  token: string,
+  entry: Pick<CalendarEntry, 'kind' | 'id'>,
+): Promise<CalendarEntryDetails> {
+  const path = entry.kind === 'booking' ? 'bookings' : 'unavailabilities'
+  return readCalendarResponse(
+    await fetch(`/api/venue-calendar/${path}/${entry.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  )
+}
+
+/**
+ * SCRUM-77 AC2 and AC3: the event behind a booking, or null when this user may not see
+ * it. The event request endpoint decides that with require_event_access(VIEW).
+ * Only a 403 means "no access". A missing event or a failed request throws, so it is
+ * shown as an error rather than as a permission problem.
+ */
+export async function getEntryEvent(token: string, eventId: string): Promise<EventRequest | null> {
+  const response = await fetch(`/api/event-requests/${eventId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (response.status === 403) return null
+  if (response.status === 404) throw new Error('The event for this booking no longer exists.')
+  if (!response.ok) throw new Error(`Could not load the event (status ${response.status}).`)
+  return (await response.json()) as EventRequest
 }

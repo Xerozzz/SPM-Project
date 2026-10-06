@@ -1,4 +1,5 @@
-"""Venue availability calendar for Coordinators and Venue Staff (SCRUM-54, SCRUM-76)."""
+"""Venue availability calendar for Coordinators and Venue Staff (SCRUM-54, SCRUM-76,
+SCRUM-77)."""
 
 import uuid
 from datetime import datetime
@@ -10,7 +11,7 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.dependencies import require_role
 from domain.roles import Role
-from schemas.venue_calendar import AvailabilityRead, CalendarEntryRead
+from schemas.venue_calendar import AvailabilityRead, CalendarEntryDetailsRead, CalendarEntryRead
 from services import venue_calendar as service
 from services import venues
 
@@ -47,8 +48,33 @@ def availability(
     return AvailabilityRead.model_validate(result)
 
 
+@router.get("/bookings/{booking_id}", response_model=CalendarEntryDetailsRead)
+def booking_details(user: Planner, db: Db, booking_id: uuid.UUID) -> CalendarEntryDetailsRead:
+    """SCRUM-77 AC1: a booking entry in full."""
+    del user
+    try:
+        return CalendarEntryDetailsRead.model_validate(service.booking_details(db, booking_id))
+    except service.CalendarEntryNotFoundError as exc:
+        raise _http_error(exc) from exc
+
+
+@router.get("/unavailabilities/{unavailability_id}", response_model=CalendarEntryDetailsRead)
+def unavailability_details(
+    user: Planner, db: Db, unavailability_id: uuid.UUID
+) -> CalendarEntryDetailsRead:
+    """SCRUM-77 AC1: a closure entry in full, with its reason."""
+    del user
+    try:
+        details = service.unavailability_details(db, unavailability_id)
+    except service.CalendarEntryNotFoundError as exc:
+        raise _http_error(exc) from exc
+    return CalendarEntryDetailsRead.model_validate(details)
+
+
 def _http_error(exc: Exception) -> HTTPException:
     if isinstance(exc, venues.VenueNotFoundError):
         return HTTPException(status.HTTP_404_NOT_FOUND, "Venue not found")
+    if isinstance(exc, service.CalendarEntryNotFoundError):
+        return HTTPException(status.HTTP_404_NOT_FOUND, "Calendar entry not found")
     assert isinstance(exc, service.InvalidCalendarRangeError)
     return HTTPException(422, [problem.__dict__ for problem in exc.problems])
