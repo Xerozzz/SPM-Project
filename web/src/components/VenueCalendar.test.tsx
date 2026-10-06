@@ -193,14 +193,65 @@ test('SCRUM-77 AC1: a closure shows its reason', async () => {
   expect(await screen.findByText('Repairs')).toBeInTheDocument()
 })
 
-test('SCRUM-77: changing the range closes the open entry', async () => {
+test.each([
+  ['To', '2030-12-31'],
+  ['From', '2030-01-01'],
+])('SCRUM-77: changing %s closes the open entry', async (label, value) => {
   renderCalendar((url) =>
     url.startsWith('/api/venue-calendar/bookings/') ? json(DETAILS) : json([ENTRY]),
   )
 
   fireEvent.click(await screen.findByRole('button', { name: /Confirmed booking/ }))
   await screen.findByRole('article', { name: 'Entry details' })
-  fireEvent.change(screen.getByLabelText('To'), { target: { value: '2030-12-31' } })
+  fireEvent.change(screen.getByLabelText(label), { target: { value } })
 
   expect(screen.queryByRole('article', { name: 'Entry details' })).toBeNull()
 })
+
+test('SCRUM-77: choosing another venue closes the open entry', async () => {
+  renderCalendar((url) =>
+    url.startsWith('/api/venue-calendar/bookings/') ? json(DETAILS) : json([ENTRY]),
+  )
+
+  fireEvent.click(await screen.findByRole('button', { name: /Confirmed booking/ }))
+  await screen.findByRole('article', { name: 'Entry details' })
+  fireEvent.change(screen.getByLabelText('Venue'), { target: { value: 'v-1' } })
+
+  expect(screen.queryByRole('article', { name: 'Entry details' })).toBeNull()
+})
+
+test.each([
+  ['rejected', 'Rejected request'],
+  ['cancelled', 'Cancelled request'],
+])('SCRUM-77: a %s booking opened in full shows its label', async (status, label) => {
+  renderCalendar((url) => {
+    if (url.startsWith('/api/venue-calendar/bookings/')) return json({ ...DETAILS, status })
+    if (url.startsWith('/api/event-requests/')) return json({ detail: 'Forbidden' }, 403)
+    return json([ENTRY])
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: /Confirmed booking/ }))
+
+  const panel = await screen.findByRole('article', { name: 'Entry details' })
+  expect(await within(panel).findByText(label)).toBeInTheDocument()
+})
+
+test.each([
+  [500, 'Could not load the event (status 500).'],
+  [404, 'The event for this booking no longer exists.'],
+])(
+  'SCRUM-77: an event lookup that fails with %s is an error, not no access',
+  async (code, message) => {
+    renderCalendar((url) => {
+      if (url.startsWith('/api/venue-calendar/bookings/')) return json(DETAILS)
+      if (url.startsWith('/api/event-requests/')) return json({ detail: 'Boom' }, code)
+      return json([ENTRY])
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: /Confirmed booking/ }))
+
+    const panel = await screen.findByRole('article', { name: 'Entry details' })
+    expect(await within(panel).findByRole('alert')).toHaveTextContent(message)
+    expect(within(panel).queryByText(/do not have access/)).toBeNull()
+  },
+)

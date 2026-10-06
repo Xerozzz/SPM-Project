@@ -24,6 +24,15 @@ export const CALENDAR_LABELS: Record<CalendarStatus, string> = {
   unavailable: 'Unavailable',
 }
 
+/** SCRUM-77: an entry opened in full can be any booking, rejected and cancelled included. */
+export type DetailsStatus = CalendarStatus | 'rejected' | 'cancelled'
+
+export const DETAILS_LABELS: Record<DetailsStatus, string> = {
+  ...CALENDAR_LABELS,
+  rejected: 'Rejected request',
+  cancelled: 'Cancelled request',
+}
+
 /** Days are Singapore days, the same assumption venue search makes. */
 export function singaporeDayStart(date: string): string {
   return new Date(`${date}T00:00:00+08:00`).toISOString()
@@ -108,7 +117,7 @@ export interface CalendarEntryDetails {
   venue_location: string
   start_at: string
   end_at: string
-  status: string
+  status: DetailsStatus
   reason: string | null
   event_request_id: string | null
 }
@@ -128,11 +137,15 @@ export async function getCalendarEntry(
 /**
  * SCRUM-77 AC2 and AC3: the event behind a booking, or null when this user may not see
  * it. The event request endpoint decides that with require_event_access(VIEW).
+ * Only a 403 means "no access". A missing event or a failed request throws, so it is
+ * shown as an error rather than as a permission problem.
  */
 export async function getEntryEvent(token: string, eventId: string): Promise<EventRequest | null> {
   const response = await fetch(`/api/event-requests/${eventId}`, {
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (response.status === 403 || response.status === 404) return null
-  return readCalendarResponse(response)
+  if (response.status === 403) return null
+  if (response.status === 404) throw new Error('The event for this booking no longer exists.')
+  if (!response.ok) throw new Error(`Could not load the event (status ${response.status}).`)
+  return (await response.json()) as EventRequest
 }

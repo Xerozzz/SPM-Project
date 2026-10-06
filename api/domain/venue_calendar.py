@@ -28,6 +28,15 @@ BOOKING_LABELS: dict[BookingStatus, EntryStatus] = {
     BookingStatus.PENDING: "pending",
 }
 
+# SCRUM-77: one entry opened in full can be any booking, rejected and cancelled included.
+DetailsStatus = Literal["confirmed", "pending", "rejected", "cancelled", "unavailable"]
+DETAILS_LABELS: dict[BookingStatus, DetailsStatus] = {
+    BookingStatus.CONFIRMED: "confirmed",
+    BookingStatus.PENDING: "pending",
+    BookingStatus.REJECTED: "rejected",
+    BookingStatus.CANCELLED: "cancelled",
+}
+
 
 def range_problems(start_at: datetime, end_at: datetime) -> list[FieldProblem]:
     """What is wrong with a requested calendar range, if anything.

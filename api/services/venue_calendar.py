@@ -111,7 +111,7 @@ class EntryDetails:
     venue_location: str
     start_at: datetime
     end_at: datetime
-    status: str
+    status: venue_calendar.DetailsStatus
     reason: str | None
     event_request_id: uuid.UUID | None
 
@@ -129,7 +129,7 @@ def booking_details(db: Session, booking_id: uuid.UUID) -> EntryDetails:
         v.location,
         b.start_at,
         b.end_at,
-        b.status.value,
+        venue_calendar.DETAILS_LABELS[b.status],
         None,
         b.event_request_id,
     )

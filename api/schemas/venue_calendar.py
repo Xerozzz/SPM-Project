@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from domain.venue_calendar import DetailsStatus
+
 
 class CalendarEntryRead(BaseModel):
     """One calendar entry. `status` tells a confirmed booking, a pending request and an
@@ -52,6 +54,6 @@ class CalendarEntryDetailsRead(BaseModel):
     venue_location: str
     start_at: datetime
     end_at: datetime
-    status: Literal["confirmed", "pending", "rejected", "cancelled", "unavailable"]
+    status: DetailsStatus
     reason: str | None
     event_request_id: uuid.UUID | None

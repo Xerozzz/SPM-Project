@@ -8,6 +8,7 @@ from domain.validation import FieldProblem
 from domain.venue_booking import BookingStatus
 from domain.venue_calendar import (
     BOOKING_LABELS,
+    DETAILS_LABELS,
     MAX_RANGE,
     SHOWN_BOOKING_STATUSES,
     EntryKind,
@@ -64,6 +65,13 @@ def test_only_confirmed_and_pending_bookings_are_shown() -> None:
 def test_every_shown_booking_status_has_a_calendar_label() -> None:
     # entries() looks up BOOKING_LABELS for every shown booking, so the two must match.
     assert set(BOOKING_LABELS) == SHOWN_BOOKING_STATUSES
+
+
+@pytest.mark.story("SCRUM-77")
+def test_every_booking_status_has_a_details_label() -> None:
+    # booking_details() looks up DETAILS_LABELS for any booking, so a new BookingStatus
+    # needs a label here or opening that booking would fail.
+    assert set(DETAILS_LABELS) == set(BookingStatus)
 
 
 @pytest.mark.story("SCRUM-76")

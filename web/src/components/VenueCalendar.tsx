@@ -3,6 +3,7 @@ import { useState } from 'react'
 
 import {
   CALENDAR_LABELS,
+  DETAILS_LABELS,
   formatSingaporeTime,
   getCalendarEntry,
   getEntryEvent,
@@ -190,9 +191,7 @@ function EntryDetails({ entry }: { entry: CalendarEntry }) {
           </div>
           <div>
             <dt className="inline font-medium">Status: </dt>
-            <dd className="inline">
-              {CALENDAR_LABELS[details.data.status as CalendarStatus] ?? details.data.status}
-            </dd>
+            <dd className="inline">{DETAILS_LABELS[details.data.status]}</dd>
           </div>
           {details.data.reason && (
             <div>
@@ -211,6 +210,11 @@ function EntryDetails({ entry }: { entry: CalendarEntry }) {
       )}
       {event.isSuccess && event.data === null && (
         <p className="mt-2 text-slate-500">You do not have access to this event&apos;s details.</p>
+      )}
+      {event.isError && (
+        <p role="alert" className="mt-2 text-red-600">
+          {event.error.message}
+        </p>
       )}
     </article>
   )
