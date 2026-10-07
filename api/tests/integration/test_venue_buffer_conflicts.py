@@ -8,7 +8,6 @@ venue from 09:30 to 12:45. The interesting periods are the ones that clash *only
 of the buffers, since those are what this story changes.
 """
 
-import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -339,7 +338,9 @@ async def test_approving_refreshes_the_stored_interval_from_the_current_buffers(
 
     venue.setup_minutes, venue.turnaround_minutes = _SETUP, _TURNAROUND
     db.flush()
-    approved = booking_service.approve(db, request.id, uuid.uuid4(), datetime.now(UTC))
+    # decided_by_id has a foreign key to users, so it cannot be an arbitrary uuid.
+    staff = make_user("venue_staff")
+    approved = booking_service.approve(db, request.id, staff.id, datetime.now(UTC))
 
     assert (approved.effective_start_at, approved.effective_end_at) == (at(9.5), at(12.75))
 
