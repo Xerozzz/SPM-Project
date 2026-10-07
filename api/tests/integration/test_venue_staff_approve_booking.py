@@ -20,11 +20,18 @@ from tests.integration.test_submit_event_request import MakeClient, MakeUser
 def clashing_booking(
     db: Session, make_user: MakeUser, booking: VenueBooking, status: BookingStatus
 ) -> VenueBooking:
-    """Another request for the same venue and the same period."""
+    """Another request for the same venue and the same period.
+
+    SCRUM-82: moving a booking's period means moving its effective occupied interval too,
+    or the `venue_bookings_effective_covers_event` check refuses the row. Copied from the
+    booking being clashed with, which is on the same venue and period by construction.
+    """
     other = pending_booking(db, make_user)
     other.venue_id = booking.venue_id
     other.start_at = booking.start_at
     other.end_at = booking.end_at
+    other.effective_start_at = booking.effective_start_at
+    other.effective_end_at = booking.effective_end_at
     other.status = status
     db.flush()
     return other

@@ -1,17 +1,39 @@
-"""Venue booking and unavailability persistence (SCRUM-55/SCRUM-38/SCRUM-73/SCRUM-74)."""
+"""Venue booking and unavailability persistence (SCRUM-55/38/73/74, buffers SCRUM-82)."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from psycopg.errors import DeadlockDetected, ExclusionViolation
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from domain.booking_conflict import ConcurrentBookingConflictError
 from domain.venue_booking import BookingStatus
+from models.venue import Venue
 from models.venue_booking import VenueBooking
 from models.venue_unavailability import VenueUnavailability
+
+
+# SCRUM-82: the venue's buffers as SQL intervals, so a period can be widened inside the
+# query. `make_interval(mins => n)` is read positionally here because SQLAlchemy's `func`
+# emits positional arguments: years, months, weeks, days, hours, minutes, seconds.
+def _setup() -> ColumnElement[timedelta]:
+    return func.make_interval(0, 0, 0, 0, 0, Venue.setup_minutes)
+
+
+def _turnaround() -> ColumnElement[timedelta]:
+    return func.make_interval(0, 0, 0, 0, 0, Venue.turnaround_minutes)
+
+
+def _combined_buffer_gap() -> ColumnElement[timedelta]:
+    """The clear time two bookings at one venue need between them (AC6).
+
+    Setup plus turnaround, added once. Widening both bookings is the same condition as
+    requiring this gap between their event periods, which keeps these queries on raw
+    columns; `test_widening_both_sides_equals_one_combined_gap` proves the equivalence.
+    """
+    return func.make_interval(0, 0, 0, 0, 0, Venue.setup_minutes + Venue.turnaround_minutes)
 
 
 def venue_ids_with_confirmed_overlap(
@@ -25,10 +47,15 @@ def venue_ids_with_confirmed_overlap(
     comparison uses the same `BookingStatus` enum the domain rule takes, so the two
     cannot disagree on what "confirmed" means.
     """
-    statement = select(VenueBooking.venue_id).where(
-        VenueBooking.status == BookingStatus.CONFIRMED,
-        VenueBooking.start_at < end_at,
-        start_at < VenueBooking.end_at,
+    gap = _combined_buffer_gap()
+    statement = (
+        select(VenueBooking.venue_id)
+        .join(Venue, Venue.id == VenueBooking.venue_id)
+        .where(
+            VenueBooking.status == BookingStatus.CONFIRMED,
+            VenueBooking.start_at < end_at + gap,
+            start_at < VenueBooking.end_at + gap,
+        )
     )
     return set(db.scalars(statement))
 
@@ -36,10 +63,19 @@ def venue_ids_with_confirmed_overlap(
 def venue_ids_with_unavailability_overlap(
     db: Session, start_at: datetime, end_at: datetime
 ) -> set[uuid.UUID]:
-    """Venue ids with an unavailability block overlapping [start_at, end_at) (AC5)."""
-    statement = select(VenueUnavailability.venue_id).where(
-        VenueUnavailability.starts_at < end_at,
-        start_at < VenueUnavailability.ends_at,
+    """Venue ids with an unavailability block overlapping [start_at, end_at) (AC5).
+
+    SCRUM-82: the requested period is widened by the venue's buffers because a booking
+    made for it would need them; the closure is not, for the reason in
+    `unavailabilities_overlapping`.
+    """
+    statement = (
+        select(VenueUnavailability.venue_id)
+        .join(Venue, Venue.id == VenueUnavailability.venue_id)
+        .where(
+            VenueUnavailability.starts_at < end_at + _turnaround(),
+            start_at - _setup() < VenueUnavailability.ends_at,
+        )
     )
     return set(db.scalars(statement))
 
@@ -86,14 +122,22 @@ def other_bookings_overlapping(db: Session, booking: VenueBooking) -> list[Venue
     not the query's. The half-open bounds only narrow the rows loaded; the domain
     re-applies the same rule. The booking itself is excluded so re-checking a booking
     never reports it as conflicting with itself.
+
+    SCRUM-82: widened by the venue's buffers on both sides, because both bookings need
+    their own setup and reset. Rather than widen each side, this adds the combined gap
+    once to the raw comparison, which is the same condition; the identity is proved by
+    `test_widening_both_sides_equals_one_combined_gap`. Doing it in one place keeps the
+    query reading raw columns, so it is unaffected by a stale effective snapshot.
     """
+    gap = _combined_buffer_gap()
     statement = (
         select(VenueBooking)
+        .join(Venue, Venue.id == VenueBooking.venue_id)
         .where(
             VenueBooking.venue_id == booking.venue_id,
             VenueBooking.id != booking.id,
-            VenueBooking.start_at < booking.end_at,
-            booking.start_at < VenueBooking.end_at,
+            VenueBooking.start_at < booking.end_at + gap,
+            booking.start_at < VenueBooking.end_at + gap,
         )
         .order_by(VenueBooking.start_at, VenueBooking.id)
     )
@@ -101,13 +145,19 @@ def other_bookings_overlapping(db: Session, booking: VenueBooking) -> list[Venue
 
 
 def unavailabilities_overlapping(db: Session, booking: VenueBooking) -> list[VenueUnavailability]:
-    """Closures on `booking`'s venue overlapping its period, half-open (SCRUM-73 AC3/AC5)."""
+    """Closures on `booking`'s venue overlapping its period, half-open (SCRUM-73 AC3/AC5).
+
+    SCRUM-82 AC5: the booking is widened by the venue's buffers and the closure is not, so
+    preparation that runs into a closure is a clash. Asymmetric on purpose, unlike
+    `other_bookings_overlapping`: a closure already covers the whole unusable period.
+    """
     statement = (
         select(VenueUnavailability)
+        .join(Venue, Venue.id == VenueUnavailability.venue_id)
         .where(
             VenueUnavailability.venue_id == booking.venue_id,
-            VenueUnavailability.starts_at < booking.end_at,
-            booking.start_at < VenueUnavailability.ends_at,
+            VenueUnavailability.starts_at < booking.end_at + _turnaround(),
+            booking.start_at - _setup() < VenueUnavailability.ends_at,
         )
         .order_by(VenueUnavailability.starts_at, VenueUnavailability.id)
     )

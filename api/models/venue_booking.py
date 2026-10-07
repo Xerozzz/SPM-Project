@@ -40,6 +40,12 @@ class VenueBooking(Base):
     )
     start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # SCRUM-82: the period the venue is really occupied, event times widened by the
+    # venue's setup and turnaround (AC3). Stored because the overlap constraint from
+    # ADR-0002 cannot read the buffers off `venues`; see ADR-0019 for why it is a snapshot
+    # taken when the booking is written rather than a value kept in step with the venue.
+    effective_start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    effective_end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     # Only "confirmed" blocks search (domain.venue_search). Stored as
     # the enum's lowercase value in a plain VARCHAR (native_enum=False), so adding a
     # status later is a code change, not a Postgres type migration (like EventRequest).
