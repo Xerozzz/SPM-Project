@@ -10,6 +10,7 @@ import pytest
 
 from domain.validation import FieldProblem
 from domain.venue import (
+    BUFFER_FIELDS,
     REQUIRED_TEXT_FIELDS,
     ROOM_LAYOUTS,
     VenueFields,
@@ -185,4 +186,40 @@ def test_field_names_cover_the_whole_ticket_in_order() -> None:
         "accessibility_features",
         "opens_at",
         "closes_at",
+        # SCRUM-82 added these two; the service copies values across by this tuple.
+        "setup_minutes",
+        "turnaround_minutes",
     )
+
+
+# ------------------------------------------------------- SCRUM-82 setup and turnaround
+
+
+@pytest.mark.story("SCRUM-82")
+@pytest.mark.parametrize("field", BUFFER_FIELDS)
+@pytest.mark.parametrize(
+    ("minutes", "is_problem"),
+    [(-1, True), (0, False), (1, False), (45, False)],
+)
+def test_a_buffer_must_be_zero_or_more_minutes(field: str, minutes: int, is_problem: bool) -> None:
+    # AC1, at the boundary: just below zero, exactly zero, just above, and a real value.
+    problems = validate_venue(complete_venue(**{field: minutes}))
+
+    assert problem_fields(problems) == ([field] if is_problem else [])
+
+
+@pytest.mark.story("SCRUM-82")
+def test_both_negative_buffers_are_named_together() -> None:
+    # AC1 names the field, and AC5's one-save-many-problems rule applies to these too.
+    problems = validate_venue(complete_venue(setup_minutes=-5, turnaround_minutes=-10))
+
+    assert problem_fields(problems) == ["setup_minutes", "turnaround_minutes"]
+
+
+@pytest.mark.story("SCRUM-82")
+@pytest.mark.parametrize("field", BUFFER_FIELDS)
+def test_an_absent_buffer_is_no_buffer_rather_than_invalid(field: str) -> None:
+    # AC7: a venue saved before buffers existed, or by a form that does not send them,
+    # stays valid. test_every_problem_is_reported_at_once covers the same from the other
+    # side: an empty record is not blamed for its missing buffers.
+    assert problem_fields(validate_venue(complete_venue(**{field: None}))) == []
