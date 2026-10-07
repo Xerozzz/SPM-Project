@@ -91,9 +91,12 @@ is proved by a test rather than asserted in a comment.
   not, and the constraint will not notice. This is the known gap, and it is what SCRUM-89 exists to
   surface. The application checks are always current, so nothing *new* can be approved into the
   overlap; only pre-existing confirmations can be caught out by it.
-- SCRUM-89 will want to extend the constraint's `WHERE` clause to exclude flagged bookings
-  (`status = 'confirmed' AND NOT requires_action`) so the problematic state stays representable
-  once it recomputes. That is a migration in that story, noted here so it is not a surprise.
+- SCRUM-89 has to surface that gap without needing the constraint changed. Its acceptance
+  criteria were amended on 7 Oct 2026 to settle this: the "requires action" marker is derived
+  from the venue's current buffers whenever it is read, not stored on the booking, so no
+  migration and no change to this constraint's `WHERE` clause is needed. A stored flag would
+  have required one, to keep a problematic booking representable, which is the version of this
+  consequence an earlier draft of this ADR assumed.
 - Two columns now hold derived data, which is a denormalisation. The check constraint
   `effective_start_at <= start_at AND effective_end_at >= end_at` is the backstop.
 - Four queries now join `venues` to read buffers, where before they did not.
