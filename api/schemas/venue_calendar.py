@@ -22,6 +22,10 @@ class CalendarEntryRead(BaseModel):
     start_at: datetime
     end_at: datetime
     status: Literal["confirmed", "pending", "unavailable"]
+    # SCRUM-82: the period the venue is actually held. Equal to the event period when the
+    # venue has no buffers, and always for a closure.
+    effective_start_at: datetime
+    effective_end_at: datetime
 
 
 class AvailabilityRead(BaseModel):

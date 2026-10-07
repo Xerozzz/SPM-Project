@@ -160,6 +160,7 @@ function VenueRow({
         <p className="text-sm text-slate-500">
           {venue.location} · up to {venue.maximum_capacity} people · {shortTime(venue.opens_at)} to{' '}
           {shortTime(venue.closes_at)}
+          {describeBuffers(venue)}
         </p>
         <p className="text-sm text-slate-500">Layouts: {venue.supported_layouts.join(', ')}</p>
         {venue.facilities.length > 0 && (
@@ -224,6 +225,8 @@ const emptyVenue: VenueFormValues = {
   accessibility_features: '',
   opens_at: '',
   closes_at: '',
+  setup_minutes: null,
+  turnaround_minutes: null,
 }
 
 /** An existing venue as the form holds it: "HH:MM:SS" from the API becomes "HH:MM". */
@@ -239,6 +242,8 @@ function formValuesOf(venue: Venue): VenueFormValues {
     accessibility_features: venue.accessibility_features.join(', '),
     opens_at: shortTime(venue.opens_at),
     closes_at: shortTime(venue.closes_at),
+    setup_minutes: venue.setup_minutes,
+    turnaround_minutes: venue.turnaround_minutes,
   }
 }
 
@@ -299,6 +304,44 @@ function VenueForm({
         <input
           value={values.location}
           onChange={(event) => setValues({ ...values, location: event.target.value })}
+          className="mt-1 w-full rounded border border-slate-300 p-2 text-sm"
+        />
+      </Field>
+
+      <Field
+        label="Setup time (minutes)"
+        error={reasonFor('setup_minutes')}
+        hint="Time needed to prepare the venue before an event. It is occupied for this long beforehand."
+      >
+        <input
+          type="number"
+          min={0}
+          value={values.setup_minutes ?? ''}
+          onChange={(event) =>
+            setValues({
+              ...values,
+              setup_minutes: event.target.value === '' ? null : Number(event.target.value),
+            })
+          }
+          className="mt-1 w-full rounded border border-slate-300 p-2 text-sm"
+        />
+      </Field>
+
+      <Field
+        label="Turnaround time (minutes)"
+        error={reasonFor('turnaround_minutes')}
+        hint="Time needed to reset the venue afterwards. It stays occupied for this long."
+      >
+        <input
+          type="number"
+          min={0}
+          value={values.turnaround_minutes ?? ''}
+          onChange={(event) =>
+            setValues({
+              ...values,
+              turnaround_minutes: event.target.value === '' ? null : Number(event.target.value),
+            })
+          }
           className="mt-1 w-full rounded border border-slate-300 p-2 text-sm"
         />
       </Field>
@@ -400,15 +443,19 @@ function VenueForm({
 function Field({
   label,
   error,
+  hint,
   children,
 }: {
   label: string
   error?: string
+  /** Shown under the label. For a field whose effect is not obvious from its name. */
+  hint?: string
   children: React.ReactNode
 }) {
   return (
     <label className="block text-sm font-medium">
       {label}
+      {hint && <span className="block text-sm font-normal text-slate-500">{hint}</span>}
       {children}
       {error && (
         <span className="mt-1 block text-sm font-normal text-red-600">
@@ -438,4 +485,17 @@ function withSeconds(value: string): string | null {
 /** "08:00:00" reads better as "08:00" in a form and a list. */
 function shortTime(value: string): string {
   return value.slice(0, 5)
+}
+
+/**
+ * SCRUM-82: the venue's buffers, for the catalogue line, or nothing when it has none.
+ *
+ * Left out entirely for a venue with no buffers rather than shown as "0 min setup",
+ * because zero buffers is the normal case and means the venue behaves as it always did.
+ */
+function describeBuffers(venue: Venue): string {
+  const parts: string[] = []
+  if (venue.setup_minutes > 0) parts.push(`${venue.setup_minutes} min setup`)
+  if (venue.turnaround_minutes > 0) parts.push(`${venue.turnaround_minutes} min turnaround`)
+  return parts.length > 0 ? ` · ${parts.join(', ')}` : ''
 }

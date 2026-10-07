@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from domain import venue_calendar
 from domain.validation import FieldProblem
 from domain.venue_buffer import VenueBuffers, effective_interval
+from models.venue import Venue
 from repositories import venue_calendar as repo
 from services import venues
 
@@ -36,6 +37,21 @@ class CalendarEntry:
     end_at: datetime
     # "confirmed" or "pending" for a booking (AC1 labels), "unavailable" for a closure.
     status: venue_calendar.EntryStatus
+    # SCRUM-82: the period the venue is actually held, which for a booking is the event
+    # widened by the venue's current buffers. Reported alongside the event's own times
+    # rather than instead of them, because the calendar now lists a booking whose setup
+    # or reset reaches into the window while its event sits outside it, and showing only
+    # the event times would leave that unexplained. Equal to the event period for a
+    # closure, which is never widened, and for any venue without buffers (AC7).
+    effective_start_at: datetime
+    effective_end_at: datetime
+
+
+def _buffers_of(venue: Venue) -> VenueBuffers:
+    """SCRUM-82: a venue's current buffers, as the domain takes them."""
+    return VenueBuffers(
+        setup_minutes=venue.setup_minutes, turnaround_minutes=venue.turnaround_minutes
+    )
 
 
 def entries(
@@ -56,11 +72,22 @@ def entries(
             b.start_at,
             b.end_at,
             venue_calendar.BOOKING_LABELS[b.status],
+            *effective_interval(b.start_at, b.end_at, _buffers_of(v)),
         )
         for b, v in repo.bookings_in_range(db, start_at, end_at, statuses, venue_id)
     ]
     closures = [
-        CalendarEntry("unavailability", u.id, v.id, v.name, u.starts_at, u.ends_at, "unavailable")
+        CalendarEntry(
+            "unavailability",
+            u.id,
+            v.id,
+            v.name,
+            u.starts_at,
+            u.ends_at,
+            "unavailable",
+            u.starts_at,
+            u.ends_at,
+        )
         for u, v in repo.unavailabilities_in_range(db, start_at, end_at, venue_id)
     ]
     return sorted(bookings + closures, key=lambda entry: (entry.start_at, str(entry.id)))
@@ -99,9 +126,7 @@ def availability(
     would show an unavailable venue with nothing to explain it.
     """
     venue = venues.get(db, venue_id)
-    buffers = VenueBuffers(
-        setup_minutes=venue.setup_minutes, turnaround_minutes=venue.turnaround_minutes
-    )
+    buffers = _buffers_of(venue)
     occupied_start, occupied_end = effective_interval(start_at, end_at, buffers)
     found = entries(db, occupied_start, occupied_end, venue_id)
     blocked = any(venue_calendar.entry_blocks(entry.kind, entry.status) for entry in found)

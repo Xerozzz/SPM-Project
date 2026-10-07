@@ -9,6 +9,7 @@ import {
   getEntryEvent,
   getVenueAvailability,
   getVenueCalendar,
+  hasBuffer,
   type CalendarEntry,
   type CalendarStatus,
 } from '../api/venueCalendar'
@@ -138,6 +139,15 @@ export default function VenueCalendar() {
               {entry.venue_name}
               <br />
               {formatSingaporeTime(entry.start_at)} to {formatSingaporeTime(entry.end_at)}
+              {hasBuffer(entry) && (
+                <>
+                  <br />
+                  <span className="text-slate-500">
+                    Venue held {formatSingaporeTime(entry.effective_start_at)} to{' '}
+                    {formatSingaporeTime(entry.effective_end_at)} for setup and turnaround
+                  </span>
+                </>
+              )}
             </button>
           </li>
         ))}

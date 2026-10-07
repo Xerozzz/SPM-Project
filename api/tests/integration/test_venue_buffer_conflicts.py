@@ -289,6 +289,52 @@ async def test_the_calendar_lists_a_booking_whose_buffer_reaches_into_the_window
 
 
 @pytest.mark.story("SCRUM-82")
+async def test_a_calendar_entry_reports_both_the_event_and_the_held_period(
+    db: Session, make_user: MakeUser
+) -> None:
+    """AC4: the entry carries the effective interval alongside the event's own times.
+
+    Both are needed: the calendar now lists a booking whose setup or reset reaches into
+    the window while its event sits outside it, so showing only the event times would
+    leave the entry unexplained.
+    """
+    venue = buffered_venue(db)
+    booking_for(db, make_user("coordinator"), venue, at(10), at(12))
+
+    entry = calendar_service.entries(db, at(9), at(13), venue.id)[0]
+
+    assert (entry.start_at, entry.end_at) == (at(10), at(12))
+    assert (entry.effective_start_at, entry.effective_end_at) == (at(9.5), at(12.75))
+
+
+@pytest.mark.story("SCRUM-82")
+async def test_a_closure_entry_is_held_for_exactly_its_own_period(
+    db: Session, make_user: MakeUser
+) -> None:
+    # AC5's asymmetry, visible in the calendar: a closure is never widened.
+    venue = buffered_venue(db)
+    closure_for(db, venue, at(10), at(12))
+
+    entry = calendar_service.entries(db, at(9), at(13), venue.id)[0]
+
+    assert (entry.effective_start_at, entry.effective_end_at) == (at(10), at(12))
+
+
+@pytest.mark.story("SCRUM-82")
+async def test_an_entry_at_a_venue_without_buffers_is_held_for_its_event_period(
+    db: Session, make_user: MakeUser
+) -> None:
+    # AC7: the frontend hides the held-period line when these match, so this is what
+    # keeps the common case uncluttered.
+    venue = make_venue(db)
+    booking_for(db, make_user("coordinator"), venue, at(10), at(12))
+
+    entry = calendar_service.entries(db, at(9), at(13), venue.id)[0]
+
+    assert (entry.effective_start_at, entry.effective_end_at) == (entry.start_at, entry.end_at)
+
+
+@pytest.mark.story("SCRUM-82")
 async def test_the_calendar_leaves_out_a_booking_whose_buffer_clears_the_window(
     db: Session, make_user: MakeUser
 ) -> None:

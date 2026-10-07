@@ -27,6 +27,9 @@ const ENTRY: CalendarEntry = {
   id: 'b-1',
   venue_id: 'v-1',
   venue_name: 'Hall A',
+  // SCRUM-82: a venue with no buffers, so the venue is held for exactly the event period.
+  effective_start_at: '2030-03-04T01:00:00Z',
+  effective_end_at: '2030-03-04T03:00:00Z',
   start_at: '2030-03-04T01:00:00Z',
   end_at: '2030-03-04T03:00:00Z',
   status: 'confirmed',
@@ -255,3 +258,39 @@ test.each([
     expect(within(panel).queryByText(/do not have access/)).toBeNull()
   },
 )
+
+
+// --------------------------------------------------------------- SCRUM-82 buffers
+
+/** The same Singapore formatter the component uses, so the times are checked, not skipped. */
+function sgt(value: string): string {
+  return new Date(value).toLocaleString('en-SG', { timeZone: 'Asia/Singapore' })
+}
+
+test.each([
+  // A buffer on one end only is the case a start-only or end-only comparison would miss.
+  ['setup only', '2030-03-04T00:30:00Z', ENTRY.end_at],
+  ['turnaround only', ENTRY.start_at, '2030-03-04T03:45:00Z'],
+  ['both', '2030-03-04T00:30:00Z', '2030-03-04T03:45:00Z'],
+])(
+  'SCRUM-82: an entry held longer than its event says so (%s)',
+  async (_label, effective_start_at, effective_end_at) => {
+    // Without this line the entry would appear outside the window the Coordinator asked
+    // for, with nothing to explain why.
+    renderCalendar(() => json([{ ...ENTRY, effective_start_at, effective_end_at }]))
+
+    const line = await screen.findByText(/Venue held/)
+    // The times themselves, not just the sentence around them: asserting the shape only
+    // would pass with the event's own times rendered in place of the held ones.
+    expect(line).toHaveTextContent(sgt(effective_start_at))
+    expect(line).toHaveTextContent(sgt(effective_end_at))
+  },
+)
+
+test('SCRUM-82: an entry with no buffers says nothing extra', async () => {
+  // AC7: the common case stays as uncluttered as it was before this story.
+  renderCalendar(() => json([ENTRY]))
+
+  await screen.findByRole('button', { name: /Confirmed booking/ })
+  expect(screen.queryByText(/Venue held/)).toBeNull()
+})
