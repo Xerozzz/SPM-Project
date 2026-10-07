@@ -487,15 +487,25 @@ test('SCRUM-82 AC1: a buffer cleared after being typed goes back to null', async
 })
 
 test('SCRUM-82 AC1: a negative buffer is reported against its own field', async () => {
+  let body: Record<string, unknown> = {}
   renderCatalogue('venue_staff', async (_input, init) => {
     if ((init?.method ?? 'GET') === 'GET') return json([])
-    return json({ detail: [{ field: 'setup_minutes', reason: 'must be zero or more minutes' }] }, 422)
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return json(
+      { detail: [{ field: 'setup_minutes', reason: 'must be zero or more minutes' }] },
+      422,
+    )
   })
 
   await screen.findByText('No venues in the catalogue yet.')
   fireEvent.change(screen.getByLabelText(/^Setup time/), { target: { value: '-5' } })
   fireEvent.click(screen.getByRole('button', { name: 'Add venue' }))
 
+  // The value has to reach the API for the API to be the one refusing it. Asserted
+  // because the form could clamp it to zero and this test would still pass.
+  await waitFor(() => {
+    expect(body.setup_minutes).toBe(-5)
+  })
   expect(
     await screen.findByText(/Setup time \(minutes\) must be zero or more minutes/),
   ).toBeInTheDocument()
