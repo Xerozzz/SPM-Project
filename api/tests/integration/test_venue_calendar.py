@@ -13,7 +13,7 @@ from models.venue_booking import VenueBooking
 from models.venue_unavailability import VenueUnavailability
 from tests.integration.test_submit_event_request import MakeClient, MakeUser
 from tests.integration.test_submit_venue_booking import approved_event
-from tests.integration.test_venue_search import make_venue
+from tests.integration.test_venue_search import effective_for, make_venue
 
 _DAY = datetime(2030, 3, 4, tzinfo=UTC)
 _HOUR = timedelta(hours=1)
@@ -29,12 +29,15 @@ def booking(
 ) -> VenueBooking:
     coordinator: User = make_user("coordinator")
     event = approved_event(db, make_user("organiser"), coordinator)
+    effective_start, effective_end = effective_for(venue, start_at, end_at)
     row = VenueBooking(
         venue_id=venue.id,
         event_request_id=event.id,
         requested_by_id=coordinator.id,
         start_at=start_at,
         end_at=end_at,
+        effective_start_at=effective_start,
+        effective_end_at=effective_end,
         status=status,
     )
     db.add(row)

@@ -13,7 +13,7 @@ from models.user import User
 from models.venue_booking import VenueBooking
 from tests.integration.test_submit_event_request import MakeClient, MakeUser
 from tests.integration.test_submit_venue_booking import approved_event, submit
-from tests.integration.test_venue_search import make_venue
+from tests.integration.test_venue_search import effective_for, make_venue
 
 
 def pending_booking(db: Session, make_user: MakeUser, **event_changes: object) -> VenueBooking:
@@ -22,12 +22,15 @@ def pending_booking(db: Session, make_user: MakeUser, **event_changes: object) -
     event = approved_event(db, make_user("organiser"), coordinator, **event_changes)
     venue = make_venue(db, name=f"Hall {uuid.uuid4()}")
     assert event.start_at is not None and event.end_at is not None
+    effective_start, effective_end = effective_for(venue, event.start_at, event.end_at)
     booking = VenueBooking(
         venue_id=venue.id,
         event_request_id=event.id,
         requested_by_id=coordinator.id,
         start_at=event.start_at,
         end_at=event.end_at,
+        effective_start_at=effective_start,
+        effective_end_at=effective_end,
         status=BookingStatus.PENDING,
     )
     db.add(booking)

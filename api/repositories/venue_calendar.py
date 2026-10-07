@@ -1,10 +1,10 @@
-"""Reads for the venue availability calendar (SCRUM-54, SCRUM-77)."""
+"""Reads for the venue availability calendar (SCRUM-54, SCRUM-77, buffers SCRUM-82)."""
 
 import uuid
 from collections.abc import Iterable
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from domain.venue_booking import BookingStatus
@@ -20,17 +20,27 @@ def bookings_in_range(
     statuses: Iterable[BookingStatus],
     venue_id: uuid.UUID | None,
 ) -> list[tuple[VenueBooking, Venue]]:
-    """Bookings with one of `statuses` overlapping [start_at, end_at), with their venue.
+    """Bookings whose *effective* interval overlaps [start_at, end_at), with their venue.
 
     Half-open, like domain.venue_search.intervals_overlap.
+
+    SCRUM-82 AC4: the booking is widened by its venue's buffers, so a booking whose setup
+    or reset reaches into the window is included even when the event itself is outside it.
+    Computed from the venue's current buffers rather than read from the booking's stored
+    effective columns, so the calendar reflects a buffer change at once (ADR-0019).
+
+    Only the booking side is widened here. `[start_at, end_at)` is whatever the caller is
+    asking about: a viewing window for the calendar, or an already-widened period when
+    `services.venue_calendar.availability` asks whether a venue is free.
     """
     statement = (
         select(VenueBooking, Venue)
         .join(Venue, Venue.id == VenueBooking.venue_id)
         .where(
             VenueBooking.status.in_(list(statuses)),
-            VenueBooking.start_at < end_at,
-            start_at < VenueBooking.end_at,
+            VenueBooking.start_at - func.make_interval(0, 0, 0, 0, 0, Venue.setup_minutes) < end_at,
+            start_at
+            < VenueBooking.end_at + func.make_interval(0, 0, 0, 0, 0, Venue.turnaround_minutes),
         )
     )
     if venue_id is not None:
@@ -41,7 +51,11 @@ def bookings_in_range(
 def unavailabilities_in_range(
     db: Session, start_at: datetime, end_at: datetime, venue_id: uuid.UUID | None
 ) -> list[tuple[VenueUnavailability, Venue]]:
-    """Unavailability blocks overlapping [start_at, end_at), with their venue."""
+    """Unavailability blocks overlapping [start_at, end_at), with their venue.
+
+    Never widened: a closure already covers the whole period the venue is unusable, which
+    is the asymmetry SCRUM-82 AC5 describes.
+    """
     statement = (
         select(VenueUnavailability, Venue)
         .join(Venue, Venue.id == VenueUnavailability.venue_id)

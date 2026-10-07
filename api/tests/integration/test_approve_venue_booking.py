@@ -31,7 +31,7 @@ from repositories import venue_availability
 from services import venue_bookings as service
 from tests.integration.test_submit_event_request import MakeClient, MakeUser
 from tests.integration.test_submit_venue_booking import approved_event
-from tests.integration.test_venue_search import make_venue
+from tests.integration.test_venue_search import effective_for, make_venue
 
 _START = datetime(2026, 11, 10, 2, 0, tzinfo=UTC)
 _END = _START + timedelta(hours=3)
@@ -49,12 +49,15 @@ def _booking(
     """A booking row for its own approved event; the coordinator doubles as organiser,
     because neither the conflict rule nor approval looks at who owns the event."""
     event = approved_event(db, coordinator, coordinator, start_at=start_at, end_at=end_at)
+    effective_start, effective_end = effective_for(venue, start_at, end_at)
     booking = VenueBooking(
         venue_id=venue.id,
         event_request_id=event.id,
         requested_by_id=coordinator.id,
         start_at=start_at,
         end_at=end_at,
+        effective_start_at=effective_start,
+        effective_end_at=effective_end,
         status=status,
     )
     db.add(booking)

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from domain import venue_calendar
 from domain.validation import FieldProblem
+from domain.venue_buffer import VenueBuffers, effective_interval
 from repositories import venue_calendar as repo
 from services import venues
 
@@ -85,9 +86,24 @@ def availability(
 
     `available` means nothing is holding the venue. Opening hours are not considered,
     so a venue can be reported available for a period it is closed (unlike venue search).
+
+    SCRUM-82 AC4: the period asked about is a period someone wants to *use* the venue for,
+    so it is widened by the venue's buffers before anything is compared, the same reading
+    venue search takes. The entries themselves are widened by `repo.bookings_in_range`, so
+    a booking is compared effective-to-effective (AC6) and a closure only against the
+    widened request (AC5).
+
+    `entries` reports what was found over the widened period, because those are the
+    entries behind the answer: with buffers, a booking whose event sits just outside the
+    requested period can still be the reason the venue is not free, and leaving it out
+    would show an unavailable venue with nothing to explain it.
     """
     venue = venues.get(db, venue_id)
-    found = entries(db, start_at, end_at, venue_id)
+    buffers = VenueBuffers(
+        setup_minutes=venue.setup_minutes, turnaround_minutes=venue.turnaround_minutes
+    )
+    occupied_start, occupied_end = effective_interval(start_at, end_at, buffers)
+    found = entries(db, occupied_start, occupied_end, venue_id)
     blocked = any(venue_calendar.entry_blocks(entry.kind, entry.status) for entry in found)
     available = venue.is_active and not blocked
     return Availability(
