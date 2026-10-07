@@ -1,4 +1,4 @@
-"""API contracts for the venue catalogue (SCRUM-59). Mirrors domain/venue.py."""
+"""API contracts for the venue catalogue (SCRUM-59, SCRUM-82). Mirrors domain/venue.py."""
 
 import uuid
 from datetime import time
@@ -23,6 +23,11 @@ class VenueCreate(BaseModel):
     accessibility_features: list[str] | None = None
     opens_at: time | None = None
     closes_at: time | None = None
+    # SCRUM-82 AC1: `int` is what refuses a non-numeric buffer, with the field named in
+    # the Pydantic error. Whether the number is acceptable is domain/venue.py's decision,
+    # as for maximum_capacity. Absent means no buffer, so an existing payload still saves.
+    setup_minutes: int | None = None
+    turnaround_minutes: int | None = None
 
 
 class VenueUpdate(VenueCreate):
@@ -44,6 +49,10 @@ class VenueRead(BaseModel):
     accessibility_features: list[str]
     opens_at: time
     closes_at: time
+    # SCRUM-82 AC2: readable by anyone who may read the catalogue, so an Event Coordinator
+    # can see the buffers. Only Venue Staff reach the POST and PATCH routes that set them.
+    setup_minutes: int
+    turnaround_minutes: int
     is_active: bool
 
 

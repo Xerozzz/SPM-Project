@@ -10,7 +10,7 @@ from typing import Any
 
 from core.database import Session
 from domain.validation import FieldProblem
-from domain.venue import VenueFields, field_names, validate_venue
+from domain.venue import BUFFER_FIELDS, VenueFields, field_names, validate_venue
 from models.venue import Venue
 from repositories import venues as repo
 
@@ -106,4 +106,8 @@ def _stored_values(fields: VenueFields) -> dict[str, object]:
         values[name] = value.strip() if isinstance(value, str) else value
     for name in ("facilities", "supported_layouts", "accessibility_features"):
         values[name] = values[name] or []
+    # SCRUM-82: an absent buffer is no buffer. Stored as zero so the column stays NOT NULL
+    # and the venue behaves exactly as it did before buffers existed (AC7).
+    for name in BUFFER_FIELDS:
+        values[name] = values[name] or 0
     return values
