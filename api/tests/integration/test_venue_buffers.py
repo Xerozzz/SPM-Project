@@ -57,19 +57,25 @@ async def test_venue_staff_can_set_both_buffers_when_adding_a_venue(
 
 
 @pytest.mark.story("SCRUM-82")
-async def test_venue_staff_can_change_the_buffers_on_an_existing_venue(
-    db: Session, make_user: MakeUser, make_client: MakeClient
+@pytest.mark.parametrize(
+    ("changed", "untouched"),
+    [("setup_minutes", "turnaround_minutes"), ("turnaround_minutes", "setup_minutes")],
+)
+async def test_venue_staff_can_change_one_buffer_without_disturbing_the_other(
+    db: Session, make_user: MakeUser, make_client: MakeClient, changed: str, untouched: str
 ) -> None:
-    venue = make_venue(db)
+    # AC1 for each field on its own. The second assertion matters because the service
+    # merges a PATCH over the stored record and then normalises every value, so an
+    # absent field passes through that normalisation on its way back to the column.
+    venue = make_venue(db, setup_minutes=_SETUP, turnaround_minutes=_TURNAROUND)
+    was = getattr(venue, untouched)
 
     async with make_client(make_user("venue_staff")) as client:
-        response = await client.patch(
-            f"/api/venues/{venue.id}", json={"setup_minutes": 15, "turnaround_minutes": 20}
-        )
+        response = await client.patch(f"/api/venues/{venue.id}", json={changed: 15})
 
     assert response.status_code == 200, response.text
-    assert response.json()["setup_minutes"] == 15
-    assert response.json()["turnaround_minutes"] == 20
+    assert response.json()[changed] == 15
+    assert response.json()[untouched] == was
 
 
 @pytest.mark.story("SCRUM-82")
