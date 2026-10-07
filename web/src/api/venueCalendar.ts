@@ -15,6 +15,18 @@ export interface CalendarEntry {
   start_at: string
   end_at: string
   status: CalendarStatus
+  /**
+   * SCRUM-82: the period the venue is actually held, the event widened by the venue's
+   * setup and turnaround. Equal to the event period when the venue has no buffers, and
+   * always for a closure.
+   */
+  effective_start_at: string
+  effective_end_at: string
+}
+
+/** SCRUM-82: whether an entry holds the venue for longer than its own event period. */
+export function hasBuffer(entry: CalendarEntry): boolean {
+  return entry.effective_start_at !== entry.start_at || entry.effective_end_at !== entry.end_at
 }
 
 /** AC1: how each kind of entry is labelled so they can be told apart. */

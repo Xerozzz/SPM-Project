@@ -25,6 +25,13 @@ export interface Venue {
   /** Wall-clock opening hours as "HH:MM:SS"; see domain/venue.py for why they are not UTC. */
   opens_at: string
   closes_at: string
+  /**
+   * SCRUM-82: minutes the venue needs to prepare before a booking and to reset after it.
+   * A booking occupies the venue from its start minus setup to its end plus turnaround,
+   * which is what availability and conflict detection compare (AC3, AC4).
+   */
+  setup_minutes: number
+  turnaround_minutes: number
   /** A deactivated venue stays readable but cannot be chosen for new work (ADR-0012). */
   is_active: boolean
 }
@@ -40,6 +47,9 @@ export interface VenueInput {
   /** null when Venue Staff have not entered a time yet; the API names it as required. */
   opens_at: string | null
   closes_at: string | null
+  /** SCRUM-82 AC1: whole minutes, zero or more. Null means no buffer. */
+  setup_minutes: number | null
+  turnaround_minutes: number | null
 }
 
 /** One field Venue Staff must fix before the record can be saved (AC5). */

@@ -27,6 +27,9 @@ const ENTRY: CalendarEntry = {
   id: 'b-1',
   venue_id: 'v-1',
   venue_name: 'Hall A',
+  // SCRUM-82: a venue with no buffers, so the venue is held for exactly the event period.
+  effective_start_at: '2030-03-04T01:00:00Z',
+  effective_end_at: '2030-03-04T03:00:00Z',
   start_at: '2030-03-04T01:00:00Z',
   end_at: '2030-03-04T03:00:00Z',
   status: 'confirmed',
@@ -255,3 +258,33 @@ test.each([
     expect(within(panel).queryByText(/do not have access/)).toBeNull()
   },
 )
+
+
+// --------------------------------------------------------------- SCRUM-82 buffers
+
+test('SCRUM-82: an entry held longer than its event says so', async () => {
+  // A 09:00-11:00 SGT event at a venue with 30 minutes setup and 45 turnaround holds the
+  // venue 08:30-11:45. Without this line the entry would appear outside the window the
+  // Coordinator asked for with nothing to explain why.
+  renderCalendar(() =>
+    json([
+      {
+        ...ENTRY,
+        effective_start_at: '2030-03-04T00:30:00Z',
+        effective_end_at: '2030-03-04T03:45:00Z',
+      },
+    ]),
+  )
+
+  expect(
+    await screen.findByText(/Venue held .* to .* for setup and turnaround/),
+  ).toBeInTheDocument()
+})
+
+test('SCRUM-82: an entry with no buffers says nothing extra', async () => {
+  // AC7: the common case stays as uncluttered as it was before this story.
+  renderCalendar(() => json([ENTRY]))
+
+  await screen.findByRole('button', { name: /Confirmed booking/ })
+  expect(screen.queryByText(/Venue held/)).toBeNull()
+})
