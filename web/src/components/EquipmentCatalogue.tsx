@@ -1,0 +1,154 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { type FormEvent, type ReactNode, useState } from 'react'
+
+import {
+  createEquipment,
+  listEquipment,
+  type EquipmentInput,
+  type EquipmentProblem,
+  EquipmentRejectedError,
+} from '../api/equipment'
+import { useAuth } from '../auth/useAuth'
+
+const emptyForm: EquipmentInput = {
+  equipment_type: '',
+  description: null,
+  total_quantity: null,
+  location: '',
+  operational_status: '',
+}
+
+/** SCRUM-84: Technical Support Staff add and view equipment inventory entries. */
+export default function EquipmentCatalogue() {
+  const { token } = useAuth()
+  const queryClient = useQueryClient()
+  const queryKey = ['equipment', token]
+  const [values, setValues] = useState<EquipmentInput>(emptyForm)
+  const [problems, setProblems] = useState<EquipmentProblem[]>([])
+  const [outcome, setOutcome] = useState<string | null>(null)
+  const catalogue = useQuery({
+    queryKey,
+    queryFn: () => listEquipment(token ?? ''),
+    enabled: token !== null,
+  })
+
+  const save = useMutation({
+    mutationFn: () => createEquipment(token ?? '', values),
+    onSuccess: (equipment) => {
+      setValues(emptyForm)
+      setProblems([])
+      setOutcome(`“${equipment.equipment_type}” has been added to the catalogue.`)
+      void queryClient.invalidateQueries({ queryKey })
+    },
+    onError: (error: Error) => {
+      if (error instanceof EquipmentRejectedError) {
+        setProblems(error.problems)
+        setOutcome(null)
+      } else {
+        setProblems([])
+        setOutcome(error.message)
+      }
+    },
+  })
+
+  function reasonFor(field: string) {
+    return problems.find((problem) => problem.field === field)?.reason
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    save.mutate()
+  }
+
+  return (
+    <section className="mt-6 rounded-lg border border-slate-200 p-4">
+      <h2 className="font-medium">Equipment catalogue</h2>
+      {catalogue.isPending && <p className="mt-2 text-sm">Loading equipment…</p>}
+      {catalogue.isError && <p className="mt-2 text-sm">{catalogue.error.message}</p>}
+      {catalogue.data?.length === 0 && (
+        <p className="mt-2 text-sm">No equipment in the catalogue yet.</p>
+      )}
+      {catalogue.data && catalogue.data.length > 0 && (
+        <ul className="mt-2 space-y-2" aria-label="Equipment catalogue entries">
+          {catalogue.data.map((equipment) => (
+            <li key={equipment.id} className="rounded border border-slate-200 p-2 text-sm">
+              <p className="font-medium">{equipment.equipment_type}</p>
+              <p>
+                {equipment.location} · {equipment.total_quantity} · {equipment.operational_status}
+              </p>
+              {equipment.description && <p>{equipment.description}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <form className="mt-4 space-y-3 border-t border-slate-200 pt-4" noValidate onSubmit={submit}>
+        <h3 className="text-sm font-medium">Add equipment</h3>
+        <Field label="Equipment type" error={reasonFor('equipment_type')}>
+          <input
+            value={values.equipment_type}
+            onChange={(event) => setValues({ ...values, equipment_type: event.target.value })}
+          />
+        </Field>
+        <Field label="Description" error={reasonFor('description')}>
+          <textarea
+            value={values.description ?? ''}
+            onChange={(event) => setValues({ ...values, description: event.target.value || null })}
+          />
+        </Field>
+        <Field label="Total quantity" error={reasonFor('total_quantity')}>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={values.total_quantity ?? ''}
+            onChange={(event) =>
+              setValues({
+                ...values,
+                total_quantity: event.target.value === '' ? null : Number(event.target.value),
+              })
+            }
+          />
+        </Field>
+        <Field label="Location" error={reasonFor('location')}>
+          <input
+            value={values.location}
+            onChange={(event) => setValues({ ...values, location: event.target.value })}
+          />
+        </Field>
+        <Field label="Operational status" error={reasonFor('operational_status')}>
+          <input
+            value={values.operational_status}
+            onChange={(event) => setValues({ ...values, operational_status: event.target.value })}
+          />
+        </Field>
+        <button type="submit" className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white">
+          Add equipment
+        </button>
+      </form>
+      {outcome && (
+        <p className="mt-3 text-sm" role="status">
+          {outcome}
+        </p>
+      )}
+    </section>
+  )
+}
+
+function Field({ label, error, children }: { label: string; error?: string; children: ReactNode }) {
+  return (
+    <label className="block text-sm">
+      {label}
+      {children && (
+        <span className="mt-1 block [&_input]:w-full [&_input]:rounded [&_input]:border [&_input]:border-slate-300 [&_input]:p-2 [&_textarea]:w-full [&_textarea]:rounded [&_textarea]:border [&_textarea]:border-slate-300 [&_textarea]:p-2">
+          {children}
+        </span>
+      )}
+      {error && (
+        <span className="mt-1 block text-red-700">
+          {label} {error}
+        </span>
+      )}
+    </label>
+  )
+}

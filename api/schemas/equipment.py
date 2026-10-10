@@ -1,0 +1,35 @@
+"""HTTP contracts for equipment catalogue entries (SCRUM-84)."""
+
+import uuid
+
+from pydantic import BaseModel, ConfigDict, StrictInt
+
+
+class EquipmentCreate(BaseModel):
+    """Everything Technical Support Staff may supply when adding equipment."""
+
+    equipment_type: str | None = None
+    description: str | None = None
+    total_quantity: StrictInt | None = None
+    location: str | None = None
+    operational_status: str | None = None
+
+
+class EquipmentRead(BaseModel):
+    """An equipment entry as shown in the catalogue."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    equipment_type: str
+    description: str | None
+    total_quantity: int
+    location: str
+    operational_status: str
+
+
+class EquipmentProblemRead(BaseModel):
+    """One field that must be corrected before an entry can be saved."""
+
+    field: str
+    reason: str

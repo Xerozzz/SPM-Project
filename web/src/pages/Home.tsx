@@ -8,6 +8,7 @@ import NotificationInbox from '../components/NotificationInbox'
 import EventRequestForm from '../components/EventRequestForm'
 import EventRequestReview from '../components/EventRequestReview'
 import UnassignedQueue from '../components/UnassignedQueue'
+import EquipmentCatalogue from '../components/EquipmentCatalogue'
 import VenueBookingDecisions from '../components/VenueBookingDecisions'
 import VenueCalendar from '../components/VenueCalendar'
 import VenueCatalogue from '../components/VenueCatalogue'
@@ -53,6 +54,8 @@ export default function HomePage() {
 
       {/* SCRUM-99: every signed-in user gets a private notification inbox. */}
       <NotificationInbox />
+
+      {hasRole('tech_support') && <EquipmentCatalogue />}
 
       {/* SCRUM-55: coordinators search active venues by event requirements. */}
       {hasRole('coordinator') && <VenueSearch />}
