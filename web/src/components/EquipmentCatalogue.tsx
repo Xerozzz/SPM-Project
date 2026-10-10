@@ -73,11 +73,26 @@ export default function EquipmentCatalogue() {
         <ul className="mt-2 space-y-2" aria-label="Equipment catalogue entries">
           {catalogue.data.map((equipment) => (
             <li key={equipment.id} className="rounded border border-slate-200 p-2 text-sm">
-              <p className="font-medium">{equipment.equipment_type}</p>
               <p>
-                {equipment.location} · {equipment.total_quantity} · {equipment.operational_status}
+                <span className="font-medium">Equipment type: </span>
+                {equipment.equipment_type}
               </p>
-              {equipment.description && <p>{equipment.description}</p>}
+              <p>
+                <span className="font-medium">Description: </span>
+                {equipment.description ?? 'Not provided'}
+              </p>
+              <p>
+                <span className="font-medium">Total quantity: </span>
+                {equipment.total_quantity}
+              </p>
+              <p>
+                <span className="font-medium">Location: </span>
+                {equipment.location}
+              </p>
+              <p>
+                <span className="font-medium">Operational status: </span>
+                {equipment.operational_status}
+              </p>
             </li>
           ))}
         </ul>

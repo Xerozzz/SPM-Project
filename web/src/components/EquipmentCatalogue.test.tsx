@@ -56,9 +56,12 @@ test('technical support can add equipment and sees it in the catalogue', async (
   await waitFor(() => expect(posted.total_quantity).toBe(4))
   expect(posted.description).toBeNull()
   expect(await screen.findByRole('status')).toHaveTextContent('“Projector” has been added')
-  expect(
-    await screen.findByRole('list', { name: 'Equipment catalogue entries' }),
-  ).toHaveTextContent('Media Store · 4 · Operational')
+  const entry = await screen.findByRole('listitem')
+  expect(entry).toHaveTextContent('Equipment type: Projector')
+  expect(entry).toHaveTextContent('Description: Not provided')
+  expect(entry).toHaveTextContent('Total quantity: 4')
+  expect(entry).toHaveTextContent('Location: Media Store')
+  expect(entry).toHaveTextContent('Operational status: Operational')
 })
 
 test('validation feedback names the equipment field to correct', async () => {
