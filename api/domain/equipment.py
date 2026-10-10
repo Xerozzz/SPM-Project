@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 from domain.validation import FieldProblem
 
+OPERATIONAL_STATUSES: tuple[str, ...] = ("Operational", "Damaged", "Under Maintenance")
+
 
 @dataclass(frozen=True)
 class EquipmentFields:
@@ -23,6 +25,18 @@ def validate_equipment(equipment: EquipmentFields) -> list[FieldProblem]:
     for field in ("equipment_type", "location", "operational_status"):
         if _is_blank(getattr(equipment, field)):
             problems.append(FieldProblem(field, "is required"))
+
+    if (
+        equipment.operational_status is not None
+        and equipment.operational_status.strip()
+        and equipment.operational_status.strip() not in OPERATIONAL_STATUSES
+    ):
+        problems.append(
+            FieldProblem(
+                "operational_status",
+                f"must be one of: {', '.join(OPERATIONAL_STATUSES)}",
+            )
+        )
 
     if equipment.total_quantity is None:
         problems.append(FieldProblem("total_quantity", "is required"))

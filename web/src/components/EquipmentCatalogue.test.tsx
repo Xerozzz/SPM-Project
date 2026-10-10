@@ -49,7 +49,7 @@ test('technical support can add equipment and sees it in the catalogue', async (
   fireEvent.change(screen.getByLabelText(/^Total quantity/), { target: { value: '4' } })
   fireEvent.change(screen.getByLabelText(/^Location/), { target: { value: 'Media Store' } })
   fireEvent.change(screen.getByLabelText(/^Operational status/), {
-    target: { value: 'operational' },
+    target: { value: 'Operational' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Add equipment' }))
 
@@ -58,7 +58,7 @@ test('technical support can add equipment and sees it in the catalogue', async (
   expect(await screen.findByRole('status')).toHaveTextContent('“Projector” has been added')
   expect(
     await screen.findByRole('list', { name: 'Equipment catalogue entries' }),
-  ).toHaveTextContent('Media Store · 4 · operational')
+  ).toHaveTextContent('Media Store · 4 · Operational')
 })
 
 test('validation feedback names the equipment field to correct', async () => {

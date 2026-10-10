@@ -4,6 +4,7 @@ import { type FormEvent, type ReactNode, useState } from 'react'
 import {
   createEquipment,
   listEquipment,
+  OPERATIONAL_STATUSES,
   type EquipmentInput,
   type EquipmentProblem,
   EquipmentRejectedError,
@@ -117,10 +118,22 @@ export default function EquipmentCatalogue() {
           />
         </Field>
         <Field label="Operational status" error={reasonFor('operational_status')}>
-          <input
+          <select
             value={values.operational_status}
-            onChange={(event) => setValues({ ...values, operational_status: event.target.value })}
-          />
+            onChange={(event) =>
+              setValues({
+                ...values,
+                operational_status: event.target.value as EquipmentInput['operational_status'],
+              })
+            }
+          >
+            <option value="">Select a status</option>
+            {OPERATIONAL_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
         </Field>
         <button type="submit" className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white">
           Add equipment
@@ -140,7 +153,7 @@ function Field({ label, error, children }: { label: string; error?: string; chil
     <label className="block text-sm">
       {label}
       {children && (
-        <span className="mt-1 block [&_input]:w-full [&_input]:rounded [&_input]:border [&_input]:border-slate-300 [&_input]:p-2 [&_textarea]:w-full [&_textarea]:rounded [&_textarea]:border [&_textarea]:border-slate-300 [&_textarea]:p-2">
+        <span className="mt-1 block [&_input]:w-full [&_input]:rounded [&_input]:border [&_input]:border-slate-300 [&_input]:p-2 [&_select]:w-full [&_select]:rounded [&_select]:border [&_select]:border-slate-300 [&_select]:p-2 [&_textarea]:w-full [&_textarea]:rounded [&_textarea]:border [&_textarea]:border-slate-300 [&_textarea]:p-2">
           {children}
         </span>
       )}

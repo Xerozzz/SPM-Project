@@ -21,7 +21,7 @@ def equipment_body(**overrides: Any) -> dict[str, Any]:
         "description": "Portable presentation projector",
         "total_quantity": 4,
         "location": "Media Store",
-        "operational_status": "operational",
+        "operational_status": "Operational",
     }
     values.update(overrides)
     return values
@@ -43,7 +43,7 @@ async def test_technical_support_can_create_and_view_equipment(
         "description": "Portable presentation projector",
         "total_quantity": 4,
         "location": "Media Store",
-        "operational_status": "operational",
+        "operational_status": "Operational",
     }
     stored = db.get(Equipment, uuid.UUID(created["id"]))
     assert stored is not None
@@ -68,6 +68,7 @@ async def test_description_is_optional(make_user: MakeUser, make_client: MakeCli
         ("equipment_type", None),
         ("location", ""),
         ("operational_status", "   "),
+        ("operational_status", "Unavailable"),
         ("total_quantity", None),
         ("total_quantity", -1),
     ],

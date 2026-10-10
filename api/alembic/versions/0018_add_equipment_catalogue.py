@@ -28,6 +28,10 @@ def upgrade() -> None:
         sa.Column("operational_status", sa.String(length=100), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint("total_quantity >= 0", name="equipment_total_quantity_non_negative"),
+        sa.CheckConstraint(
+            "operational_status IN ('Operational', 'Damaged', 'Under Maintenance')",
+            name="equipment_operational_status_allowed",
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("equipment_type", "location", name="uq_equipment_type_location"),
     )

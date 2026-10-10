@@ -6,15 +6,19 @@ export interface Equipment {
   description: string | null
   total_quantity: number
   location: string
-  operational_status: string
+  operational_status: OperationalStatus
 }
+
+export const OPERATIONAL_STATUSES = ['Operational', 'Damaged', 'Under Maintenance'] as const
+
+export type OperationalStatus = (typeof OPERATIONAL_STATUSES)[number]
 
 export interface EquipmentInput {
   equipment_type: string
   description: string | null
   total_quantity: number | null
   location: string
-  operational_status: string
+  operational_status: OperationalStatus | ''
 }
 
 export interface EquipmentProblem {
