@@ -17,8 +17,11 @@ async function signInAsOrganiser(page: Page) {
 function row(page: Page, name: string) {
   const ownRequests = page
     .getByRole('heading', { name: 'My event requests' })
-    .locator('xpath=../following-sibling::ul[1]')
-  return ownRequests.getByRole('listitem').filter({ hasText: name })
+    .locator('..')
+    .getByRole('list')
+  return ownRequests.getByRole('listitem').filter({
+    has: page.getByText(name, { exact: true }),
+  })
 }
 
 async function createCompleteDraft(page: Page, name: string) {
@@ -33,10 +36,10 @@ async function createCompleteDraft(page: Page, name: string) {
   await page.getByLabel('Equipment requirement *').selectOption('Projector-type requirement')
   await page.getByLabel('Layout requirement *').fill('Theatre style')
   await page.getByLabel('Registration requirement *').fill('Open registration')
-  await page.getByRole('button', { name: 'Create event request' }).click()
+  await page.getByRole('button', { name: 'Save draft' }).click()
 
-  await expect(page.getByRole('status').filter({ hasText: 'has been created' })).toContainText(
-    `“${name}” has been created.`,
+  await expect(page.getByRole('status').filter({ hasText: 'saved as a draft' })).toContainText(
+    `“${name}” was saved as a draft.`,
   )
 }
 
@@ -46,11 +49,15 @@ test('a complete draft is submitted and confirmed (AC1), then locked (AC3)', asy
   await createCompleteDraft(page, name)
 
   await expect(row(page, name)).toContainText('Draft')
-  await row(page, name).getByRole('button', { name: 'Submit for review' }).click()
+  await page
+    .getByRole('heading', { name: 'Edit saved draft' })
+    .locator('..')
+    .getByRole('button', { name: 'Submit for review' })
+    .click()
 
   // Home also has a role="status" line for API health, so pick ours by its text.
   await expect(page.getByRole('status').filter({ hasText: 'submitted for review' })).toContainText(
-    `“${name}” has been submitted for review. Its status is now Submitted.`,
+    `“${name}” has been submitted for review and is now read-only.`,
   )
   await expect(row(page, name)).toContainText('Submitted')
   await expect(row(page, name)).toContainText('Locked')

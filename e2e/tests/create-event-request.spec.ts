@@ -1,7 +1,7 @@
 import { expect, type Page, test } from '@playwright/test'
 
-// SCRUM-28: an organiser creates one complete event request through the UI. This covers only
-// creation; saving/resuming drafts and submitting them belong to their respective stories.
+// SCRUM-28/SCRUM-29: an organiser saves one complete event request as a draft through the
+// unified event-request form.
 
 async function signInAsOrganiser(page: Page) {
   await page.goto('/')
@@ -12,7 +12,13 @@ async function signInAsOrganiser(page: Page) {
 }
 
 function row(page: Page, name: string) {
-  return page.getByRole('listitem').filter({ hasText: name })
+  const ownRequests = page
+    .getByRole('heading', { name: 'My event requests' })
+    .locator('..')
+    .getByRole('list')
+  return ownRequests.getByRole('listitem').filter({
+    has: page.getByText(name, { exact: true }),
+  })
 }
 
 test('an organiser creates a complete event request as a draft', async ({ page }) => {
@@ -30,10 +36,10 @@ test('an organiser creates a complete event request as a draft', async ({ page }
   await page.getByLabel('Equipment requirement *').selectOption('Projector-type requirement')
   await page.getByLabel('Layout requirement *').fill('Theatre style')
   await page.getByLabel('Registration requirement *').fill('Open registration')
-  await page.getByRole('button', { name: 'Create event request' }).click()
+  await page.getByRole('button', { name: 'Save draft' }).click()
 
-  await expect(page.getByRole('status').filter({ hasText: 'has been created' })).toContainText(
-    `“${name}” has been created.`,
+  await expect(page.getByRole('status').filter({ hasText: 'saved as a draft' })).toContainText(
+    `“${name}” was saved as a draft.`,
   )
   await expect(row(page, name)).toContainText('Draft')
 })
