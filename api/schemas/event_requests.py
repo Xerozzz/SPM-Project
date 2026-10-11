@@ -78,6 +78,18 @@ class EventRequestDraftCreate(EventRequestUpdate):
     """
 
 
+class EventCalendarEntryRead(BaseModel):
+    """SCRUM-87: read-only calendar details, with no implied edit permissions."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str | None
+    start_at: AwareDatetime
+    end_at: AwareDatetime
+    status: EventStatus
+
+
 class EventRequestRead(BaseModel):
     """An event request as the organiser sees it."""
 

@@ -5,6 +5,7 @@ import { useAuth } from '../auth/useAuth'
 import MyEventRequests from '../components/MyEventRequests'
 import ActiveAssignments from '../components/ActiveAssignments'
 import NotificationInbox from '../components/NotificationInbox'
+import OrganisationEventCalendar from '../components/OrganisationEventCalendar'
 import EventRequestForm from '../components/EventRequestForm'
 import EventRequestReview from '../components/EventRequestReview'
 import UnassignedQueue from '../components/UnassignedQueue'
@@ -39,6 +40,7 @@ export default function HomePage() {
 
       {hasRole('organiser') && (
         <>
+          <OrganisationEventCalendar />
           <EventRequestForm />
           <MyEventRequests />
         </>

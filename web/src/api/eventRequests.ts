@@ -6,6 +6,22 @@ export type EventStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'con
 
 export type EventAction = 'edit' | 'submit' | 'approve' | 'reject'
 
+export interface EventCalendarEntry {
+  id: string
+  name: string | null
+  start_at: string
+  end_at: string
+  status: EventStatus
+}
+
+export async function listOrganisationCalendar(token: string): Promise<EventCalendarEntry[]> {
+  const response = await fetch('/api/event-requests/organisation-calendar', {
+    headers: authHeaders(token),
+  })
+  if (!response.ok) throw new Error(`Could not load organisation calendar (${response.status})`)
+  return (await response.json()) as EventCalendarEntry[]
+}
+
 export const VENUE_REQUIREMENTS = [
   'Auditorium-type venue',
   'Lecture theatre-type venue',
@@ -39,7 +55,7 @@ export interface EventRequest {
   submitted_at: string | null
   /** What the status allows, regardless of who is asking (SCRUM-35). Not an authorisation. */
   status_permits: EventAction[]
-  /** The assigned coordinator (SCRUM-34). Compare with the viewer's id for "may I decide?". */
+  /** Coordinator assigned by the later Lead workflow. Null means queued for assignment. */
   coordinator_id: string | null
   decided_by_id: string | null
   decided_at: string | null
@@ -368,6 +384,10 @@ export async function createDraft(
     headers: jsonHeaders(token),
     body: JSON.stringify(draft),
   })
+  if (response.status === 422) {
+    const problems = parseValidationProblems(await response.json())
+    if (problems) throw new EventRequestValidationError(problems)
+  }
   if (!response.ok) {
     throw new Error(`Draft save failed (${response.status})`)
   }
@@ -384,6 +404,10 @@ export async function updateDraft(
     headers: jsonHeaders(token),
     body: JSON.stringify(draft),
   })
+  if (response.status === 422) {
+    const problems = parseValidationProblems(await response.json())
+    if (problems) throw new EventRequestValidationError(problems)
+  }
   if (!response.ok) {
     throw new Error(`Draft save failed (${response.status})`)
   }

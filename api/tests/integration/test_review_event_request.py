@@ -1,16 +1,27 @@
 """SCRUM-31: an Event Coordinator reviews and decides submitted event requests."""
 
+from datetime import UTC, datetime
+
 import httpx
 import pytest
 from sqlalchemy.orm import Session
 
 from domain.event_status import EventStatus
+from models.event_request import EventRequest
+from models.user import User
 from tests.integration.test_submit_event_request import MakeClient, MakeUser, make_draft
 
 
 async def _submit(client: httpx.AsyncClient, request_id: object) -> None:
     response = await client.post(f"/api/event-requests/{request_id}/submit")
     assert response.status_code == 200
+
+
+def _assign(db: Session, request: EventRequest, coordinator: User) -> None:
+    """Arrange coordinator ownership for the review tests."""
+    request.coordinator_id = coordinator.id
+    request.assigned_at = datetime.now(UTC)
+    db.flush()
 
 
 @pytest.mark.story("SCRUM-31")
@@ -23,10 +34,7 @@ async def test_coordinator_sees_submitted_request_information_and_approves_it(
 
     async with make_client(organiser) as client:
         await _submit(client, request.id)
-    # SCRUM-101: submission leaves the request unassigned; the Lead's assignment
-    # (SCRUM-98) is not built yet, so the test arranges ownership directly.
-    request.coordinator_id = coordinator.id
-    db.flush()
+    _assign(db, request, coordinator)
     async with make_client(coordinator) as client:
         review = await client.get("/api/event-requests/reviewable")
         approval = await client.post(f"/api/event-requests/{request.id}/approve")
@@ -62,8 +70,7 @@ async def test_rejection_requires_a_reason_and_records_the_decision(
 
     async with make_client(organiser) as organiser_client:
         await _submit(organiser_client, request.id)
-    request.coordinator_id = coordinator.id
-    db.flush()
+    _assign(db, request, coordinator)
     async with make_client(coordinator) as coordinator_client:
         missing_reason = await coordinator_client.post(
             f"/api/event-requests/{request.id}/reject", json={"reason": "   "}
@@ -106,8 +113,7 @@ async def test_non_assigned_coordinator_can_view_but_cannot_decide_a_request(
 
     async with make_client(organiser) as organiser_client:
         await _submit(organiser_client, request.id)
-    request.coordinator_id = assigned_coordinator.id
-    db.flush()
+    _assign(db, request, assigned_coordinator)
     async with make_client(other_coordinator) as other_client:
         read = await other_client.get(f"/api/event-requests/{request.id}")
         approval = await other_client.post(f"/api/event-requests/{request.id}/approve")

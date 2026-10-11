@@ -57,7 +57,7 @@ def content_of(request: EventRequest) -> dict[str, object]:
 
 
 @pytest.mark.story("SCRUM-46")
-async def test_a_complete_draft_is_submitted_and_confirmed(
+async def test_a_complete_draft_is_submitted_unassigned_and_timestamped(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     organiser = make_user("organiser")
@@ -70,6 +70,8 @@ async def test_a_complete_draft_is_submitted_and_confirmed(
     body = response.json()
     assert body["id"] == str(draft.id)
     assert body["status"] == "submitted"
+    assert body["coordinator_id"] is None
+    assert body["assigned_at"] is None
 
     db.refresh(draft)
     assert draft.status is EventStatus.SUBMITTED
@@ -78,6 +80,25 @@ async def test_a_complete_draft_is_submitted_and_confirmed(
     assert draft.submitted_at.tzinfo is not None
     assert abs(datetime.now(UTC) - draft.submitted_at) < timedelta(seconds=30)
     assert body["submitted_at"] == draft.submitted_at.isoformat().replace("+00:00", "Z")
+
+
+@pytest.mark.story("SCRUM-46")
+@pytest.mark.story("SCRUM-87")
+async def test_draft_without_dates_can_be_saved_but_cannot_be_submitted(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    organiser = make_user("organiser")
+
+    async with make_client(organiser) as client:
+        saved = await client.post("/api/event-requests/drafts", json={"name": "Early idea"})
+        submitted = await client.post(f"/api/event-requests/{saved.json()['id']}/submit")
+
+    assert saved.status_code == 201
+    assert saved.json()["start_at"] is None
+    assert saved.json()["end_at"] is None
+    assert submitted.status_code == 422
+    problems = submitted.json()["detail"]
+    assert {problem["field"] for problem in problems} >= {"start_at", "end_at"}
 
 
 # --------------------------------------------------------------------------- AC2
@@ -268,11 +289,9 @@ async def test_editing_with_another_timezone_is_stored_as_utc(
 async def test_submission_changes_nothing_but_status_and_timestamp(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
-    # AC4: no venue booking, equipment reservation or registration results from
-    # submitting. Those tables do not exist yet, so the observable form of the rule is
-    # that submission touches exactly the status and its timestamp - nothing else.
-    # (SCRUM-101: submission leaves the request unassigned, so coordinator_id/assigned_at
-    # stay null — see domain/event_request.py for why they are not part of `content_of`.)
+    # AC4: submission preserves request content and allocates no resources.
+    # Coordinator assignment is a separate Lead action (ADR-0020); this normal
+    # draft keeps its assignment fields null. `content_of` covers content only.
     organiser = make_user("organiser")
     draft = make_draft(db, organiser)
     before = content_of(draft)

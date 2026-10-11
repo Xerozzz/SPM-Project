@@ -97,6 +97,12 @@ def list_visible_drafts_for_organiser(db: Session, organiser_id: uuid.UUID) -> l
     return repo.list_drafts_for_organisation(db, organiser.organisation_id)
 
 
+def list_organisation_calendar(db: Session, organiser_id: uuid.UUID) -> list[EventRequest]:
+    """SCRUM-87: dated requests visible through the organiser's stored membership."""
+    organiser = _user_or_forbidden(db, organiser_id)
+    return repo.list_calendar_for_organisation(db, organiser.organisation_id)
+
+
 def create_draft(db: Session, organiser_id: uuid.UUID, fields: dict[str, object]) -> EventRequest:
     """SCRUM-29: save a new incomplete draft for the current organiser.
 
@@ -133,8 +139,9 @@ def submit(
     fields. AC4 holds by construction — nothing here touches venues, equipment or
     registration, and no other code runs on submission.
 
-    SCRUM-101 (Week 7 manual-assignment policy): submission leaves the request
-    unassigned. A Coordinator Lead assigns it later (SCRUM-98). See ADR-0020.
+    SCRUM-101 (Week 7 manual-assignment policy): normal drafts remain unassigned
+    for the Coordinator Lead to assign (SCRUM-98). Existing assignment fields
+    are preserved. See ADR-0020.
     """
     # Locked read: two organisers' browsers double-clicking "Submit" at the same instant
     # serialise here, and the second sees SUBMITTED and gets a 409 rather than a second
