@@ -10,6 +10,7 @@ from enum import StrEnum
 class Role(StrEnum):
     ORGANISER = "organiser"
     COORDINATOR = "coordinator"
+    COORDINATOR_LEAD = "coordinator_lead"
     VENUE_STAFF = "venue_staff"
     TECH_SUPPORT = "tech_support"
     ATTENDEE = "attendee"

@@ -193,6 +193,27 @@ export async function listBookableEventRequests(token: string): Promise<EventReq
   return (await response.json()) as EventRequest[]
 }
 
+/** SCRUM-101: one row of the Coordinator Lead unassigned queue (AC2 fields only). */
+export interface UnassignedEventRequest {
+  id: string
+  name: string | null
+  organiser_id: string
+  start_at: string | null
+  end_at: string | null
+  expected_attendance: number | null
+  submitted_at: string | null
+}
+
+export async function listUnassignedEventRequests(
+  token: string,
+): Promise<UnassignedEventRequest[]> {
+  const response = await fetch('/api/event-requests/unassigned', {
+    headers: authHeaders(token),
+  })
+  if (!response.ok) throw new Error(`Could not load unassigned requests (${response.status})`)
+  return (await response.json()) as UnassignedEventRequest[]
+}
+
 export async function createEventRequest(
   token: string,
   request: EventRequestCreate,

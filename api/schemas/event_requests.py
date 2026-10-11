@@ -128,3 +128,21 @@ class FieldProblemRead(BaseModel):
 
     field: str
     reason: str
+
+
+class UnassignedEventRequestRead(BaseModel):
+    """SCRUM-101: one row of the Coordinator Lead unassigned queue.
+
+    Only the fields the acceptance criteria require: event ID, name, organiser,
+    start/end, expected attendance, and submission time. No unrelated private fields.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str | None
+    organiser_id: uuid.UUID
+    start_at: datetime | None
+    end_at: datetime | None
+    expected_attendance: int | None
+    submitted_at: datetime | None

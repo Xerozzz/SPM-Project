@@ -48,6 +48,24 @@ def list_submitted(db: Session) -> list[EventRequest]:
     return list(db.scalars(statement))
 
 
+def list_unassigned_submitted(db: Session) -> list[EventRequest]:
+    """SCRUM-101: Submitted requests with no coordinator, oldest submission first.
+
+    Only unassigned Submitted rows appear: assigned requests and requests outside the
+    active review state are excluded. `id` is the stable secondary order for equal
+    `submitted_at` values.
+    """
+    statement = (
+        select(EventRequest)
+        .where(
+            EventRequest.status == EventStatus.SUBMITTED,
+            EventRequest.coordinator_id.is_(None),
+        )
+        .order_by(EventRequest.submitted_at.asc(), EventRequest.id.asc())
+    )
+    return list(db.scalars(statement))
+
+
 def list_bookable_for_coordinator(db: Session, coordinator_id: uuid.UUID) -> list[EventRequest]:
     """Approved requests assigned to this coordinator for venue booking."""
     statement = (

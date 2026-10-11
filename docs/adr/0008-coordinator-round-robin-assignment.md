@@ -1,6 +1,6 @@
 # ADR-0008: Derive round-robin coordinator assignment from assignment history
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR-0019
 - **Date:** 2026-09-13
 - **Deciders:** Whole team
 - **Related stories:** SCRUM-34 (auto-assign an Event Coordinator on first submission)
