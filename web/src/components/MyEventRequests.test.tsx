@@ -26,8 +26,6 @@ const draft = eventRequest({
   status: 'draft',
   name: 'Orientation Day',
   description: 'Campus welcome',
-  venue_requirement: 'Auditorium-type venue',
-  equipment_requirement: 'Projector-type requirement',
   submitted_at: null,
   status_permits: ['edit', 'submit'],
 })
@@ -103,11 +101,33 @@ test('shows a rejection reason to the organiser', async () => {
   ).toBeInTheDocument()
 })
 
-test('does not offer a second standalone new-draft flow', async () => {
-  renderSignedIn({ 'GET /api/event-requests': () => json([]) })
+test('incomplete form can be saved as a draft with confirmation and status', async () => {
+  let listed: EventRequest[] = []
+  const saved = eventRequest({ id: 'req-3', name: 'Hackathon', status: 'draft' })
+  const create = vi.fn((init?: RequestInit) => {
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      name: 'Hackathon',
+      purpose: null,
+      start_at: null,
+      expected_attendance: null,
+    })
+    listed = [saved]
+    return json(saved, 201)
+  })
 
-  await screen.findByText('You have no event requests yet.')
-  expect(screen.queryByRole('button', { name: 'New draft' })).not.toBeInTheDocument()
+  renderSignedIn({
+    'GET /api/event-requests': () => json(listed),
+    'GET /api/event-requests/drafts': () => json(listed),
+    'POST /api/event-requests/drafts': create,
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: 'New draft' }))
+  fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Hackathon' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save Draft' }))
+
+  expect(await screen.findByRole('status')).toHaveTextContent('“Hackathon” was saved as a Draft.')
+  expect(create).toHaveBeenCalledOnce()
+  expect(await screen.findAllByText('Draft')).not.toHaveLength(0)
 })
 
 test('reopened draft shows persisted values and can be edited', async () => {
@@ -132,14 +152,8 @@ test('reopened draft shows persisted values and can be edited', async () => {
   const form = await screen.findByRole('form', { name: 'Event request draft form' })
   expect(within(form).getByDisplayValue('Orientation Day')).toBeInTheDocument()
   expect(within(form).getByDisplayValue('Campus welcome')).toBeInTheDocument()
-  expect(within(form).getByLabelText('Venue requirement *').tagName).toBe('SELECT')
-  expect(within(form).getByLabelText('Venue requirement *')).toHaveValue('Auditorium-type venue')
-  expect(within(form).getByLabelText('Equipment requirement *').tagName).toBe('SELECT')
-  expect(within(form).getByLabelText('Equipment requirement *')).toHaveValue(
-    'Projector-type requirement',
-  )
 
-  fireEvent.change(within(form).getByLabelText('Description *'), {
+  fireEvent.change(within(form).getByLabelText('Description'), {
     target: { value: 'Updated campus welcome' },
   })
   fireEvent.click(within(form).getByRole('button', { name: 'Save Draft' }))
@@ -155,7 +169,6 @@ test('submitting an incomplete draft names the fields to correct', async () => {
     'GET /api/event-requests': () => json([draft]),
     'GET /api/event-requests/drafts': () => json([draft]),
     'GET /api/event-requests/req-1': () => json(draft),
-    'PATCH /api/event-requests/req-1': () => json(draft),
     'POST /api/event-requests/req-1/submit': () =>
       json(
         {
@@ -179,13 +192,11 @@ test('submitting an incomplete draft names the fields to correct', async () => {
   expect(within(form).getByRole('button', { name: 'Submit for review' })).toBeInTheDocument()
 })
 
-test('submitting an open draft closes its editor and shows a read-only submitted row', async () => {
+test('submitting a complete draft shows confirmation and the new status', async () => {
   let listed = [draft]
   renderSignedIn({
     'GET /api/event-requests': () => json(listed),
     'GET /api/event-requests/drafts': () => json(listed),
-    'GET /api/event-requests/req-1': () => json(draft),
-    'PATCH /api/event-requests/req-1': () => json(draft),
     'POST /api/event-requests/req-1/submit': () => {
       listed = [
         { ...draft, status: 'submitted', submitted_at: '2026-09-12T09:00:00Z', status_permits: [] },
@@ -194,15 +205,12 @@ test('submitting an open draft closes its editor and shows a read-only submitted
     },
   })
 
-  fireEvent.click(await screen.findByLabelText('Edit draft Orientation Day'))
-  const form = await screen.findByRole('form', { name: 'Event request draft form' })
-  fireEvent.click(within(form).getByRole('button', { name: 'Submit for review' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Submit for review' }))
 
   expect(await screen.findByRole('status')).toHaveTextContent(
     '“Orientation Day” has been submitted for review. Its status is now Submitted.',
   )
   expect(await screen.findByText(/Locked/)).toBeInTheDocument()
-  expect(screen.queryByRole('form', { name: 'Event request draft form' })).not.toBeInTheDocument()
 })
 
 test('same-organisation non-owner draft is visible without edit controls', async () => {

@@ -2,7 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import {
+  createDraft,
   type EventRequest,
+  type EventRequestDraftInput,
   FIELD_LABELS,
   type FieldProblem,
   getEventRequest,
@@ -13,13 +15,6 @@ import {
   updateDraft,
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
-import {
-  type EventRequestFieldName,
-  type EventRequestFormValues,
-  eventRequestToDraftInput,
-  eventRequestToFormValues,
-} from '../validation/eventRequest'
-import EventRequestFields from './EventRequestFields'
 
 /**
  * SCRUM-46: an organiser's event requests, each with a Submit action while it is a draft.
@@ -60,15 +55,19 @@ export default function MyEventRequests() {
   // The mutation variable carries the request id plus its current name, so validation
   // feedback can name the request even when the API refuses submission.
   const submit = useMutation({
-    mutationFn: async (request: SubmitTarget) => {
-      if (request.values) {
-        await updateDraft(token ?? '', request.id, eventRequestToDraftInput(request.values))
-      }
-      return submitEventRequest(token ?? '', request.id)
-    },
+    mutationFn: (request: SubmitTarget) => submitEventRequest(token ?? '', request.id),
     onSuccess: (request) => {
       setOutcome({ kind: 'submitted', request })
-      setEditing(null)
+      setEditing((current) =>
+        current?.id === request.id
+          ? {
+              id: request.id,
+              status: request.status,
+              status_permits: request.status_permits,
+              values: toForm(request),
+            }
+          : current,
+      )
       void queryClient.invalidateQueries({ queryKey })
       void queryClient.invalidateQueries({ queryKey: draftsQueryKey })
       void queryClient.invalidateQueries({ queryKey: ['organisation-calendar', token] })
@@ -90,7 +89,7 @@ export default function MyEventRequests() {
         id: request.id,
         status: request.status,
         status_permits: request.status_permits,
-        values: eventRequestToFormValues(request),
+        values: toForm(request),
       })
     },
     onError: (error) => {
@@ -100,8 +99,10 @@ export default function MyEventRequests() {
 
   const saveDraft = useMutation({
     mutationFn: (state: EditingState) => {
-      const payload = eventRequestToDraftInput(state.values)
-      return updateDraft(token ?? '', state.id, payload)
+      const payload = toDraftPayload(state.values)
+      return state.id === null
+        ? createDraft(token ?? '', payload)
+        : updateDraft(token ?? '', state.id, payload)
     },
     onSuccess: (request) => {
       setOutcome({ kind: 'saved', request })
@@ -109,7 +110,7 @@ export default function MyEventRequests() {
         id: request.id,
         status: request.status,
         status_permits: request.status_permits,
-        values: eventRequestToFormValues(request),
+        values: toForm(request),
       })
       void queryClient.invalidateQueries({ queryKey })
       void queryClient.invalidateQueries({ queryKey: draftsQueryKey })
@@ -123,7 +124,19 @@ export default function MyEventRequests() {
   return (
     <section className="mt-6 space-y-4">
       <div className="rounded-lg border border-slate-200 p-4">
-        <h2 className="font-medium">My event requests</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-medium">My event requests</h2>
+          <button
+            type="button"
+            onClick={() => {
+              setOutcome(null)
+              setEditing({ id: null, status: 'draft', status_permits: ['edit'], values: emptyForm() })
+            }}
+            className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white"
+          >
+            New draft
+          </button>
+        </div>
 
         {requests.isPending && <p className="mt-2 text-sm">Loading...</p>}
         {requests.isError && (
@@ -193,11 +206,7 @@ export default function MyEventRequests() {
           onCancel={() => setEditing(null)}
           onSave={() => saveDraft.mutate(editing)}
           onSubmit={() =>
-            submit.mutate({
-              id: editing.id,
-              name: nullableText(editing.values.name),
-              values: editing.values,
-            })
+            editing.id && submit.mutate({ id: editing.id, name: nullableText(editing.values.name) })
           }
           isSaving={saveDraft.isPending}
           isSubmitting={submit.isPending}
@@ -250,15 +259,27 @@ type Outcome =
   | { kind: 'failed'; message: string }
 
 interface EditingState {
-  id: string
+  id: string | null
   status: EventRequest['status']
   status_permits: EventRequest['status_permits']
-  values: EventRequestFormValues
+  values: DraftFormValues
 }
 
-type SubmitTarget = Pick<EventRequest, 'id' | 'name'> & {
-  values?: EventRequestFormValues
+interface DraftFormValues {
+  name: string
+  purpose: string
+  description: string
+  start_at: string
+  end_at: string
+  expected_attendance: string
+  venue_requirement: string
+  accessibility_requirement: string
+  equipment_requirement: string
+  layout_requirement: string
+  registration_requirement: string
 }
+
+type SubmitTarget = Pick<EventRequest, 'id' | 'name'>
 
 function StatusLabel({ status }: { status: EventRequest['status'] }) {
   if (status === 'submitted') return <>Submitted</>
@@ -320,7 +341,7 @@ function DraftForm({
   isSaving: boolean
   isSubmitting: boolean
 }) {
-  const update = (field: EventRequestFieldName, value: string) => {
+  const update = (field: keyof DraftFormValues, value: string) => {
     onChange({ ...state, values: { ...state.values, [field]: value } })
   }
 
@@ -335,12 +356,9 @@ function DraftForm({
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-medium">Edit event request</h2>
+          <h2 className="font-medium">{state.id ? 'Edit event request' : 'New event request'}</h2>
           <p className="text-sm text-slate-500">
             Status: <StatusLabel status={state.status} />
-          </p>
-          <p className="text-sm text-slate-500">
-            Fields marked * are required to submit. A draft may be incomplete.
           </p>
         </div>
         <button
@@ -352,12 +370,62 @@ function DraftForm({
         </button>
       </div>
 
-      <div className="mt-4">
-        <EventRequestFields
-          idPrefix={`draft-${state.id}`}
-          values={state.values}
-          onChange={update}
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <Field label="Name" value={state.values.name} onChange={(value) => update('name', value)} />
+        <Field
+          label="Purpose"
+          value={state.values.purpose}
+          onChange={(value) => update('purpose', value)}
         />
+        <Field
+          label="Start date and time"
+          value={state.values.start_at}
+          onChange={(value) => update('start_at', value)}
+        />
+        <Field
+          label="End date and time"
+          value={state.values.end_at}
+          onChange={(value) => update('end_at', value)}
+        />
+        <Field
+          label="Expected attendance"
+          type="number"
+          value={state.values.expected_attendance}
+          onChange={(value) => update('expected_attendance', value)}
+        />
+        <Field
+          label="Venue requirement"
+          value={state.values.venue_requirement}
+          onChange={(value) => update('venue_requirement', value)}
+        />
+        <Field
+          label="Accessibility requirement"
+          value={state.values.accessibility_requirement}
+          onChange={(value) => update('accessibility_requirement', value)}
+        />
+        <Field
+          label="Equipment requirement"
+          value={state.values.equipment_requirement}
+          onChange={(value) => update('equipment_requirement', value)}
+        />
+        <Field
+          label="Layout requirement"
+          value={state.values.layout_requirement}
+          onChange={(value) => update('layout_requirement', value)}
+        />
+        <Field
+          label="Registration requirement"
+          value={state.values.registration_requirement}
+          onChange={(value) => update('registration_requirement', value)}
+        />
+        <label className="md:col-span-2">
+          <span className="text-sm font-medium text-slate-700">Description</span>
+          <textarea
+            value={state.values.description}
+            onChange={(event) => update('description', event.target.value)}
+            className="mt-1 min-h-24 w-full rounded border border-slate-300 px-3 py-2 text-sm"
+          />
+        </label>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
@@ -381,6 +449,79 @@ function DraftForm({
       </div>
     </form>
   )
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  type = 'text',
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  type?: 'text' | 'number'
+}) {
+  return (
+    <label>
+      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm"
+      />
+    </label>
+  )
+}
+
+function emptyForm(): DraftFormValues {
+  return {
+    name: '',
+    purpose: '',
+    description: '',
+    start_at: '',
+    end_at: '',
+    expected_attendance: '',
+    venue_requirement: '',
+    accessibility_requirement: '',
+    equipment_requirement: '',
+    layout_requirement: '',
+    registration_requirement: '',
+  }
+}
+
+function toForm(request: EventRequest): DraftFormValues {
+  return {
+    name: request.name ?? '',
+    purpose: request.purpose ?? '',
+    description: request.description ?? '',
+    start_at: request.start_at ?? '',
+    end_at: request.end_at ?? '',
+    expected_attendance: request.expected_attendance?.toString() ?? '',
+    venue_requirement: request.venue_requirement ?? '',
+    accessibility_requirement: request.accessibility_requirement ?? '',
+    equipment_requirement: request.equipment_requirement ?? '',
+    layout_requirement: request.layout_requirement ?? '',
+    registration_requirement: request.registration_requirement ?? '',
+  }
+}
+
+function toDraftPayload(values: DraftFormValues): EventRequestDraftInput {
+  return {
+    name: nullableText(values.name),
+    purpose: nullableText(values.purpose),
+    description: nullableText(values.description),
+    start_at: nullableText(values.start_at),
+    end_at: nullableText(values.end_at),
+    expected_attendance:
+      values.expected_attendance.trim() === '' ? null : Number(values.expected_attendance),
+    venue_requirement: nullableText(values.venue_requirement),
+    accessibility_requirement: nullableText(values.accessibility_requirement),
+    equipment_requirement: nullableText(values.equipment_requirement),
+    layout_requirement: nullableText(values.layout_requirement),
+    registration_requirement: nullableText(values.registration_requirement),
+  }
 }
 
 function nullableText(value: string): string | null {

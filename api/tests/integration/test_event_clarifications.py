@@ -16,23 +16,12 @@ MakeUser = Callable[..., User]
 MakeClient = Callable[[User | None], httpx.AsyncClient]
 
 
-async def submitted_request(
-    db: Session,
-    organiser: User,
-    make_client: MakeClient,
-    coordinator: User | None = None,
-) -> EventRequest:
+async def submitted_request(db: Session, organiser: User, make_client: MakeClient) -> EventRequest:
     request = make_draft(db, organiser)
     async with make_client(organiser) as client:
         response = await client.post(f"/api/event-requests/{request.id}/submit")
     assert response.status_code == 200
     db.refresh(request)
-    if coordinator is not None:
-        # Arrange coordinator ownership explicitly so these tests stay focused
-        # on SCRUM-30 clarification permissions and message history.
-        request.coordinator_id = coordinator.id
-        request.assigned_at = datetime.now(UTC)
-        db.flush()
     return request
 
 
@@ -50,7 +39,11 @@ async def test_coordinator_can_create_clarification_with_audit_fields(
 ) -> None:
     organiser = make_user("organiser")
     coordinator = make_user("coordinator")
-    request = await submitted_request(db, organiser, make_client, coordinator)
+    request = await submitted_request(db, organiser, make_client)
+    # SCRUM-101: submission leaves the request unassigned; arrange ownership directly
+    # until the Lead assignment story (SCRUM-98) lands.
+    request.coordinator_id = coordinator.id
+    db.flush()
     assert request.coordinator_id == coordinator.id
 
     async with make_client(coordinator) as client:
@@ -93,7 +86,9 @@ async def test_unassigned_coordinator_can_view_but_cannot_request_clarification(
     now = datetime.now(UTC)
     assigned = make_user("coordinator", created_at=now - timedelta(minutes=1))
     unassigned = make_user("coordinator", created_at=now)
-    request = await submitted_request(db, organiser, make_client, assigned)
+    request = await submitted_request(db, organiser, make_client)
+    request.coordinator_id = assigned.id
+    db.flush()
     assert request.coordinator_id == assigned.id
 
     async with make_client(unassigned) as client:
@@ -112,7 +107,9 @@ async def test_blank_coordinator_clarification_is_rejected(
 ) -> None:
     organiser = make_user("organiser")
     coordinator = make_user("coordinator")
-    request = await submitted_request(db, organiser, make_client, coordinator)
+    request = await submitted_request(db, organiser, make_client)
+    request.coordinator_id = coordinator.id
+    db.flush()
 
     async with make_client(coordinator) as client:
         response = await request_clarification(client, request, message)
@@ -126,7 +123,9 @@ async def test_organiser_can_view_clarification_and_respond(
 ) -> None:
     organiser = make_user("organiser")
     coordinator = make_user("coordinator")
-    request = await submitted_request(db, organiser, make_client, coordinator)
+    request = await submitted_request(db, organiser, make_client)
+    request.coordinator_id = coordinator.id
+    db.flush()
 
     async with make_client(coordinator) as client:
         clarification = await request_clarification(client, request)
@@ -151,11 +150,13 @@ async def test_organiser_can_view_clarification_and_respond(
 async def test_kind_comes_from_the_endpoint_not_the_author(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
-    # One person holding both roles (clarification sheet row 7) creates a request and is
-    # arranged as its assignee. Their question and their answer have the same
-    # author_id, so only `kind` tells the two apart.
+    # One person holding both roles (clarification sheet row 7) creates a request; the
+    # test assigns them directly (SCRUM-101 leaves submissions unassigned). Their
+    # question and their answer have the same author_id, so only `kind` tells them apart.
     both = make_user("organiser", "coordinator")
-    request = await submitted_request(db, both, make_client, both)
+    request = await submitted_request(db, both, make_client)
+    request.coordinator_id = both.id
+    db.flush()
     assert request.coordinator_id == both.id
 
     async with make_client(both) as client:
@@ -233,7 +234,7 @@ async def test_participant_roles_cannot_use_each_others_message_endpoint(
 ) -> None:
     organiser = make_user("organiser")
     coordinator = make_user("coordinator")
-    request = await submitted_request(db, organiser, make_client, coordinator)
+    request = await submitted_request(db, organiser, make_client)
 
     async with make_client(organiser) as client:
         organiser_request = await request_clarification(client, request)
@@ -272,7 +273,9 @@ async def test_clarification_and_response_leave_status_unchanged(
 ) -> None:
     organiser = make_user("organiser")
     coordinator = make_user("coordinator")
-    request = await submitted_request(db, organiser, make_client, coordinator)
+    request = await submitted_request(db, organiser, make_client)
+    request.coordinator_id = coordinator.id
+    db.flush()
 
     async with make_client(coordinator) as client:
         clarification = await request_clarification(client, request)
@@ -296,7 +299,9 @@ async def test_history_persists_in_deterministic_order(
 ) -> None:
     organiser = make_user("organiser")
     coordinator = make_user("coordinator")
-    request = await submitted_request(db, organiser, make_client, coordinator)
+    request = await submitted_request(db, organiser, make_client)
+    request.coordinator_id = coordinator.id
+    db.flush()
 
     async with make_client(coordinator) as client:
         first = await request_clarification(client, request, "First question")

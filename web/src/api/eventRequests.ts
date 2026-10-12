@@ -55,7 +55,7 @@ export interface EventRequest {
   submitted_at: string | null
   /** What the status allows, regardless of who is asking (SCRUM-35). Not an authorisation. */
   status_permits: EventAction[]
-  /** Coordinator assigned by the later Lead workflow. Null means queued for assignment. */
+  /** The assigned coordinator (SCRUM-34). Compare with the viewer's id for "may I decide?". */
   coordinator_id: string | null
   decided_by_id: string | null
   decided_at: string | null
@@ -384,10 +384,6 @@ export async function createDraft(
     headers: jsonHeaders(token),
     body: JSON.stringify(draft),
   })
-  if (response.status === 422) {
-    const problems = parseValidationProblems(await response.json())
-    if (problems) throw new EventRequestValidationError(problems)
-  }
   if (!response.ok) {
     throw new Error(`Draft save failed (${response.status})`)
   }
@@ -404,10 +400,6 @@ export async function updateDraft(
     headers: jsonHeaders(token),
     body: JSON.stringify(draft),
   })
-  if (response.status === 422) {
-    const problems = parseValidationProblems(await response.json())
-    if (problems) throw new EventRequestValidationError(problems)
-  }
   if (!response.ok) {
     throw new Error(`Draft save failed (${response.status})`)
   }

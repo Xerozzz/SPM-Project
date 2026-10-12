@@ -139,9 +139,8 @@ def submit(
     fields. AC4 holds by construction — nothing here touches venues, equipment or
     registration, and no other code runs on submission.
 
-    SCRUM-101 (Week 7 manual-assignment policy): normal drafts remain unassigned
-    for the Coordinator Lead to assign (SCRUM-98). Existing assignment fields
-    are preserved. See ADR-0020.
+    SCRUM-101 (Week 7 manual-assignment policy): submission leaves the request
+    unassigned. A Coordinator Lead assigns it later (SCRUM-98). See ADR-0020.
     """
     # Locked read: two organisers' browsers double-clicking "Submit" at the same instant
     # serialise here, and the second sees SUBMITTED and gets a 409 rather than a second
