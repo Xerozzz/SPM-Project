@@ -146,3 +146,18 @@ class UnassignedEventRequestRead(BaseModel):
     end_at: datetime | None
     expected_attendance: int | None
     submitted_at: datetime | None
+
+
+class EventRequestAssign(BaseModel):
+    """SCRUM-98: the Lead's chosen owner for an unassigned Submitted request."""
+
+    coordinator_id: uuid.UUID
+
+
+class AssignableCoordinatorRead(BaseModel):
+    """SCRUM-98: one eligible owner the Lead may pick — active Event Coordinators only."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    email: str

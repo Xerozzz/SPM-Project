@@ -1,19 +1,42 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 
-import { listUnassignedEventRequests } from '../api/eventRequests'
+import {
+  assignEventRequest,
+  listAssignableCoordinators,
+  listUnassignedEventRequests,
+} from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
 
 /**
  * SCRUM-101: the Coordinator Lead unassigned queue. Read-only triage list showing every
  * required field (event ID, name, organiser, start/end, expected attendance, submission
- * time) oldest submission first. Assignment itself is SCRUM-98.
+ * time) oldest submission first. SCRUM-98 adds assignment: the Lead picks an eligible
+ * coordinator per row, confirms, and the request leaves the queue.
  */
 export default function UnassignedQueue() {
   const { token } = useAuth()
+  const client = useQueryClient()
+  const [selected, setSelected] = useState<Record<string, string>>({})
+  const [outcome, setOutcome] = useState<string | null>(null)
+  const queueKey = ['event-requests', 'unassigned', token]
   const queue = useQuery({
-    queryKey: ['event-requests', 'unassigned', token],
+    queryKey: queueKey,
     queryFn: () => listUnassignedEventRequests(token ?? ''),
     enabled: token !== null,
+  })
+  const coordinators = useQuery({
+    queryKey: ['event-requests', 'assignable-coordinators', token],
+    queryFn: () => listAssignableCoordinators(token ?? ''),
+    enabled: token !== null,
+  })
+  const assign = useMutation({
+    mutationFn: ({ id, coordinatorId }: { id: string; coordinatorId: string }) =>
+      assignEventRequest(token ?? '', id, coordinatorId),
+    onSuccess: (request) => {
+      setOutcome(`“${request.name ?? request.id}” has been assigned.`)
+      void client.invalidateQueries({ queryKey: queueKey })
+    },
   })
 
   return (
@@ -47,9 +70,50 @@ export default function UnassignedQueue() {
                 <dt className="font-medium text-slate-500">Submitted</dt>
                 <dd>{request.submitted_at ?? '—'}</dd>
               </dl>
+              <div className="mt-2 flex items-center gap-2">
+                <label className="text-slate-500">
+                  Coordinator{' '}
+                  <select
+                    aria-label={`Coordinator for ${request.name ?? request.id}`}
+                    value={selected[request.id] ?? ''}
+                    onChange={(event) =>
+                      setSelected({ ...selected, [request.id]: event.target.value })
+                    }
+                    className="rounded border border-slate-300 px-2 py-1"
+                  >
+                    <option value="">Select a coordinator</option>
+                    {(coordinators.data ?? []).map((coordinator) => (
+                      <option key={coordinator.id} value={coordinator.id}>
+                        {coordinator.email}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  disabled={!selected[request.id] || assign.isPending}
+                  onClick={() =>
+                    selected[request.id] &&
+                    assign.mutate({ id: request.id, coordinatorId: selected[request.id] })
+                  }
+                  className="rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
+                >
+                  Assign
+                </button>
+              </div>
             </li>
           ))}
         </ul>
+      )}
+      {outcome && (
+        <p role="status" className="mt-4 rounded bg-green-50 p-3 text-sm text-green-800">
+          {outcome}
+        </p>
+      )}
+      {assign.isError && (
+        <p role="alert" className="mt-4 text-sm text-red-600">
+          The assignment could not be recorded: {assign.error.message}
+        </p>
       )}
     </section>
   )

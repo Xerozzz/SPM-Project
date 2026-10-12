@@ -19,6 +19,7 @@ from domain.event_request import (
     validate_catalogue_requirements,
     validate_event_request,
 )
+from domain.roles import Role
 from models.event_request import EventRequest
 from models.user import User
 from repositories import event_requests as repo
@@ -47,6 +48,14 @@ class IncompleteEventRequestError(EventRequestError):
     def __init__(self, problems: list[FieldProblem]) -> None:
         super().__init__("event request is not complete")
         self.problems = problems
+
+
+class AlreadyAssignedError(EventRequestError):
+    """SCRUM-98: the request already has an owner, so initial assignment is refused."""
+
+
+class InvalidAssigneeError(EventRequestError):
+    """SCRUM-98: the chosen owner is not an active Event Coordinator."""
 
 
 def list_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventRequest]:
@@ -137,6 +146,39 @@ def submit(
 def list_unassigned_for_lead(db: Session) -> list[EventRequest]:
     """SCRUM-101: unassigned Submitted requests for the Coordinator Lead queue."""
     return repo.list_unassigned_submitted(db)
+
+
+def list_assignable_coordinators(db: Session) -> list[User]:
+    """SCRUM-98: active Event Coordinators the Lead may pick as the owner."""
+    return users_repo.list_active_coordinators(db)
+
+
+def assign_coordinator(
+    db: Session, request_id: uuid.UUID, coordinator_id: uuid.UUID, now: datetime
+) -> EventRequest:
+    """SCRUM-98: a Lead assigns an unassigned Submitted request to an active coordinator.
+
+    The row is locked before checking `coordinator_id is None`, so two Leads assigning
+    the same request serialise here: the winner commits first and the loser then sees
+    an owner and receives AlreadyAssignedError rather than silently overwriting.
+    """
+    request = repo.get_for_update(db, request_id)
+    if request is None:
+        raise EventRequestNotFoundError
+    if request.status is not event_status.EventStatus.SUBMITTED:
+        raise AlreadyAssignedError
+    if request.coordinator_id is not None:
+        raise AlreadyAssignedError
+    candidate = users_repo.get(db, coordinator_id)
+    if (
+        candidate is None
+        or not candidate.is_active
+        or Role.COORDINATOR.value not in list(candidate.roles)
+    ):
+        raise InvalidAssigneeError
+    request.coordinator_id = candidate.id
+    request.assigned_at = now
+    return repo.save(db, request)
 
 
 def approve(

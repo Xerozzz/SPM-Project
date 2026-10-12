@@ -214,6 +214,48 @@ export async function listUnassignedEventRequests(
   return (await response.json()) as UnassignedEventRequest[]
 }
 
+/** SCRUM-98: one eligible owner the Lead may pick — active Event Coordinators only. */
+export interface AssignableCoordinator {
+  id: string
+  email: string
+}
+
+export async function listAssignableCoordinators(
+  token: string,
+): Promise<AssignableCoordinator[]> {
+  const response = await fetch('/api/event-requests/assignable-coordinators', {
+    headers: authHeaders(token),
+  })
+  if (!response.ok) throw new Error(`Could not load coordinators (${response.status})`)
+  return (await response.json()) as AssignableCoordinator[]
+}
+
+/** SCRUM-98: a Lead assigns an unassigned Submitted request to an active coordinator. */
+export async function assignEventRequest(
+  token: string,
+  id: string,
+  coordinatorId: string,
+): Promise<EventRequest> {
+  const response = await fetch(`/api/event-requests/${id}/assign`, {
+    method: 'POST',
+    headers: jsonHeaders(token),
+    body: JSON.stringify({ coordinator_id: coordinatorId }),
+  })
+  if (!response.ok) {
+    const detail = await response
+      .json()
+      .then(
+        (body: unknown) =>
+          body && typeof body === 'object' && 'detail' in body
+            ? String((body as { detail: unknown }).detail)
+            : `Assignment failed (${response.status})`,
+      )
+      .catch(() => `Assignment failed (${response.status})`)
+    throw new Error(detail)
+  }
+  return (await response.json()) as EventRequest
+}
+
 export async function createEventRequest(
   token: string,
   request: EventRequestCreate,
