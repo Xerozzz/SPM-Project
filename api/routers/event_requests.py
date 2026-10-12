@@ -17,10 +17,12 @@ from models.event_request import EventRequest
 from schemas.event_requests import (
     ActiveAssignmentRead,
     AssignableCoordinatorRead,
+    AssignmentHistoryRead,
     EventRequestAssign,
     EventRequestCreate,
     EventRequestDraftCreate,
     EventRequestRead,
+    EventRequestReassign,
     EventRequestRejection,
     EventRequestUpdate,
     FieldProblemRead,
@@ -65,6 +67,11 @@ def _http_error(exc: Exception) -> HTTPException:
         return HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
     if isinstance(exc, service.InvalidAssigneeError):
         return HTTPException(422, [{"field": "coordinator_id", "reason": "is not valid"}])
+    if isinstance(exc, service.StaleAssignmentError):
+        return HTTPException(
+            status.HTTP_409_CONFLICT,
+            "This request was reassigned by someone else — refresh and try again",
+        )
     if isinstance(exc, service.AlreadyAssignedError):
         return HTTPException(status.HTTP_409_CONFLICT, "This request already has an owner")
     if isinstance(exc, service.IncompleteEventRequestError):
@@ -116,14 +123,50 @@ def list_active_assignments(_user: CoordinatorLead, db: Db) -> list[ActiveAssign
 
 @router.post("/{request_id}/assign", response_model=EventRequestRead)
 def assign_coordinator(
-    request_id: uuid.UUID, body: EventRequestAssign, _user: CoordinatorLead, db: Db
+    request_id: uuid.UUID, body: EventRequestAssign, user: CoordinatorLead, db: Db
 ) -> EventRequestRead:
     """SCRUM-98: a Lead assigns an unassigned Submitted request to an active coordinator."""
     try:
-        row = service.assign_coordinator(db, request_id, body.coordinator_id, datetime.now(UTC))
+        row = service.assign_coordinator(
+            db, request_id, body.coordinator_id, datetime.now(UTC), _coordinator_id(user)
+        )
     except _REFUSALS as exc:
         raise _http_error(exc) from exc
     return EventRequestRead.model_validate(row)
+
+
+@router.post("/{request_id}/reassign", response_model=EventRequestRead)
+def reassign_coordinator(
+    request_id: uuid.UUID, body: EventRequestReassign, user: CoordinatorLead, db: Db
+) -> EventRequestRead:
+    """SCRUM-97: a Lead moves an active assigned request to another active coordinator."""
+    try:
+        row = service.reassign_coordinator(
+            db,
+            request_id,
+            body.coordinator_id,
+            body.expected_current_coordinator_id,
+            _coordinator_id(user),
+            datetime.now(UTC),
+        )
+    except _REFUSALS as exc:
+        raise _http_error(exc) from exc
+    return EventRequestRead.model_validate(row)
+
+
+@router.get("/{request_id}/assignment-history", response_model=list[AssignmentHistoryRead])
+def list_assignment_history(
+    request_id: uuid.UUID, _user: CoordinatorLead, db: Db
+) -> list[AssignmentHistoryRead]:
+    """SCRUM-97: the request's assignment history, oldest first.
+
+    Static suffix route declared above `/{request_id}` so FastAPI matches it literally.
+    """
+    try:
+        rows = service.list_assignment_history(db, request_id)
+    except _REFUSALS as exc:
+        raise _http_error(exc) from exc
+    return [AssignmentHistoryRead.model_validate(row) for row in rows]
 
 
 @router.get("", response_model=list[EventRequestRead])

@@ -11,6 +11,9 @@ Add each new model here as you write it:
 
 from core.database import Base as Base
 from models.event_clarification import EventClarification as EventClarification
+from models.event_coordinator_assignment import (
+    EventCoordinatorAssignment as EventCoordinatorAssignment,
+)
 from models.event_request import EventRequest as EventRequest
 from models.organisation import Organisation as Organisation
 from models.user import User as User

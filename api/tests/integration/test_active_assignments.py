@@ -17,6 +17,9 @@ from models.user import User
 from tests.integration.test_submit_event_request import MakeClient, MakeUser, make_draft
 
 # Exactly the fields AC1 requires on each overview row — no more, no less.
+# SCRUM-97 adds `coordinator_id` (the current owner's id, None when unassigned) so
+# the Lead UI can send it back as `expected_current_coordinator_id` for optimistic
+# concurrency (ADR-0021). It names the same owner as `coordinator_email`.
 _OVERVIEW_FIELDS = {
     "id",
     "name",
@@ -24,6 +27,7 @@ _OVERVIEW_FIELDS = {
     "organiser_email",
     "start_at",
     "end_at",
+    "coordinator_id",
     "coordinator_email",
 }
 
@@ -78,10 +82,12 @@ async def test_lead_sees_mixed_assigned_and_unassigned_active_rows(
     assert set(rows) == {str(owned.id), str(open_row.id)}
     assert all(set(row) == _OVERVIEW_FIELDS for row in rows.values())
     assert rows[str(owned.id)]["coordinator_email"] == coordinator.email
+    assert rows[str(owned.id)]["coordinator_id"] == str(coordinator.id)
     assert rows[str(owned.id)]["status"] == "submitted"
     assert rows[str(owned.id)]["name"] == "Owned request"
     assert rows[str(owned.id)]["organiser_email"] == organiser.email
     assert rows[str(open_row.id)]["coordinator_email"] is None
+    assert rows[str(open_row.id)]["coordinator_id"] is None
     assert rows[str(open_row.id)]["name"] == "Open request"
 
 
