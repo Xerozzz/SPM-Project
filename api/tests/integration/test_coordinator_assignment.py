@@ -61,9 +61,7 @@ _NOT_CONFIRMED = [status for status in EventStatus if status is not EventStatus.
 
 @pytest.mark.story("SCRUM-34")
 @pytest.mark.story("SCRUM-101")
-def test_first_submission_enters_the_unassigned_queue(
-    db: Session, make_user: MakeUser
-) -> None:
+def test_first_submission_enters_the_unassigned_queue(db: Session, make_user: MakeUser) -> None:
     """SCRUM-101: submission leaves the request unassigned for Lead triage.
 
     Supersedes the SCRUM-34 round-robin expectation: no coordinator is assigned at
