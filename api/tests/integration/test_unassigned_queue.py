@@ -21,7 +21,7 @@ from tests.integration.test_submit_event_request import MakeClient, MakeUser, ma
 _QUEUE_FIELDS = {
     "id",
     "name",
-    "organiser_id",
+    "organiser_email",
     "start_at",
     "end_at",
     "expected_attendance",
@@ -101,7 +101,7 @@ async def test_lead_receives_exactly_the_required_fields(
     assert request.start_at is not None and request.end_at is not None
     assert row["id"] == str(request.id)
     assert row["name"] == "Orientation Day"
-    assert row["organiser_id"] == str(organiser.id)
+    assert row["organiser_email"] == organiser.email
     assert row["expected_attendance"] == 200
     assert row["submitted_at"] == submitted_at.isoformat().replace("+00:00", "Z")
     assert row["start_at"] == request.start_at.isoformat().replace("+00:00", "Z")

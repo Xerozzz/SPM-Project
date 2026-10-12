@@ -20,6 +20,10 @@ export default function UnassignedQueue() {
   const [selected, setSelected] = useState<Record<string, string>>({})
   const [outcome, setOutcome] = useState<string | null>(null)
   const queueKey = ['event-requests', 'unassigned', token]
+  // SCRUM-100: the active-assignment overview caches its own snapshot. Assigning
+  // moves the row there, so the overview must refetch too — otherwise it keeps
+  // showing the stale `coordinator_id: null` ("Unassigned") until a manual refresh.
+  const activeKey = ['event-requests', 'active-assignments', token]
   const queue = useQuery({
     queryKey: queueKey,
     queryFn: () => listUnassignedEventRequests(token ?? ''),
@@ -36,6 +40,7 @@ export default function UnassignedQueue() {
     onSuccess: (request) => {
       setOutcome(`“${request.name ?? request.id}” has been assigned.`)
       void client.invalidateQueries({ queryKey: queueKey })
+      void client.invalidateQueries({ queryKey: activeKey })
     },
   })
 
@@ -60,7 +65,7 @@ export default function UnassignedQueue() {
                 <dt className="font-medium text-slate-500">Event ID</dt>
                 <dd>{request.id}</dd>
                 <dt className="font-medium text-slate-500">Organiser</dt>
-                <dd>{request.organiser_id}</dd>
+                <dd>{request.organiser_email}</dd>
                 <dt className="font-medium text-slate-500">Start</dt>
                 <dd>{request.start_at ?? '—'}</dd>
                 <dt className="font-medium text-slate-500">End</dt>

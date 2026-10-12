@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime
+from typing import Self
 
 from pydantic import (
     AwareDatetime,
@@ -12,6 +13,7 @@ from pydantic import (
 )
 
 from domain.event_status import EventAction, EventStatus, allowed_actions
+from models.event_request import EventRequest
 
 
 class EventRequestCreate(BaseModel):
@@ -133,19 +135,30 @@ class FieldProblemRead(BaseModel):
 class UnassignedEventRequestRead(BaseModel):
     """SCRUM-101: one row of the Coordinator Lead unassigned queue.
 
-    Only the fields the acceptance criteria require: event ID, name, organiser,
+    Only the fields the acceptance criteria require: event ID, name, organiser email,
     start/end, expected attendance, and submission time. No unrelated private fields.
     """
 
-    model_config = ConfigDict(from_attributes=True)
-
     id: uuid.UUID
     name: str | None
-    organiser_id: uuid.UUID
+    organiser_email: str
     start_at: datetime | None
     end_at: datetime | None
     expected_attendance: int | None
     submitted_at: datetime | None
+
+    @classmethod
+    def from_row(cls, request: EventRequest, organiser_email: str) -> Self:
+        """Build a queue row from the request and its organiser's email."""
+        return cls(
+            id=request.id,
+            name=request.name,
+            organiser_email=organiser_email,
+            start_at=request.start_at,
+            end_at=request.end_at,
+            expected_attendance=request.expected_attendance,
+            submitted_at=request.submitted_at,
+        )
 
 
 class EventRequestAssign(BaseModel):
@@ -161,3 +174,34 @@ class AssignableCoordinatorRead(BaseModel):
 
     id: uuid.UUID
     email: str
+
+
+class ActiveAssignmentRead(BaseModel):
+    """SCRUM-100: one row of the Lead active-assignment overview.
+
+    Current ownership only: `coordinator_email` is the present owner's email or None
+    (rendered as Unassigned). Historical owners never appear here.
+    """
+
+    id: uuid.UUID
+    name: str | None
+    status: EventStatus
+    organiser_email: str
+    start_at: datetime | None
+    end_at: datetime | None
+    coordinator_email: str | None
+
+    @classmethod
+    def from_row(
+        cls, request: EventRequest, organiser_email: str, coordinator_email: str | None
+    ) -> Self:
+        """Build an overview row from the request and its owners' emails."""
+        return cls(
+            id=request.id,
+            name=request.name,
+            status=request.status,
+            organiser_email=organiser_email,
+            start_at=request.start_at,
+            end_at=request.end_at,
+            coordinator_email=coordinator_email,
+        )

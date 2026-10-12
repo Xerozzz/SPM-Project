@@ -143,9 +143,14 @@ def submit(
     return repo.save(db, request)
 
 
-def list_unassigned_for_lead(db: Session) -> list[EventRequest]:
+def list_unassigned_for_lead(db: Session) -> list[repo.UnassignedRow]:
     """SCRUM-101: unassigned Submitted requests for the Coordinator Lead queue."""
     return repo.list_unassigned_submitted(db)
+
+
+def list_active_for_lead(db: Session) -> list[repo.ActiveRow]:
+    """SCRUM-100: every active request with its current coordinator for the Lead overview."""
+    return repo.list_active_for_lead(db)
 
 
 def list_assignable_coordinators(db: Session) -> list[User]:

@@ -109,3 +109,18 @@ def allowed_actions(status: EventStatus) -> frozenset[EventAction]:
     if is_editable(status):
         actions.add(EventAction.EDIT)
     return frozenset(actions)
+
+
+# SCRUM-100: which statuses count as "active" for the Lead assignment overview.
+# Active means the request still needs coordinator ownership or planning attention:
+# SUBMITTED (awaiting review/assignment), APPROVED (planning), CONFIRMED (committed).
+# DRAFT (never submitted) and REJECTED (terminal) are inactive. Completed/cancelled
+# statuses do not exist yet; when added they join the inactive set, not this one.
+ACTIVE_STATUSES: frozenset[EventStatus] = frozenset(
+    {EventStatus.SUBMITTED, EventStatus.APPROVED, EventStatus.CONFIRMED}
+)
+
+
+def is_active_status(status: EventStatus) -> bool:
+    """SCRUM-100: True when the request belongs in the Lead active-assignment overview."""
+    return status in ACTIVE_STATUSES
