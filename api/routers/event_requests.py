@@ -15,6 +15,8 @@ from domain.event_status import EventRequestLockedError, InvalidTransitionError
 from domain.roles import Role
 from models.event_request import EventRequest
 from schemas.event_requests import (
+    AssignableCoordinatorRead,
+    EventRequestAssign,
     EventRequestCreate,
     EventRequestDraftCreate,
     EventRequestRead,
@@ -60,6 +62,10 @@ def _http_error(exc: Exception) -> HTTPException:
         return HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found")
     if isinstance(exc, service.NotTheOrganiserError | service.NotAuthorisedError):
         return HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
+    if isinstance(exc, service.InvalidAssigneeError):
+        return HTTPException(422, [{"field": "coordinator_id", "reason": "is not valid"}])
+    if isinstance(exc, service.AlreadyAssignedError):
+        return HTTPException(status.HTTP_409_CONFLICT, "This request already has an owner")
     if isinstance(exc, service.IncompleteEventRequestError):
         problems = [FieldProblemRead(field=p.field, reason=p.reason) for p in exc.problems]
         # A literal 422: Starlette renamed its constant between the versions we allow, so
@@ -82,6 +88,28 @@ def list_unassigned_queue(_user: CoordinatorLead, db: Db) -> list[UnassignedEven
     """
     rows = service.list_unassigned_for_lead(db)
     return [UnassignedEventRequestRead.model_validate(row) for row in rows]
+
+
+@router.get("/assignable-coordinators", response_model=list[AssignableCoordinatorRead])
+def list_assignable_coordinators(_user: CoordinatorLead, db: Db) -> list[AssignableCoordinatorRead]:
+    """SCRUM-98: active Event Coordinators the Lead may pick as the owner.
+
+    Static route declared above `/{request_id}` so FastAPI matches it literally.
+    """
+    rows = service.list_assignable_coordinators(db)
+    return [AssignableCoordinatorRead.model_validate(row) for row in rows]
+
+
+@router.post("/{request_id}/assign", response_model=EventRequestRead)
+def assign_coordinator(
+    request_id: uuid.UUID, body: EventRequestAssign, _user: CoordinatorLead, db: Db
+) -> EventRequestRead:
+    """SCRUM-98: a Lead assigns an unassigned Submitted request to an active coordinator."""
+    try:
+        row = service.assign_coordinator(db, request_id, body.coordinator_id, datetime.now(UTC))
+    except _REFUSALS as exc:
+        raise _http_error(exc) from exc
+    return EventRequestRead.model_validate(row)
 
 
 @router.get("", response_model=list[EventRequestRead])
