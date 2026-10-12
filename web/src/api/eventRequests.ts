@@ -214,7 +214,9 @@ export async function listUnassignedEventRequests(
   return (await response.json()) as UnassignedEventRequest[]
 }
 
-/** SCRUM-100: one row of the Lead active-assignment overview (AC1 fields only). */
+/** SCRUM-100: one row of the Lead active-assignment overview (AC1 fields only).
+ * SCRUM-97 adds `coordinator_id` — the current owner's id (None when unassigned) —
+ * so the UI can send it back as `expected_current_coordinator_id` (ADR-0021). */
 export interface ActiveAssignment {
   id: string
   name: string | null
@@ -222,6 +224,7 @@ export interface ActiveAssignment {
   organiser_email: string
   start_at: string | null
   end_at: string | null
+  coordinator_id: string | null
   coordinator_email: string | null
 }
 
@@ -239,9 +242,7 @@ export interface AssignableCoordinator {
   email: string
 }
 
-export async function listAssignableCoordinators(
-  token: string,
-): Promise<AssignableCoordinator[]> {
+export async function listAssignableCoordinators(token: string): Promise<AssignableCoordinator[]> {
   const response = await fetch('/api/event-requests/assignable-coordinators', {
     headers: authHeaders(token),
   })
@@ -263,13 +264,61 @@ export async function assignEventRequest(
   if (!response.ok) {
     const detail = await response
       .json()
-      .then(
-        (body: unknown) =>
-          body && typeof body === 'object' && 'detail' in body
-            ? String((body as { detail: unknown }).detail)
-            : `Assignment failed (${response.status})`,
+      .then((body: unknown) =>
+        body && typeof body === 'object' && 'detail' in body
+          ? String((body as { detail: unknown }).detail)
+          : `Assignment failed (${response.status})`,
       )
       .catch(() => `Assignment failed (${response.status})`)
+    throw new Error(detail)
+  }
+  return (await response.json()) as EventRequest
+}
+
+/** SCRUM-97: one immutable assignment entry, oldest first. */
+export interface AssignmentHistoryEntry {
+  id: string
+  previous_coordinator_id: string | null
+  new_coordinator_id: string
+  acted_by_id: string
+  assigned_at: string
+}
+
+export async function listAssignmentHistory(
+  token: string,
+  id: string,
+): Promise<AssignmentHistoryEntry[]> {
+  const response = await fetch(`/api/event-requests/${id}/assignment-history`, {
+    headers: authHeaders(token),
+  })
+  if (!response.ok) throw new Error(`Could not load assignment history (${response.status})`)
+  return (await response.json()) as AssignmentHistoryEntry[]
+}
+
+/** SCRUM-97: a Lead moves an active assigned request to another active coordinator. */
+export async function reassignEventRequest(
+  token: string,
+  id: string,
+  coordinatorId: string,
+  expectedCurrentCoordinatorId: string,
+): Promise<EventRequest> {
+  const response = await fetch(`/api/event-requests/${id}/reassign`, {
+    method: 'POST',
+    headers: jsonHeaders(token),
+    body: JSON.stringify({
+      coordinator_id: coordinatorId,
+      expected_current_coordinator_id: expectedCurrentCoordinatorId,
+    }),
+  })
+  if (!response.ok) {
+    const detail = await response
+      .json()
+      .then((body: unknown) =>
+        body && typeof body === 'object' && 'detail' in body
+          ? String((body as { detail: unknown }).detail)
+          : `Reassignment failed (${response.status})`,
+      )
+      .catch(() => `Reassignment failed (${response.status})`)
     throw new Error(detail)
   }
   return (await response.json()) as EventRequest

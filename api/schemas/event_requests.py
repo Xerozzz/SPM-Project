@@ -167,6 +167,34 @@ class EventRequestAssign(BaseModel):
     coordinator_id: uuid.UUID
 
 
+class EventRequestReassign(BaseModel):
+    """SCRUM-97: the Lead's replacement owner plus the owner the Lead saw.
+
+    `expected_current_coordinator_id` is optimistic concurrency: the service refuses
+    with 409 when the locked row no longer has this owner, so a stale screen cannot
+    silently overwrite a concurrent reassignment.
+    """
+
+    coordinator_id: uuid.UUID
+    expected_current_coordinator_id: uuid.UUID
+
+
+class AssignmentHistoryRead(BaseModel):
+    """SCRUM-97: one immutable assignment entry, oldest first.
+
+    `previous_coordinator_id` is None only for the first assignment after this story's
+    migration landed; requests assigned earlier have no history rows at all (ADR-0021).
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    previous_coordinator_id: uuid.UUID | None
+    new_coordinator_id: uuid.UUID
+    acted_by_id: uuid.UUID
+    assigned_at: datetime
+
+
 class AssignableCoordinatorRead(BaseModel):
     """SCRUM-98: one eligible owner the Lead may pick — active Event Coordinators only."""
 
@@ -180,7 +208,10 @@ class ActiveAssignmentRead(BaseModel):
     """SCRUM-100: one row of the Lead active-assignment overview.
 
     Current ownership only: `coordinator_email` is the present owner's email or None
-    (rendered as Unassigned). Historical owners never appear here.
+    (rendered as Unassigned). Historical owners never appear here. SCRUM-97 adds
+    `coordinator_id` — the current owner's id (None when unassigned) — so the Lead UI
+    can send it back as `expected_current_coordinator_id` for optimistic concurrency
+    (ADR-0021). It is the same owner the email names, not a second source of truth.
     """
 
     id: uuid.UUID
@@ -189,6 +220,7 @@ class ActiveAssignmentRead(BaseModel):
     organiser_email: str
     start_at: datetime | None
     end_at: datetime | None
+    coordinator_id: uuid.UUID | None
     coordinator_email: str | None
 
     @classmethod
@@ -203,5 +235,6 @@ class ActiveAssignmentRead(BaseModel):
             organiser_email=organiser_email,
             start_at=request.start_at,
             end_at=request.end_at,
+            coordinator_id=request.coordinator_id,
             coordinator_email=coordinator_email,
         )

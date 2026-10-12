@@ -58,14 +58,9 @@ function withOverview(
 }
 
 function renderQueue(
-  fetchImpl: (
-    input: string | URL | Request,
-    init?: RequestInit,
-  ) => Promise<Response>,
+  fetchImpl: (input: string | URL | Request, init?: RequestInit) => Promise<Response>,
 ) {
-  vi.spyOn(globalThis, 'fetch').mockImplementation(
-    fetchImpl as typeof globalThis.fetch,
-  )
+  vi.spyOn(globalThis, 'fetch').mockImplementation(fetchImpl as typeof globalThis.fetch)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
@@ -87,9 +82,7 @@ test('shows a loading state while the queue loads', () => {
 test('shows an empty state when the queue has no rows', async () => {
   signInAsLead()
   renderQueue(withOverview(async () => json([])))
-  await waitFor(() =>
-    expect(screen.getByText('No unassigned requests.')).toBeDefined(),
-  )
+  await waitFor(() => expect(screen.getByText('No unassigned requests.')).toBeDefined())
 })
 
 test('shows every required field for a queued request', async () => {
@@ -97,8 +90,7 @@ test('shows every required field for a queued request', async () => {
   renderQueue(
     withOverview(async (input) => {
       if (String(input) === '/api/event-requests/unassigned') return json([row])
-      if (String(input) === '/api/event-requests/assignable-coordinators')
-        return json(coordinators)
+      if (String(input) === '/api/event-requests/assignable-coordinators') return json(coordinators)
       throw new Error(`unexpected fetch ${String(input)}`)
     }),
   )
@@ -116,9 +108,7 @@ test('shows every required field for a queued request', async () => {
   expect(screen.getByLabelText('Unassigned requests')).toBeDefined()
   // The picker lists the eligible coordinators for this row.
   await waitFor(() =>
-    expect(
-      screen.getByLabelText('Coordinator for Orientation Day'),
-    ).toBeDefined(),
+    expect(screen.getByLabelText('Coordinator for Orientation Day')).toBeDefined(),
   )
   expect(screen.getByText('coordinator@example.com')).toBeDefined()
   expect(screen.getByText('coordinator2@example.com')).toBeDefined()
@@ -128,9 +118,7 @@ test('shows a failure state when the queue cannot load', async () => {
   signInAsLead()
   renderQueue(withOverview(async () => json({ detail: 'boom' }, 500)))
   await waitFor(() =>
-    expect(screen.getByRole('alert').textContent).toMatch(
-      'Could not load unassigned requests',
-    ),
+    expect(screen.getByRole('alert').textContent).toMatch('Could not load unassigned requests'),
   )
 })
 
@@ -139,8 +127,7 @@ test('assigning a coordinator confirms and removes the request from the queue', 
   let queueCalls = 0
   renderQueue(
     withOverview(async (input, init) => {
-      if (String(input) === '/api/event-requests/assignable-coordinators')
-        return json(coordinators)
+      if (String(input) === '/api/event-requests/assignable-coordinators') return json(coordinators)
       if (String(input) === '/api/event-requests/unassigned') {
         queueCalls += 1
         return json(queueCalls === 1 ? [row] : [])
@@ -157,21 +144,16 @@ test('assigning a coordinator confirms and removes the request from the queue', 
   })
   fireEvent.click(screen.getByRole('button', { name: 'Assign' }))
   await waitFor(() =>
-    expect(screen.getByRole('status').textContent).toMatch(
-      '“Orientation Day” has been assigned.',
-    ),
+    expect(screen.getByRole('status').textContent).toMatch('“Orientation Day” has been assigned.'),
   )
-  await waitFor(() =>
-    expect(screen.getByText('No unassigned requests.')).toBeDefined(),
-  )
+  await waitFor(() => expect(screen.getByText('No unassigned requests.')).toBeDefined())
 })
 
 test('a failed assignment keeps the request visible with an error', async () => {
   signInAsLead()
   renderQueue(
     withOverview(async (input, init) => {
-      if (String(input) === '/api/event-requests/assignable-coordinators')
-        return json(coordinators)
+      if (String(input) === '/api/event-requests/assignable-coordinators') return json(coordinators)
       if (String(input) === '/api/event-requests/unassigned') return json([row])
       if (String(input) === '/api/event-requests/req-1/assign' && init?.method === 'POST')
         return json({ detail: 'This request already has an owner' }, 409)
@@ -184,9 +166,7 @@ test('a failed assignment keeps the request visible with an error', async () => 
   })
   fireEvent.click(screen.getByRole('button', { name: 'Assign' }))
   await waitFor(() =>
-    expect(screen.getByRole('alert').textContent).toMatch(
-      'The assignment could not be recorded',
-    ),
+    expect(screen.getByRole('alert').textContent).toMatch('The assignment could not be recorded'),
   )
   // The row stays: the Lead can pick someone else or retry.
   expect(screen.getByText('Orientation Day')).toBeDefined()
@@ -201,8 +181,7 @@ test('assigning refetches the active-assignment overview with the new owner', as
   let queueCalls = 0
   let overviewCalls = 0
   renderQueue(async (input, init) => {
-    if (String(input) === '/api/event-requests/assignable-coordinators')
-      return json(coordinators)
+    if (String(input) === '/api/event-requests/assignable-coordinators') return json(coordinators)
     if (String(input) === '/api/event-requests/unassigned') {
       queueCalls += 1
       return json(queueCalls === 1 ? [row] : [])
@@ -218,6 +197,7 @@ test('assigning refetches the active-assignment overview with the new owner', as
               {
                 ...row,
                 status: 'submitted',
+                coordinator_id: 'coord-1',
                 coordinator_email: 'coordinator@example.com',
               },
             ],
@@ -233,10 +213,12 @@ test('assigning refetches the active-assignment overview with the new owner', as
     target: { value: 'coord-1' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Assign' }))
-  await waitFor(() =>
-    expect(screen.getByText('No unassigned requests.')).toBeDefined(),
-  )
-  // The overview refetched after the assignment and now shows the owner.
+  await waitFor(() => expect(screen.getByText('No unassigned requests.')).toBeDefined())
+  // The overview refetched after the assignment and now shows the owner. The
+  // email appears both in the row and in the picker options, so any match proves
+  // the refetch landed.
   await waitFor(() => expect(overviewCalls).toBeGreaterThan(1))
-  await waitFor(() => expect(screen.getByText('coordinator@example.com')).toBeDefined())
+  await waitFor(() =>
+    expect(screen.getAllByText('coordinator@example.com').length).toBeGreaterThan(0),
+  )
 })
