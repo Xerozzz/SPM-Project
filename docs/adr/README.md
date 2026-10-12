@@ -32,6 +32,7 @@ someone else made two weeks ago.
 | [0019](0019-venue-buffer-effective-intervals.md) | Store the effective occupied interval so the overlap constraint can see buffers | Proposed |
 | [0020](0020-manual-coordinator-assignment-queue.md) | Assign event coordinators manually via a Coordinator Lead queue | Proposed |
 | [0021](0021-coordinator-assignment-history.md) | Retain coordinator assignment history as an append-only audit trail | Proposed |
+| [0022](0022-notification-inbox.md) | Store private notifications for the in-app inbox | Proposed |
 
 ## When to write one
 
