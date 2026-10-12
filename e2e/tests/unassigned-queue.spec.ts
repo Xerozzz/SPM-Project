@@ -15,11 +15,14 @@ async function signOut(page: Page) {
   await page.getByRole('button', { name: 'Sign out' }).click()
 }
 
-function ownRow(page: Page, name: string) {
-  const ownRequests = page
-    .getByRole('heading', { name: 'My event requests' })
-    .locator('xpath=../following-sibling::ul[1]')
-  return ownRequests.getByRole('listitem').filter({ hasText: name })
+async function submitNewRequest(page: Page, name: string) {
+  const requestForm = page.locator('section').filter({
+    has: page.getByRole('heading', { name: 'New event request', exact: true }),
+  })
+  await requestForm.getByRole('button', { name: 'Submit for review', exact: true }).click()
+  await expect(requestForm.getByRole('status')).toHaveText(
+    `“${name}” has been submitted for review and is now read-only.`,
+  )
 }
 
 test('an organiser submission appears in the Lead unassigned queue', async ({ page }) => {
@@ -38,14 +41,7 @@ test('an organiser submission appears in the Lead unassigned queue', async ({ pa
   await page.getByLabel('Equipment requirement *').selectOption('Projector-type requirement')
   await page.getByLabel('Layout requirement *').fill('Theatre style')
   await page.getByLabel('Registration requirement *').fill('Open registration')
-  await page.getByRole('button', { name: 'Create event request' }).click()
-  await expect(page.getByRole('status').filter({ hasText: 'has been created' })).toContainText(
-    `“${name}” has been created.`,
-  )
-  await ownRow(page, name).getByRole('button', { name: 'Submit for review' }).click()
-  await expect(page.getByRole('status').filter({ hasText: 'submitted for review' })).toContainText(
-    `“${name}” has been submitted for review.`,
-  )
+  await submitNewRequest(page, name)
   await signOut(page)
 
   await signIn(page, 'coordinator-lead@example.com')
@@ -76,14 +72,7 @@ test('a Lead assigns an unassigned request to an eligible coordinator', async ({
   await page.getByLabel('Equipment requirement *').selectOption('Projector-type requirement')
   await page.getByLabel('Layout requirement *').fill('Theatre style')
   await page.getByLabel('Registration requirement *').fill('Open registration')
-  await page.getByRole('button', { name: 'Create event request' }).click()
-  await expect(page.getByRole('status').filter({ hasText: 'has been created' })).toContainText(
-    `“${name}” has been created.`,
-  )
-  await ownRow(page, name).getByRole('button', { name: 'Submit for review' }).click()
-  await expect(page.getByRole('status').filter({ hasText: 'submitted for review' })).toContainText(
-    `“${name}” has been submitted for review.`,
-  )
+  await submitNewRequest(page, name)
   await signOut(page)
 
   await signIn(page, 'coordinator-lead@example.com')
@@ -122,14 +111,7 @@ test('a Lead reassigns an assigned request and views its history', async ({ page
   await page.getByLabel('Equipment requirement *').selectOption('Projector-type requirement')
   await page.getByLabel('Layout requirement *').fill('Theatre style')
   await page.getByLabel('Registration requirement *').fill('Open registration')
-  await page.getByRole('button', { name: 'Create event request' }).click()
-  await expect(page.getByRole('status').filter({ hasText: 'has been created' })).toContainText(
-    `“${name}” has been created.`,
-  )
-  await ownRow(page, name).getByRole('button', { name: 'Submit for review' }).click()
-  await expect(page.getByRole('status').filter({ hasText: 'submitted for review' })).toContainText(
-    `“${name}” has been submitted for review.`,
-  )
+  await submitNewRequest(page, name)
   await signOut(page)
 
   await signIn(page, 'coordinator-lead@example.com')
