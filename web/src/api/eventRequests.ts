@@ -197,7 +197,7 @@ export async function listBookableEventRequests(token: string): Promise<EventReq
 export interface UnassignedEventRequest {
   id: string
   name: string | null
-  organiser_id: string
+  organiser_email: string
   start_at: string | null
   end_at: string | null
   expected_attendance: number | null
@@ -212,6 +212,25 @@ export async function listUnassignedEventRequests(
   })
   if (!response.ok) throw new Error(`Could not load unassigned requests (${response.status})`)
   return (await response.json()) as UnassignedEventRequest[]
+}
+
+/** SCRUM-100: one row of the Lead active-assignment overview (AC1 fields only). */
+export interface ActiveAssignment {
+  id: string
+  name: string | null
+  status: EventStatus
+  organiser_email: string
+  start_at: string | null
+  end_at: string | null
+  coordinator_email: string | null
+}
+
+export async function listActiveAssignments(token: string): Promise<ActiveAssignment[]> {
+  const response = await fetch('/api/event-requests/active-assignments', {
+    headers: authHeaders(token),
+  })
+  if (!response.ok) throw new Error(`Could not load assignments (${response.status})`)
+  return (await response.json()) as ActiveAssignment[]
 }
 
 /** SCRUM-98: one eligible owner the Lead may pick — active Event Coordinators only. */

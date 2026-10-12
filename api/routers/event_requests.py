@@ -15,6 +15,7 @@ from domain.event_status import EventRequestLockedError, InvalidTransitionError
 from domain.roles import Role
 from models.event_request import EventRequest
 from schemas.event_requests import (
+    ActiveAssignmentRead,
     AssignableCoordinatorRead,
     EventRequestAssign,
     EventRequestCreate,
@@ -87,7 +88,7 @@ def list_unassigned_queue(_user: CoordinatorLead, db: Db) -> list[UnassignedEven
     Static route declared above `/{request_id}` so FastAPI matches it literally.
     """
     rows = service.list_unassigned_for_lead(db)
-    return [UnassignedEventRequestRead.model_validate(row) for row in rows]
+    return [UnassignedEventRequestRead.from_row(request, email) for request, email in rows]
 
 
 @router.get("/assignable-coordinators", response_model=list[AssignableCoordinatorRead])
@@ -98,6 +99,19 @@ def list_assignable_coordinators(_user: CoordinatorLead, db: Db) -> list[Assigna
     """
     rows = service.list_assignable_coordinators(db)
     return [AssignableCoordinatorRead.model_validate(row) for row in rows]
+
+
+@router.get("/active-assignments", response_model=list[ActiveAssignmentRead])
+def list_active_assignments(_user: CoordinatorLead, db: Db) -> list[ActiveAssignmentRead]:
+    """SCRUM-100: every active request with its current coordinator or Unassigned.
+
+    Static route declared above `/{request_id}` so FastAPI matches it literally.
+    """
+    rows = service.list_active_for_lead(db)
+    return [
+        ActiveAssignmentRead.from_row(request, organiser_email, coordinator_email)
+        for request, organiser_email, coordinator_email in rows
+    ]
 
 
 @router.post("/{request_id}/assign", response_model=EventRequestRead)

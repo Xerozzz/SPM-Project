@@ -4,12 +4,18 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from domain.coordinator_assignment import org_day_bounds
-from domain.event_status import EventStatus
+from domain.event_status import ACTIVE_STATUSES, EventStatus
 from models.event_request import EventRequest
 from models.user import User
+
+# The Lead queue and overview show emails, not UUIDs: each row carries the
+# organiser's email, and the overview also carries the current coordinator's
+# email (None when unassigned). Joined here so services never touch SQLAlchemy.
+UnassignedRow = tuple[EventRequest, str]
+ActiveRow = tuple[EventRequest, str, str | None]
 
 
 def get(db: Session, request_id: uuid.UUID) -> EventRequest | None:
@@ -48,22 +54,25 @@ def list_submitted(db: Session) -> list[EventRequest]:
     return list(db.scalars(statement))
 
 
-def list_unassigned_submitted(db: Session) -> list[EventRequest]:
+def list_unassigned_submitted(db: Session) -> list[UnassignedRow]:
     """SCRUM-101: Submitted requests with no coordinator, oldest submission first.
 
     Only unassigned Submitted rows appear: assigned requests and requests outside the
     active review state are excluded. `id` is the stable secondary order for equal
-    `submitted_at` values.
+    `submitted_at` values. Each row carries the organiser's email so the Lead sees a
+    name, not a UUID.
     """
+    organiser = aliased(User)
     statement = (
-        select(EventRequest)
+        select(EventRequest, organiser.email)
+        .join(organiser, EventRequest.organiser_id == organiser.id)
         .where(
             EventRequest.status == EventStatus.SUBMITTED,
             EventRequest.coordinator_id.is_(None),
         )
         .order_by(EventRequest.submitted_at.asc(), EventRequest.id.asc())
     )
-    return list(db.scalars(statement))
+    return list(db.execute(statement).tuples())
 
 
 def list_bookable_for_coordinator(db: Session, coordinator_id: uuid.UUID) -> list[EventRequest]:
@@ -77,6 +86,27 @@ def list_bookable_for_coordinator(db: Session, coordinator_id: uuid.UUID) -> lis
         .order_by(EventRequest.start_at.asc(), EventRequest.id.asc())
     )
     return list(db.scalars(statement))
+
+
+def list_active_for_lead(db: Session) -> list[ActiveRow]:
+    """SCRUM-100: every active request with its current coordinator (or Unassigned).
+
+    The active-status set comes from the domain layer (`ACTIVE_STATUSES`), so the
+    repository never carries its own copy of the list. Current ownership is read from
+    the request row itself — history (SCRUM-97) never feeds this field. Deterministic
+    order: event start time, then id as the stable secondary key. Each row carries the
+    organiser's email and the current coordinator's email (None when unassigned).
+    """
+    organiser = aliased(User)
+    coordinator = aliased(User)
+    statement = (
+        select(EventRequest, organiser.email, coordinator.email)
+        .join(organiser, EventRequest.organiser_id == organiser.id)
+        .outerjoin(coordinator, EventRequest.coordinator_id == coordinator.id)
+        .where(EventRequest.status.in_(ACTIVE_STATUSES))
+        .order_by(EventRequest.start_at.asc(), EventRequest.id.asc())
+    )
+    return list(db.execute(statement).tuples())
 
 
 def list_drafts_for_organisation(db: Session, organisation_id: uuid.UUID) -> list[EventRequest]:

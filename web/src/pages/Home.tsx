@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { getHealth } from '../api/client'
 import { useAuth } from '../auth/useAuth'
 import MyEventRequests from '../components/MyEventRequests'
+import ActiveAssignments from '../components/ActiveAssignments'
 import EventRequestForm from '../components/EventRequestForm'
 import EventRequestReview from '../components/EventRequestReview'
 import UnassignedQueue from '../components/UnassignedQueue'
@@ -45,6 +46,9 @@ export default function HomePage() {
 
       {/* SCRUM-101: Coordinator Leads triage newly submitted requests. */}
       {hasRole('coordinator_lead') && <UnassignedQueue />}
+
+      {/* SCRUM-100: Coordinator Leads see every active request and its current owner. */}
+      {hasRole('coordinator_lead') && <ActiveAssignments />}
 
       {/* SCRUM-55: coordinators search active venues by event requirements. */}
       {hasRole('coordinator') && <VenueSearch />}
