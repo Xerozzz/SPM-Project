@@ -35,9 +35,10 @@ _SEED_ORGANISATIONS: tuple[tuple[uuid.UUID, str], ...] = (
 _SEED_USERS: list[tuple[str, str, list[Role], uuid.UUID]] = [
     ("organiser@example.com", "password123", [Role.ORGANISER], _PRIMARY_ORG_ID),
     ("coordinator@example.com", "password123", [Role.COORDINATOR], _PRIMARY_ORG_ID),
-    # A second active coordinator, so a fresh `docker compose up` can demonstrate
-    # round-robin assignment (SCRUM-34) rather than always assigning the same one.
+    # A second active coordinator, so assignment demos have more than one candidate.
     ("coordinator2@example.com", "password123", [Role.COORDINATOR], _PRIMARY_ORG_ID),
+    # SCRUM-101: the Coordinator Lead triages the unassigned queue and assigns owners.
+    ("coordinator-lead@example.com", "password123", [Role.COORDINATOR_LEAD], _PRIMARY_ORG_ID),
     ("venue-staff@example.com", "password123", [Role.VENUE_STAFF], _PRIMARY_ORG_ID),
     ("tech-support@example.com", "password123", [Role.TECH_SUPPORT], _PRIMARY_ORG_ID),
     ("attendee@example.com", "password123", [Role.ATTENDEE], _PRIMARY_ORG_ID),
@@ -111,10 +112,8 @@ def _sample_event_requests() -> list[tuple[uuid.UUID, dict[str, object]]]:
         "layout_requirement": "Theatre style",
         "registration_requirement": "Open registration, capped at 180",
     }
-    # Submitted but not decided. Round-robin assignment (SCRUM-34) hands this one to the
-    # *second* coordinator, because the careers fair above already took the first, so a
-    # clean clone shows both halves of the review screen: one request you may decide and
-    # one that is somebody else's to decide.
+    # Submitted but not decided. SCRUM-101 leaves submissions unassigned, so a clean
+    # clone shows one in the Coordinator Lead unassigned queue.
     alumni_dinner: dict[str, object] = {
         "name": "Alumni Dinner",
         "purpose": "Reconnect alumni with the faculty",
@@ -242,14 +241,18 @@ def _seed_event_requests(db: Session) -> None:
 def _approve_sample(db: Session, organiser_id: uuid.UUID, request_id: uuid.UUID) -> None:
     """Drive one sample to Approved through the same services the UI calls.
 
-    Submitting assigns a coordinator (SCRUM-34 round-robin), and only that coordinator may
-    approve, so this also leaves a correctly assigned request behind rather than a row that
-    happens to say "approved". Nothing here writes `status`.
+    SCRUM-101 leaves submissions unassigned, so the seed assigns the first active
+    coordinator directly (test/demo setup, not a user path) before approving — only
+    the assigned coordinator may approve. Nothing here writes `status`.
     """
     now = datetime.now(UTC)
     submitted = event_requests_service.submit(db, request_id, organiser_id, now)
-    if submitted.coordinator_id is None:
+    coordinators = users_repo.list_active_coordinators(db)
+    if not coordinators:
         return
+    submitted.coordinator_id = coordinators[0].id
+    submitted.assigned_at = now
+    db.flush()
     event_requests_service.approve(db, request_id, submitted.coordinator_id, now)
 
 

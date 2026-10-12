@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.dependencies import EventAccess, require_event_access, require_role
-from domain.coordinator_assignment import NoAvailableCoordinatorError
 from domain.event_request import EventRequestFields
 from domain.event_status import EventRequestLockedError, InvalidTransitionError
 from domain.roles import Role
@@ -22,6 +21,7 @@ from schemas.event_requests import (
     EventRequestRejection,
     EventRequestUpdate,
     FieldProblemRead,
+    UnassignedEventRequestRead,
 )
 from services import event_requests as service
 
@@ -32,6 +32,7 @@ ViewableEventRequest = Annotated[EventRequest, Depends(require_event_access(Even
 EditableEventRequest = Annotated[EventRequest, Depends(require_event_access(EventAccess.EDIT))]
 DecidableEventRequest = Annotated[EventRequest, Depends(require_event_access(EventAccess.DECIDE))]
 Coordinator = Annotated[dict[str, object], Depends(require_role(Role.COORDINATOR))]
+CoordinatorLead = Annotated[dict[str, object], Depends(require_role(Role.COORDINATOR_LEAD))]
 Db = Annotated[Session, Depends(get_db)]
 
 # Everything the service or the status machine can refuse with, in one tuple so each route
@@ -40,7 +41,6 @@ _REFUSALS = (
     service.EventRequestError,
     EventRequestLockedError,
     InvalidTransitionError,
-    NoAvailableCoordinatorError,
 )
 
 
@@ -65,10 +65,6 @@ def _http_error(exc: Exception) -> HTTPException:
         # A literal 422: Starlette renamed its constant between the versions we allow, so
         # neither HTTP_422_UNPROCESSABLE_ENTITY nor _CONTENT exists on all of them.
         return HTTPException(422, [p.model_dump() for p in problems])
-    if isinstance(exc, NoAvailableCoordinatorError):
-        return HTTPException(
-            status.HTTP_409_CONFLICT, "No active coordinator is available for that date"
-        )
     # Locked drafts and illegal transitions are conflicts with the request's current state.
     # The message is stable and for the organiser; the exception text is for logs.
     if isinstance(exc, EventRequestLockedError):
@@ -76,6 +72,16 @@ def _http_error(exc: Exception) -> HTTPException:
     else:
         detail = "This request has already been submitted"
     return HTTPException(status.HTTP_409_CONFLICT, detail)
+
+
+@router.get("/unassigned", response_model=list[UnassignedEventRequestRead])
+def list_unassigned_queue(_user: CoordinatorLead, db: Db) -> list[UnassignedEventRequestRead]:
+    """SCRUM-101: unassigned Submitted requests, oldest submission first.
+
+    Static route declared above `/{request_id}` so FastAPI matches it literally.
+    """
+    rows = service.list_unassigned_for_lead(db)
+    return [UnassignedEventRequestRead.model_validate(row) for row in rows]
 
 
 @router.get("", response_model=list[EventRequestRead])

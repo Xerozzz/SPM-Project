@@ -18,7 +18,7 @@ someone else made two weeks ago.
 | [0005](0005-jwt-auth-for-sign-in.md) | JWT bearer auth with role claims for sign-in | Proposed — hashing superseded by ADR-0007 |
 | [0006](0006-event-request-status-machine.md) | Event request storage, and status as a transition table in the domain layer | Proposed |
 | [0007](0007-bcrypt-directly-not-passlib.md) | Hash passwords with bcrypt directly, not through passlib | Proposed |
-| [0008](0008-coordinator-round-robin-assignment.md) | Derive round-robin coordinator assignment from assignment history | Accepted |
+| [0008](0008-coordinator-round-robin-assignment.md) | Derive round-robin coordinator assignment from assignment history | Superseded by ADR-0019 |
 | [0009](0009-organisation-scoped-drafts.md) | Derive draft visibility from organiser organisation membership | Proposed |
 | [0010](0010-event-clarification-history.md) | Retain event clarification as a message history | Proposed |
 | [0011](0011-event-request-review-decisions.md) | Store the current event-request review decision on the request | Proposed |
@@ -30,6 +30,7 @@ someone else made two weeks ago.
 | [0017](0017-venue-booking-approval-concurrency.md) | Enforce booking approval with the exclusion constraint and a booking-row lock | Proposed |
 | [0018](0018-venue-booking-decisions.md) | Store the Venue Staff decision on the venue booking row | Proposed |
 | [0019](0019-venue-buffer-effective-intervals.md) | Store the effective occupied interval so the overlap constraint can see buffers | Proposed |
+| [0020](0020-manual-coordinator-assignment-queue.md) | Assign event coordinators manually via a Coordinator Lead queue | Proposed |
 
 ## When to write one
 

@@ -1,5 +1,5 @@
 """Event request orchestration for SCRUM-46 (list, edit a draft, submit for review) and
-SCRUM-34 (auto-assign an Event Coordinator on first submission).
+SCRUM-101 (unassigned queue for manual Coordinator Lead assignment).
 
 Each function loads the request, checks the caller owns it, asks the domain layer whether
 the action is allowed, and persists the outcome. Every failure is a typed exception so the
@@ -12,7 +12,6 @@ from typing import cast
 
 from core.database import Session
 from domain import event_status
-from domain.coordinator_assignment import select_next_coordinator
 from domain.event_request import (
     EventRequestFields,
     FieldProblem,
@@ -118,10 +117,8 @@ def submit(
     fields. AC4 holds by construction — nothing here touches venues, equipment or
     registration, and no other code runs on submission.
 
-    SCRUM-34: this is also the only way a request becomes SUBMITTED, so it is the one
-    place that can be "first submission" — a coordinator is assigned here, once. A
-    request that already has one (because the transition table let it be submitted more
-    than once, e.g. after a future clarification round) is left alone.
+    SCRUM-101 (Week 7 manual-assignment policy): submission leaves the request
+    unassigned. A Coordinator Lead assigns it later (SCRUM-98). See ADR-0020.
     """
     # Locked read: two organisers' browsers double-clicking "Submit" at the same instant
     # serialise here, and the second sees SUBMITTED and gets a 409 rather than a second
@@ -134,9 +131,12 @@ def submit(
     # (AGENTS.md §3). InvalidTransitionError propagates if the request is not a draft.
     request.status = event_status.submit(request.status)
     request.submitted_at = now
-    if request.coordinator_id is None:
-        _assign_coordinator(db, request, now)
     return repo.save(db, request)
+
+
+def list_unassigned_for_lead(db: Session) -> list[EventRequest]:
+    """SCRUM-101: unassigned Submitted requests for the Coordinator Lead queue."""
+    return repo.list_unassigned_submitted(db)
 
 
 def approve(
@@ -161,17 +161,6 @@ def reject(
     request.decided_at = now
     request.rejection_reason = reason.strip()
     return repo.save(db, request)
-
-
-def _assign_coordinator(db: Session, request: EventRequest, now: datetime) -> None:
-    """SCRUM-34: round-robin over active coordinators, skipping anyone already
-    confirmed for that date. Raises NoAvailableCoordinatorError if none are free."""
-    assert request.start_at is not None
-    pool = [coordinator.id for coordinator in users_repo.list_active_coordinators(db)]
-    last_assigned = repo.last_assigned_coordinator_id(db)
-    unavailable = repo.coordinator_ids_confirmed_on(db, request.start_at)
-    request.coordinator_id = select_next_coordinator(pool, last_assigned, unavailable)
-    request.assigned_at = now
 
 
 def _owned_by(

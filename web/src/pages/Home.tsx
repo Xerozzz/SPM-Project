@@ -5,6 +5,7 @@ import { useAuth } from '../auth/useAuth'
 import MyEventRequests from '../components/MyEventRequests'
 import EventRequestForm from '../components/EventRequestForm'
 import EventRequestReview from '../components/EventRequestReview'
+import UnassignedQueue from '../components/UnassignedQueue'
 import VenueBookingDecisions from '../components/VenueBookingDecisions'
 import VenueCalendar from '../components/VenueCalendar'
 import VenueCatalogue from '../components/VenueCatalogue'
@@ -41,6 +42,9 @@ export default function HomePage() {
       )}
 
       {hasRole('coordinator') && <EventRequestReview />}
+
+      {/* SCRUM-101: Coordinator Leads triage newly submitted requests. */}
+      {hasRole('coordinator_lead') && <UnassignedQueue />}
 
       {/* SCRUM-55: coordinators search active venues by event requirements. */}
       {hasRole('coordinator') && <VenueSearch />}

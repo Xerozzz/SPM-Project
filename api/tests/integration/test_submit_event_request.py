@@ -61,7 +61,6 @@ async def test_a_complete_draft_is_submitted_and_confirmed(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     organiser = make_user("organiser")
-    make_user("coordinator")  # SCRUM-34: submission needs one to assign
     draft = make_draft(db, organiser)
 
     async with make_client(organiser) as client:
@@ -272,10 +271,9 @@ async def test_submission_changes_nothing_but_status_and_timestamp(
     # AC4: no venue booking, equipment reservation or registration results from
     # submitting. Those tables do not exist yet, so the observable form of the rule is
     # that submission touches exactly the status and its timestamp - nothing else.
-    # (Coordinator assignment, SCRUM-34, is a real side effect of submission, but
-    # coordinator_id/assigned_at are not part of `content_of` — see domain/event_request.py.)
+    # (SCRUM-101: submission leaves the request unassigned, so coordinator_id/assigned_at
+    # stay null — see domain/event_request.py for why they are not part of `content_of`.)
     organiser = make_user("organiser")
-    make_user("coordinator")  # SCRUM-34: submission needs one to assign
     draft = make_draft(db, organiser)
     before = content_of(draft)
 
@@ -347,7 +345,6 @@ async def test_submitting_twice_is_a_conflict(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     organiser = make_user("organiser")
-    make_user("coordinator")  # SCRUM-34: submission needs one to assign
     draft = make_draft(db, organiser)
 
     async with make_client(organiser) as client:
@@ -407,9 +404,8 @@ async def test_listing_requires_a_signed_in_organiser(
 # --------------------------------------------------------------------------- concurrency
 
 
-def _committed_draft() -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
-    """A real, committed organiser, coordinator and complete draft — visible to every
-    connection. The coordinator exists so submission (SCRUM-34) has one to assign."""
+def _committed_draft() -> tuple[uuid.UUID, uuid.UUID]:
+    """A real, committed organiser and complete draft — visible to every connection."""
     session = SessionLocal()
     try:
         organisation = Organisation(name=f"Committed test organisation {uuid.uuid4()}")
@@ -421,24 +417,16 @@ def _committed_draft() -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
             roles=["organiser"],
             organisation_id=organisation.id,
         )
-        coordinator = User(
-            email=f"{uuid.uuid4()}@example.com",
-            password_hash=hash_password("password123"),
-            roles=["coordinator"],
-            organisation_id=organisation.id,
-        )
-        session.add_all([organiser, coordinator])
+        session.add(organiser)
         session.flush()
         draft = make_draft(session, organiser)
         session.commit()
-        return draft.id, organiser.id, coordinator.id
+        return draft.id, organiser.id
     finally:
         session.close()
 
 
-def _delete_committed(
-    draft_id: uuid.UUID, organiser_id: uuid.UUID, coordinator_id: uuid.UUID
-) -> None:
+def _delete_committed(draft_id: uuid.UUID, organiser_id: uuid.UUID) -> None:
     session = SessionLocal()
     try:
         draft = session.get(EventRequest, draft_id)
@@ -449,10 +437,6 @@ def _delete_committed(
         organisation_id = organiser.organisation_id if organiser is not None else None
         if organiser is not None:
             session.delete(organiser)
-        coordinator = session.get(User, coordinator_id)
-        if coordinator is not None:
-            session.delete(coordinator)
-        if organiser is not None or coordinator is not None:
             session.flush()
         if organisation_id is not None:
             organisation = session.get(Organisation, organisation_id)
@@ -471,7 +455,7 @@ def test_simultaneous_submissions_yield_exactly_one_success(attempt: int) -> Non
     then reads SUBMITTED and is refused. This needs two real transactions racing, which
     the rolled-back `db` fixture cannot express — so it commits and cleans up itself."""
     del attempt  # the run number only exists to repeat the race
-    draft_id, organiser_id, coordinator_id = _committed_draft()
+    draft_id, organiser_id = _committed_draft()
     start_together = threading.Barrier(2)
     outcomes: list[str] = []
 
@@ -495,4 +479,4 @@ def test_simultaneous_submissions_yield_exactly_one_success(attempt: int) -> Non
 
         assert sorted(outcomes) == ["refused", "submitted"]
     finally:
-        _delete_committed(draft_id, organiser_id, coordinator_id)
+        _delete_committed(draft_id, organiser_id)
