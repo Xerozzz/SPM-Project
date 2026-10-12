@@ -16,6 +16,7 @@ from routers import (
     auth,
     event_clarifications,
     event_requests,
+    notifications,
     venue_booking_decisions,
     venue_bookings,
     venue_calendar,
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
     # Feature routers are registered here, one line each, as stories land:
     app.include_router(auth.router, prefix="/api")
     app.include_router(event_clarifications.router, prefix="/api")
+    app.include_router(notifications.router)
     app.include_router(event_requests.router, prefix="/api")
     app.include_router(venue_bookings.router, prefix="/api")
     # Venue Staff decisions share /venue-bookings: approve is venue_bookings.decisions
