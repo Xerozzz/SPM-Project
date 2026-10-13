@@ -11,6 +11,7 @@ import {
   type VenueInput,
   type VenueProblem,
   VenueRejectedError,
+  type UpdatedVenue,
 } from '../api/venues'
 import { useAuth } from '../auth/useAuth'
 import VenueUnavailabilityManager from './VenueUnavailabilityManager'
@@ -38,7 +39,13 @@ export default function VenueCatalogue() {
     enabled: token !== null,
   })
 
-  const refresh = () => void queryClient.invalidateQueries({ queryKey })
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey })
+    // SCRUM-89: changing a venue's buffers changes which bookings can stand, and the
+    // panel showing those sits on this same page. Without this it keeps saying nothing
+    // needs attention directly below a save that just caused some.
+    void queryClient.invalidateQueries({ queryKey: ['booking-problems', token] })
+  }
 
   function handleFailure(error: Error) {
     if (error instanceof VenueRejectedError) {
@@ -64,7 +71,7 @@ export default function VenueCatalogue() {
     onSuccess: (venue, { id }) =>
       handleSaved(
         id
-          ? `“${venue.name}” has been updated.`
+          ? `“${venue.name}” has been updated.${describeBufferChange(venue)}`
           : `“${venue.name}” has been added to the catalogue.`,
       ),
     onError: handleFailure,
@@ -227,6 +234,22 @@ const emptyVenue: VenueFormValues = {
   closes_at: '',
   setup_minutes: null,
   turnaround_minutes: null,
+}
+
+/**
+ * SCRUM-89 AC6: what a save did to the venue's existing bookings, if it moved the buffers.
+ *
+ * Says so explicitly when nothing was affected, because silence after changing a setup or
+ * turnaround time reads as "not checked" rather than "checked and fine". Returns nothing
+ * at all when the save did not touch the buffers, since there was nothing to check.
+ */
+function describeBufferChange(venue: Venue | UpdatedVenue): string {
+  if (!('buffer_change' in venue) || !venue.buffer_change.changed) return ''
+  const count = venue.buffer_change.problems.length
+  if (count === 0) return ' No existing bookings are affected.'
+  return ` ${count} existing booking${count === 1 ? '' : 's'} can no longer fit and ${
+    count === 1 ? 'is' : 'are'
+  } listed under bookings needing attention.`
 }
 
 /** An existing venue as the form holds it: "HH:MM:SS" from the API becomes "HH:MM". */

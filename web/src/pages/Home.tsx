@@ -7,6 +7,7 @@ import ActiveAssignments from '../components/ActiveAssignments'
 import NotificationInbox from '../components/NotificationInbox'
 import OrganisationEventCalendar from '../components/OrganisationEventCalendar'
 import EventRequestForm from '../components/EventRequestForm'
+import BookingProblems from '../components/BookingProblems'
 import EventRequestReview from '../components/EventRequestReview'
 import UnassignedQueue from '../components/UnassignedQueue'
 import EquipmentCatalogue from '../components/EquipmentCatalogue'
@@ -64,6 +65,9 @@ export default function HomePage() {
 
       {/* SCRUM-59: Venue Staff maintain the catalogue; coordinators read it for planning. */}
       {(hasRole('venue_staff') || hasRole('coordinator')) && <VenueCatalogue />}
+
+      {/* SCRUM-89: Venue Staff see confirmed bookings that no longer fit their venue. */}
+      {hasRole('venue_staff') && <BookingProblems />}
 
       {/* SCRUM-40: Venue Staff review and decide booking requests. */}
       {hasRole('venue_staff') && <VenueBookingDecisions />}

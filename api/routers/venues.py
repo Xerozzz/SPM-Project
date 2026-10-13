@@ -16,7 +16,18 @@ from core.database import get_db
 from core.dependencies import get_current_user, require_role
 from domain.roles import Role
 from domain.venue import VenueFields
-from schemas.venues import VenueCreate, VenueProblemRead, VenueRead, VenueUpdate
+from schemas.venue_booking_decisions import ConflictRead
+from schemas.venues import (
+    BufferChangeRead,
+    ProblemBookingRead,
+    VenueCreate,
+    VenueProblemRead,
+    VenueProblemsRead,
+    VenueRead,
+    VenueUpdate,
+    VenueUpdateRead,
+)
+from services import venue_buffer_review as buffer_review
 from services import venue_search as search_service
 from services import venues as service
 
@@ -28,6 +39,22 @@ AnyUser = Annotated[dict[str, object], Depends(get_current_user)]
 Db = Annotated[Session, Depends(get_db)]
 
 _REFUSALS = (service.VenueError,)
+
+
+def _problem_read(problem: buffer_review.ReviewedBooking) -> ProblemBookingRead:
+    """One problematic booking as the API reports it, wherever it is reported."""
+    return ProblemBookingRead(
+        booking_id=problem.booking.id,
+        event_request_id=problem.booking.event_request_id,
+        event_name=problem.event.name if problem.event is not None else None,
+        start_at=problem.booking.start_at,
+        end_at=problem.booking.end_at,
+        conflict=ConflictRead.from_error(problem.conflict),
+    )
+
+
+def _user_id(user: dict[str, object]) -> uuid.UUID:
+    return uuid.UUID(str(user["sub"]))
 
 
 def _http_error(exc: Exception) -> HTTPException:
@@ -102,6 +129,31 @@ def _search_period_problems(start_at: datetime, end_at: datetime) -> list[dict[s
     return problems
 
 
+@router.get("/booking-problems", response_model=list[VenueProblemsRead])
+def booking_problems(user: VenueStaff, db: Db) -> list[VenueProblemsRead]:
+    """SCRUM-89 AC4: every booking anywhere that cannot stand under its venue's buffers.
+
+    Declared before `/{venue_id}` so "booking-problems" is not read as a venue id.
+
+    Computed on each request rather than read from a stored marker, so it is right the
+    moment it is asked and needs nothing to clear it when a buffer is lowered or a
+    clashing booking is cancelled (AC3, AC7).
+    """
+    del user
+    return [
+        VenueProblemsRead(
+            venue_id=entry.venue.id,
+            venue_name=entry.venue.name,
+            venue_location=entry.venue.location,
+            setup_minutes=entry.venue.setup_minutes,
+            turnaround_minutes=entry.venue.turnaround_minutes,
+            is_active=entry.venue.is_active,
+            problems=[_problem_read(problem) for problem in entry.problems],
+        )
+        for entry in buffer_review.review_every_venue(db, datetime.now(UTC))
+    ]
+
+
 @router.get("", response_model=list[VenueRead])
 def list_selectable(user: AnyUser, db: Db) -> list[VenueRead]:
     """The venues that may be chosen for new work (AC2, AC3)."""
@@ -129,16 +181,26 @@ def create(body: VenueCreate, user: VenueStaff, db: Db) -> VenueRead:
         raise _http_error(exc) from exc
 
 
-@router.patch("/{venue_id}", response_model=VenueRead)
-def update(venue_id: uuid.UUID, body: VenueUpdate, user: VenueStaff, db: Db) -> VenueRead:
-    """Change a venue's details (AC1); an invalid change saves nothing (AC5)."""
-    del user
+@router.patch("/{venue_id}", response_model=VenueUpdateRead)
+def update(venue_id: uuid.UUID, body: VenueUpdate, user: VenueStaff, db: Db) -> VenueUpdateRead:
+    """Change a venue's details (AC1); an invalid change saves nothing (AC5).
+
+    SCRUM-89 AC6: when the change moved the venue's buffers, the response also says which
+    existing bookings that made problematic, or that none were.
+    """
     try:
-        return VenueRead.model_validate(
-            service.update(db, venue_id, body.model_dump(exclude_unset=True))
+        venue, result = service.update(
+            db, venue_id, body.model_dump(exclude_unset=True), _user_id(user), datetime.now(UTC)
         )
     except _REFUSALS as exc:
         raise _http_error(exc) from exc
+    return VenueUpdateRead(
+        **VenueRead.model_validate(venue).model_dump(),
+        buffer_change=BufferChangeRead(
+            changed=result.changed,
+            problems=[_problem_read(problem) for problem in result.problems],
+        ),
+    )
 
 
 @router.post("/{venue_id}/deactivate", response_model=VenueRead)

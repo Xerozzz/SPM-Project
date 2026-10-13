@@ -437,3 +437,38 @@ test('booking failure with a non-JSON body shows the generic status error', asyn
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Booking request failed (500)')
 })
+
+
+// --------------------------------------------------------- SCRUM-89 AC4
+
+const CLASH = {
+  kind: 'booking' as const,
+  id: 'booking-9',
+  start_at: '2030-03-04T04:00:00Z',
+  end_at: '2030-03-04T05:00:00Z',
+  message: 'conflicts with confirmed booking booking-9',
+}
+
+test('SCRUM-89 AC4: a booking needing attention says so on the coordinator own event', async () => {
+  // The Coordinator who has to act finds out on the event they own, rather than being
+  // sent to a Venue Staff screen they cannot open.
+  signInAsCoordinator()
+  renderExistingBookingReview([{ ...rejectedBooking, status: 'confirmed', conflict: CLASH }])
+
+  expect(await screen.findByText(/Needs attention/)).toBeInTheDocument()
+  // The same wording the Venue Staff panel uses, not a second vocabulary.
+  expect(screen.getByText(/Clashes with a confirmed booking from/)).toBeInTheDocument()
+  // Nothing has been cancelled, and the screen has to say whose decision it is.
+  expect(screen.getByText(/contact them to agree what moves/)).toBeInTheDocument()
+})
+
+test('SCRUM-89 AC4: a booking with nothing wrong says nothing', async () => {
+  // AC7 from the reader's side: no marker to dismiss, so none is shown.
+  signInAsCoordinator()
+  renderExistingBookingReview([{ ...rejectedBooking, conflict: null }])
+
+  expect(
+    await screen.findByRole('heading', { name: 'Existing venue booking requests' }),
+  ).toBeInTheDocument()
+  expect(screen.queryByText(/Needs attention/)).toBeNull()
+})

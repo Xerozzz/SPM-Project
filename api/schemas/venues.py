@@ -1,9 +1,14 @@
-"""API contracts for the venue catalogue (SCRUM-59, SCRUM-82). Mirrors domain/venue.py."""
+"""API contracts for the venue catalogue (SCRUM-59, SCRUM-82, SCRUM-89).
+
+Mirrors domain/venue.py.
+"""
 
 import uuid
-from datetime import time
+from datetime import datetime, time
 
 from pydantic import BaseModel, ConfigDict
+
+from schemas.venue_booking_decisions import ConflictRead
 
 
 class VenueCreate(BaseModel):
@@ -61,3 +66,55 @@ class VenueProblemRead(BaseModel):
 
     field: str
     reason: str
+
+
+class ProblemBookingRead(BaseModel):
+    """SCRUM-89 AC3: one booking that cannot stand under the venue's current buffers.
+
+    `conflict` is the shared shape from SCRUM-75, not a second one, so Venue Staff read a
+    clash the same way wherever they meet it.
+    """
+
+    booking_id: uuid.UUID
+    # Who to talk to. The panel tells Venue Staff the Coordinator decides what moves, so
+    # without the event it names nobody and cannot be acted on. Same fields the decisions
+    # panel already carries for its sibling screen (schemas/venue_booking_decisions.py).
+    event_request_id: uuid.UUID
+    event_name: str | None
+    start_at: datetime
+    end_at: datetime
+    conflict: ConflictRead
+
+
+class BufferChangeRead(BaseModel):
+    """SCRUM-89 AC6: what saving a venue did to its bookings.
+
+    `changed` is false when the save did not touch the buffers at all, which is different
+    from a buffer change that affected nothing: the second has `changed` true and an empty
+    `problems`, and that is the case AC6 asks Venue Staff to be told about explicitly.
+    """
+
+    changed: bool
+    problems: list[ProblemBookingRead]
+
+
+class VenueUpdateRead(VenueRead):
+    """What a PATCH returns: the venue, plus what the save did to its bookings.
+
+    A superset of VenueRead rather than a wrapper around it, so a reader that only wants
+    the venue keeps working unchanged.
+    """
+
+    buffer_change: BufferChangeRead
+
+
+class VenueProblemsRead(BaseModel):
+    """SCRUM-89 AC4: one venue and the bookings there that need attention."""
+
+    venue_id: uuid.UUID
+    venue_name: str
+    venue_location: str
+    setup_minutes: int
+    turnaround_minutes: int
+    is_active: bool
+    problems: list[ProblemBookingRead]
