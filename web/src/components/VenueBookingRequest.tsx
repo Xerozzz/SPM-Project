@@ -38,7 +38,6 @@ export default function VenueBookingRequest({ event }: { event: EventRequest }) 
       void queryClient.invalidateQueries({ queryKey: ['venue-bookings', event.id] })
     },
   })
-  const hasPendingBooking = venueBookings.data?.some((booking) => booking.status === 'pending')
   const result = submit.data?.suitability ?? suitability.data
   const error = submit.error ?? suitability.error ?? venues.error
 
@@ -63,27 +62,21 @@ export default function VenueBookingRequest({ event }: { event: EventRequest }) 
       {venueBookings.data.length > 0 && (
         <ExistingVenueBookings bookings={venueBookings.data} venues={venues.data ?? []} />
       )}
-      {hasPendingBooking ? (
-        <p className="text-sm text-slate-600">
-          A request for this event is already pending. Submit another once it has been decided.
-        </p>
-      ) : (
-        <VenueBookingForm
-          venueId={venueId}
-          onVenueChange={(value) => {
-            setVenueId(value)
-            submit.reset()
-          }}
-          venues={venues.data ?? []}
-          result={result}
-          error={error}
-          isSuitabilityPending={suitability.isPending}
-          isSubmitPending={submit.isPending}
-          hasSubmitted={submit.data !== undefined}
-          onSubmit={() => submit.mutate()}
-          submittedStatus={submit.data?.status}
-        />
-      )}
+      <VenueBookingForm
+        venueId={venueId}
+        onVenueChange={(value) => {
+          setVenueId(value)
+          submit.reset()
+        }}
+        venues={venues.data ?? []}
+        result={result}
+        error={error}
+        isSuitabilityPending={suitability.isPending}
+        isSubmitPending={submit.isPending}
+        hasSubmitted={submit.data !== undefined}
+        onSubmit={() => submit.mutate()}
+        submittedStatus={submit.data?.status}
+      />
     </div>
   )
 }
