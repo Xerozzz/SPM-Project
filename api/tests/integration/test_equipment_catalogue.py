@@ -86,7 +86,6 @@ async def test_text_at_database_column_limits_is_accepted(
         ("equipment_type", "P" * 201, "must be 200 characters or fewer"),
         ("description", "D" * 1001, "must be 1000 characters or fewer"),
         ("location", "L" * 201, "must be 200 characters or fewer"),
-        ("operational_status", "S" * 101, "must be 100 characters or fewer"),
     ],
 )
 async def test_text_over_database_column_limit_has_a_field_specific_error(

@@ -8,7 +8,6 @@ OPERATIONAL_STATUSES: tuple[str, ...] = ("Operational", "Damaged", "Under Mainte
 MAX_EQUIPMENT_TYPE_LENGTH = 200
 MAX_DESCRIPTION_LENGTH = 1000
 MAX_LOCATION_LENGTH = 200
-MAX_OPERATIONAL_STATUS_LENGTH = 100
 
 
 @dataclass(frozen=True)
@@ -37,7 +36,6 @@ def validate_equipment(equipment: EquipmentFields) -> list[FieldProblem]:
                 ("equipment_type", MAX_EQUIPMENT_TYPE_LENGTH),
                 ("description", MAX_DESCRIPTION_LENGTH),
                 ("location", MAX_LOCATION_LENGTH),
-                ("operational_status", MAX_OPERATIONAL_STATUS_LENGTH),
             ),
         )
     )
@@ -45,7 +43,6 @@ def validate_equipment(equipment: EquipmentFields) -> list[FieldProblem]:
     if (
         equipment.operational_status is not None
         and equipment.operational_status.strip()
-        and len(equipment.operational_status.strip()) <= MAX_OPERATIONAL_STATUS_LENGTH
         and equipment.operational_status.strip() not in OPERATIONAL_STATUSES
     ):
         problems.append(
