@@ -12,10 +12,16 @@ from models.equipment import Equipment
 from repositories import equipment as equipment_repo
 
 
+class ConstraintViolation(Exception):
+    """Minimal PostgreSQL error shape used to test named-constraint translation."""
+
+    def __init__(self, constraint_name: str | None) -> None:
+        super().__init__("constraint violation")
+        self.diag = SimpleNamespace(constraint_name=constraint_name)
+
+
 def _integrity_error(constraint_name: str | None) -> IntegrityError:
-    original = Exception("constraint violation")
-    original.diag = SimpleNamespace(constraint_name=constraint_name)
-    return IntegrityError("INSERT INTO equipment", {}, original)
+    return IntegrityError("INSERT INTO equipment", {}, ConstraintViolation(constraint_name))
 
 
 @pytest.mark.story("SCRUM-84")

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from models.equipment import Equipment
 from models.user import User
-from services import equipment as equipment_service
+from repositories import equipment as equipment_repo
 
 MakeUser = Callable[..., User]
 MakeClient = Callable[[User | None], httpx.AsyncClient]
@@ -178,7 +178,7 @@ async def test_database_identity_constraint_reports_a_concurrent_duplicate(
     async with make_client(make_user("tech_support")) as client:
         assert (await client.post("/api/equipment", json=equipment_body())).status_code == 201
         monkeypatch.setattr(
-            equipment_service.repo,
+            equipment_repo,
             "get_by_type_and_location",
             lambda db, equipment_type, location: None,
         )
