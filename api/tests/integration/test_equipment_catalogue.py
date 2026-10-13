@@ -45,6 +45,7 @@ async def test_technical_support_can_create_and_view_equipment(
         "total_quantity": 4,
         "location": "Media Store",
         "operational_status": "Operational",
+        "is_active": True,
     }
     stored = db.get(Equipment, uuid.UUID(created["id"]))
     assert stored is not None
@@ -80,6 +81,7 @@ async def test_technical_support_can_edit_equipment_and_catalogue_shows_changes(
         "total_quantity": 2,
         "location": "Lecture Theatre Store",
         "operational_status": "Damaged",
+        "is_active": True,
     }
     assert db.get(Equipment, uuid.UUID(created["id"])) is not None
     assert updated in catalogue_response.json()
@@ -331,3 +333,42 @@ async def test_unauthenticated_users_cannot_create_equipment(make_client: MakeCl
         response = await client.post("/api/equipment", json=equipment_body())
 
     assert response.status_code == 401
+
+
+@pytest.mark.story("SCRUM-103")
+async def test_technical_support_can_deactivate_equipment_without_deleting_it(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    async with make_client(make_user("tech_support")) as client:
+        created = (await client.post("/api/equipment", json=equipment_body())).json()
+        deactivated = await client.post(f"/api/equipment/{created['id']}/deactivate")
+        catalogue = await client.get("/api/equipment")
+
+    assert deactivated.status_code == 200
+    assert deactivated.json()["is_active"] is False
+    assert created["id"] not in {entry["id"] for entry in catalogue.json()}
+    stored = db.get(Equipment, uuid.UUID(created["id"]))
+    assert stored is not None
+    assert stored.is_active is False
+    assert stored.operational_status == "Operational"
+
+
+@pytest.mark.story("SCRUM-103")
+@pytest.mark.parametrize("role", ["organiser", "coordinator", "venue_staff", "attendee"])
+async def test_non_technical_support_users_cannot_deactivate_equipment(
+    make_user: MakeUser, make_client: MakeClient, role: str
+) -> None:
+    async with make_client(make_user(role)) as client:
+        response = await client.post(f"/api/equipment/{uuid.uuid4()}/deactivate")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.story("SCRUM-103")
+async def test_deactivating_unknown_equipment_is_not_found(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    async with make_client(make_user("tech_support")) as client:
+        response = await client.post(f"/api/equipment/{uuid.uuid4()}/deactivate")
+
+    assert response.status_code == 404

@@ -85,7 +85,7 @@ def create(
     db: Session, organiser_id: uuid.UUID, fields: EventRequestFields, now: datetime
 ) -> EventRequest:
     """Create a new request without submitting or allocating anything."""
-    problems = validate_event_request(fields, now, equipment_repo.list_distinct_types(db))
+    problems = validate_event_request(fields, now, equipment_repo.list_distinct_active_types(db))
     if problems:
         raise IncompleteEventRequestError(problems)
     request = EventRequest(organiser_id=organiser_id, **fields.__dict__)
@@ -125,7 +125,7 @@ def update_draft(
         equipment_requirement=cast(str | None, changes.get("equipment_requirement")),
     )
     problems = validate_catalogue_requirements(
-        catalogue_changes, equipment_repo.list_distinct_types(db)
+        catalogue_changes, equipment_repo.list_distinct_active_types(db)
     )
     if problems:
         raise IncompleteEventRequestError(problems)
@@ -150,7 +150,7 @@ def submit(
     # success. See repositories.event_requests.get_for_update.
     request = _owned_by(db, request_id, organiser_id, lock=True)
     problems = validate_event_request(
-        _fields_of(request), now, equipment_repo.list_distinct_types(db)
+        _fields_of(request), now, equipment_repo.list_distinct_active_types(db)
     )
     if problems:
         raise IncompleteEventRequestError(problems)
