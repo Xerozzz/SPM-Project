@@ -54,6 +54,8 @@ export default function BookingProblems() {
           <ul className="mt-2 space-y-2 text-sm">
             {venue.problems.map((problem) => (
               <li key={problem.booking_id} className="rounded bg-amber-50 p-2 text-amber-800">
+                <span className="font-medium">{problem.event_name ?? 'Untitled event'}</span>
+                <br />
                 {singaporeTime(problem.start_at)} to {singaporeTime(problem.end_at)}
                 <br />
                 {describeConflict(problem.conflict)}

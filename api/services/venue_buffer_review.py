@@ -23,15 +23,36 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from domain.booking_conflict import BookedPeriod, UnavailablePeriod
+from domain.booking_conflict import (
+    BookedPeriod,
+    ConflictingBookingError,
+    UnavailablePeriod,
+    VenueUnavailableError,
+)
 from domain.venue_buffer import VenueBuffers
-from domain.venue_buffer_review import ProblematicBooking, problematic_bookings
+from domain.venue_buffer_review import problematic_bookings
+from models.event_request import EventRequest
 from models.venue import Venue
 from models.venue_booking import VenueBooking
 from models.venue_buffer_change import VenueBufferChange
+from repositories import event_requests as event_repo
 from repositories import venue_availability as booking_repo
 from repositories import venue_unavailabilities as closure_repo
 from repositories import venues as venue_repo
+
+
+@dataclass(frozen=True)
+class ReviewedBooking:
+    """A problematic booking as a caller needs it: the stored row, and what blocks it.
+
+    The domain works in `BookedPeriod`, which carries only what the overlap rule needs.
+    The row is kept alongside so a caller can say *which event* without the pure rule
+    having to know an event exists.
+    """
+
+    booking: VenueBooking
+    event: EventRequest | None
+    conflict: ConflictingBookingError | VenueUnavailableError
 
 
 @dataclass(frozen=True)
@@ -39,7 +60,7 @@ class BufferChangeResult:
     """What a saved buffer change did, for telling Venue Staff (AC6)."""
 
     changed: bool
-    problems: list[ProblematicBooking]
+    problems: list[ReviewedBooking]
 
     @property
     def flagged_booking_ids(self) -> list[uuid.UUID]:
@@ -53,20 +74,27 @@ def buffers_of(venue: Venue) -> VenueBuffers:
     )
 
 
-def review(db: Session, venue: Venue, now: datetime) -> list[ProblematicBooking]:
-    """AC1 and AC2: the venue's future confirmed bookings that now clash, in start order.
+def review(db: Session, venue: Venue, now: datetime) -> list[ReviewedBooking]:
+    """AC1 and AC2: the venue's live confirmed bookings that now clash, in start order.
 
     One query for the bookings and one for the closures, then the comparison happens in
     the domain. Deliberately not a query per booking: every booking at a venue has to be
     compared with every other, so loading them once is both fewer round trips and the
     only way the pure rule can see the whole picture.
+
+    Closures are not filtered by time. A booking whose turnaround is still running can be
+    held up by a closure that has already ended, so cutting the closures at `now` the way
+    the bookings are cut would reintroduce the blind spot the booking filter had.
+
+    Events are loaded only for bookings that turned out to be problematic, so a venue with
+    nothing wrong costs no extra query.
     """
-    bookings = booking_repo.confirmed_bookings_from(db, venue.id, now)
+    rows = {row.id: row for row in booking_repo.confirmed_bookings_from(db, venue.id, now)}
     closures = closure_repo.list_for_venue(db, venue.id)
-    return problematic_bookings(
+    problems = problematic_bookings(
         [
             BookedPeriod(id=row.id, status=row.status, start_at=row.start_at, end_at=row.end_at)
-            for row in bookings
+            for row in rows.values()
         ],
         [
             UnavailablePeriod(id=row.id, starts_at=row.starts_at, ends_at=row.ends_at)
@@ -74,6 +102,14 @@ def review(db: Session, venue: Venue, now: datetime) -> list[ProblematicBooking]
         ],
         buffers_of(venue),
     )
+    return [
+        ReviewedBooking(
+            booking=rows[problem.booking.id],
+            event=event_repo.get(db, rows[problem.booking.id].event_request_id),
+            conflict=problem.conflict,
+        )
+        for problem in problems
+    ]
 
 
 def record_change(
@@ -117,7 +153,7 @@ class VenueProblems:
     """One venue and the bookings there that cannot stand under its current buffers."""
 
     venue: Venue
-    problems: list[ProblematicBooking]
+    problems: list[ReviewedBooking]
 
 
 def review_every_venue(db: Session, now: datetime) -> list[VenueProblems]:
@@ -136,7 +172,7 @@ def review_every_venue(db: Session, now: datetime) -> list[VenueProblems]:
 
 def problems_by_booking(
     db: Session, bookings: Iterable[VenueBooking], now: datetime
-) -> dict[uuid.UUID, ProblematicBooking]:
+) -> dict[uuid.UUID, ReviewedBooking]:
     """AC4: for a set of bookings, which of them need action, keyed by booking id.
 
     Reviews each venue once rather than each booking, because the answer for one booking
@@ -150,7 +186,7 @@ def problems_by_booking(
             assert venue is not None  # a booking cannot exist without its venue.
             by_venue[booking.venue_id] = venue
 
-    found: dict[uuid.UUID, ProblematicBooking] = {}
+    found: dict[uuid.UUID, ReviewedBooking] = {}
     for venue in by_venue.values():
         for problem in review(db, venue, now):
             found[problem.booking.id] = problem

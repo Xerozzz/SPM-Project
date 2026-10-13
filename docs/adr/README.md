@@ -37,6 +37,7 @@ someone else made two weeks ago.
 | [0024](0024-catalogue-backed-equipment-requirements.md) | Validate event equipment requirements against the catalogue | Proposed |
 | [0025](0025-equipment-soft-deactivation.md) | Deactivate equipment catalogue entries instead of deleting them | Proposed |
 | [0026](0026-multiple-venue-booking-requests.md) | Allow independent venue booking requests for one event | Proposed |
+| [0027](0027-venue-buffer-change-audit.md) | Record a venue buffer change as an immutable snapshot, not a live relationship | Proposed |
 
 ## When to write one
 

@@ -49,7 +49,3 @@ class VenueBookingRead(BaseModel):
     # stand beside everything else at that venue. Derived on every read rather than
     # stored, so it appears and disappears on its own as the venue changes (AC3, AC7).
     conflict: ConflictRead | None = None
-
-    @property
-    def requires_action(self) -> bool:
-        return self.conflict is not None

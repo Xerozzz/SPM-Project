@@ -91,20 +91,30 @@ def list_bookings_for_event(db: Session, event_request_id: uuid.UUID) -> list[Ve
 
 
 def confirmed_bookings_from(db: Session, venue_id: uuid.UUID, now: datetime) -> list[VenueBooking]:
-    """SCRUM-89 AC1: confirmed bookings at this venue that have not finished yet.
+    """SCRUM-89 AC1: confirmed bookings at this venue still occupying it at or after `now`.
 
-    Past bookings are left out because nothing can be done about them: the venue was
-    occupied when it was occupied, and flagging history as needing action would be noise.
-    A booking already under way is included, since its remaining time is still at stake.
+    The cut is the *effective* end, the event's end plus the venue's turnaround, not the
+    event's own end. That matters because these rows play two parts: they are the bookings
+    being assessed, and they are what each other booking is assessed against. An event
+    that finished ten minutes ago still holds the venue while its turnaround runs, so
+    dropping it would hide a real clash with the booking that follows it.
+
+    Cutting on the event's end instead was a bug: with an hour of turnaround, a booking
+    that ended at 10:00 still occupies the venue until 11:00, and a 10:30 booking that
+    genuinely could not be approved was reported as fine.
+
+    Anything whose effective interval has passed is left out, because nothing can be done
+    about it and it can no longer be in anyone's way.
 
     Ordered so the review reports the same bookings in the same order every time.
     """
     statement = (
         select(VenueBooking)
+        .join(Venue, Venue.id == VenueBooking.venue_id)
         .where(
             VenueBooking.venue_id == venue_id,
             VenueBooking.status == BookingStatus.CONFIRMED,
-            VenueBooking.end_at > now,
+            VenueBooking.end_at + _turnaround() > now,
         )
         .order_by(VenueBooking.start_at, VenueBooking.id)
     )

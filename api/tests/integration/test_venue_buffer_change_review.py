@@ -26,6 +26,15 @@ from tests.integration.test_venue_search import make_venue
 _SETUP, _TURNAROUND = 30, 45
 
 
+def _every_column(booking: VenueBooking) -> dict[str, object]:
+    """Every stored value on a booking, so AC5 is checked against the whole row.
+
+    Derived from the table rather than listed, so a column added later is compared too
+    instead of quietly falling outside the assertion.
+    """
+    return {c.name: getattr(booking, c.name) for c in VenueBooking.__table__.columns}
+
+
 def audit_rows(db: Session) -> list[VenueBufferChange]:
     return list(db.scalars(select(VenueBufferChange).order_by(VenueBufferChange.changed_at)))
 
@@ -152,7 +161,7 @@ async def test_the_change_is_saved_and_no_booking_is_touched(
     # buffer change itself is never refused because of one.
     venue = make_venue(db)
     first, second = back_to_back(db, make_user("coordinator"), venue)
-    before = [(b.id, b.start_at, b.end_at, b.status, b.effective_start_at) for b in (first, second)]
+    before = [_every_column(b) for b in (first, second)]
 
     async with make_client(make_user("venue_staff")) as client:
         response = await client.patch(
@@ -162,12 +171,9 @@ async def test_the_change_is_saved_and_no_booking_is_touched(
     assert response.status_code == 200, response.text
     assert response.json()["turnaround_minutes"] == _TURNAROUND
     db.expire_all()
-    after = [
-        (b.id, b.start_at, b.end_at, b.status, b.effective_start_at)
-        for b in (db.get(VenueBooking, first.id), db.get(VenueBooking, second.id))
-        if b is not None
-    ]
-    assert after == before
+    reloaded = [db.get(VenueBooking, first.id), db.get(VenueBooking, second.id)]
+    assert all(b is not None for b in reloaded)
+    assert [_every_column(b) for b in reloaded if b is not None] == before
 
 
 # --------------------------------------------------------------------------- AC6
@@ -261,8 +267,10 @@ async def test_the_change_is_recorded_with_the_actor_and_both_values(
 async def test_a_refused_change_records_nothing(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
-    # The audit row and the venue are saved in one commit, so a change that never happened
-    # must not leave a record claiming it did.
+    # An invalid change saves nothing at all, including no audit row. Note this refusal
+    # happens in validation, before the review runs, so it does not by itself prove the
+    # audit row and the venue share a commit. That property comes from `record_change`
+    # only calling `db.add`, with the single commit in `repositories.venues.save`.
     venue = make_venue(db)
     back_to_back(db, make_user("coordinator"), venue)
 
@@ -458,3 +466,55 @@ async def test_lowering_the_buffer_removes_the_marker_the_coordinator_sees(
 
     assert next(b for b in flagged_now.json() if b["id"] == str(first.id))["conflict"] is not None
     assert next(b for b in cleared.json() if b["id"] == str(first.id))["conflict"] is None
+
+
+# ------------------------------------------------- the live-turnaround boundary
+
+
+@pytest.mark.story("SCRUM-89")
+async def test_a_booking_whose_turnaround_is_still_running_still_blocks_the_next_one(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """The review cuts on the effective end, not the event's end.
+
+    Found in review. An event that finished minutes ago still holds the venue while its
+    turnaround runs, so leaving it out made a genuinely unapprovable booking look fine.
+    Cutting on `end_at` alone passed every other test in this file, because they all use
+    bookings either four years out or thirty days past.
+    """
+    venue = make_venue(db)
+    coordinator = make_user("coordinator")
+    now = datetime.now(UTC)
+    ended = booking_for(
+        db, coordinator, venue, now - timedelta(hours=2), now - timedelta(minutes=5)
+    )
+    follows = booking_for(
+        db, coordinator, venue, now + timedelta(minutes=25), now + timedelta(hours=1)
+    )
+
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.patch(f"/api/venues/{venue.id}", json={"turnaround_minutes": 60})
+
+    # The finished event is still in the way, so both are reported.
+    assert sorted(flagged(response)) == sorted([str(ended.id), str(follows.id)])
+
+
+@pytest.mark.story("SCRUM-89")
+async def test_a_booking_whose_turnaround_has_finished_is_left_out(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # The other side of the same boundary: once the effective interval has passed, nothing
+    # can be done about it and it can no longer be in anyone's way.
+    venue = make_venue(db)
+    coordinator = make_user("coordinator")
+    now = datetime.now(UTC)
+    booking_for(db, coordinator, venue, now - timedelta(hours=4), now - timedelta(hours=3))
+    follows = booking_for(
+        db, coordinator, venue, now + timedelta(minutes=25), now + timedelta(hours=1)
+    )
+
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.patch(f"/api/venues/{venue.id}", json={"turnaround_minutes": 60})
+
+    assert flagged(response) == []
+    assert follows.id is not None

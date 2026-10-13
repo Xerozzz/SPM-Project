@@ -116,7 +116,7 @@ function jsonHeaders(token: string): HeadersInit {
   return { ...authHeaders(token), 'Content-Type': 'application/json' }
 }
 
-async function readVenue(response: Response): Promise<Venue> {
+async function readVenue<T extends Venue = Venue>(response: Response): Promise<T> {
   if (response.status === 422) {
     const body = (await response.json()) as { detail: unknown }
     const problems = asVenueProblems(body.detail)
@@ -130,7 +130,7 @@ async function readVenue(response: Response): Promise<Venue> {
     throw new VenueRejectedError([{ field: 'name', reason: 'is already used by another venue' }])
   }
   if (!response.ok) throw new Error(`The venue could not be saved (${response.status})`)
-  return (await response.json()) as Venue
+  return (await response.json()) as T
 }
 
 /** The venues that may be chosen for new work. */
@@ -150,12 +150,24 @@ export async function createVenue(token: string, venue: VenueInput): Promise<Ven
   )
 }
 
+/**
+ * SCRUM-89 AC6: a saved venue, and what the save did to its bookings.
+ *
+ * A superset of `Venue`, so anything that only wanted the venue still gets one.
+ */
+export interface UpdatedVenue extends Venue {
+  buffer_change: {
+    changed: boolean
+    problems: ProblemBooking[]
+  }
+}
+
 export async function updateVenue(
   token: string,
   id: string,
   changes: Partial<VenueInput>,
-): Promise<Venue> {
-  return readVenue(
+): Promise<UpdatedVenue> {
+  return readVenue<UpdatedVenue>(
     await fetch(`/api/venues/${id}`, {
       method: 'PATCH',
       headers: jsonHeaders(token),
@@ -276,6 +288,9 @@ export async function searchVenues(token: string, input: VenueSearchInput): Prom
 /** SCRUM-89 AC4: one booking that cannot stand under its venue's current buffers. */
 export interface ProblemBooking {
   booking_id: string
+  /** Whose booking it is. The panel defers to the Coordinator, so it has to name them. */
+  event_request_id: string
+  event_name: string | null
   start_at: string
   end_at: string
   conflict: BookingConflict

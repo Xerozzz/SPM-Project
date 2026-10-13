@@ -16,7 +16,6 @@ from core.database import get_db
 from core.dependencies import get_current_user, require_role
 from domain.roles import Role
 from domain.venue import VenueFields
-from domain.venue_buffer_review import ProblematicBooking
 from schemas.venue_booking_decisions import ConflictRead
 from schemas.venues import (
     BufferChangeRead,
@@ -42,10 +41,12 @@ Db = Annotated[Session, Depends(get_db)]
 _REFUSALS = (service.VenueError,)
 
 
-def _problem_read(problem: ProblematicBooking) -> ProblemBookingRead:
+def _problem_read(problem: buffer_review.ReviewedBooking) -> ProblemBookingRead:
     """One problematic booking as the API reports it, wherever it is reported."""
     return ProblemBookingRead(
         booking_id=problem.booking.id,
+        event_request_id=problem.booking.event_request_id,
+        event_name=problem.event.name if problem.event is not None else None,
         start_at=problem.booking.start_at,
         end_at=problem.booking.end_at,
         conflict=ConflictRead.from_error(problem.conflict),

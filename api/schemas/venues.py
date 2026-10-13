@@ -76,6 +76,11 @@ class ProblemBookingRead(BaseModel):
     """
 
     booking_id: uuid.UUID
+    # Who to talk to. The panel tells Venue Staff the Coordinator decides what moves, so
+    # without the event it names nobody and cannot be acted on. Same fields the decisions
+    # panel already carries for its sibling screen (schemas/venue_booking_decisions.py).
+    event_request_id: uuid.UUID
+    event_name: str | None
     start_at: datetime
     end_at: datetime
     conflict: ConflictRead
