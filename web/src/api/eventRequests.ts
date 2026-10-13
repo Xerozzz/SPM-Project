@@ -6,6 +6,22 @@ export type EventStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'con
 
 export type EventAction = 'edit' | 'submit' | 'approve' | 'reject'
 
+export interface EventCalendarEntry {
+  id: string
+  name: string | null
+  start_at: string
+  end_at: string
+  status: EventStatus
+}
+
+export async function listOrganisationCalendar(token: string): Promise<EventCalendarEntry[]> {
+  const response = await fetch('/api/event-requests/organisation-calendar', {
+    headers: authHeaders(token),
+  })
+  if (!response.ok) throw new Error(`Could not load organisation calendar (${response.status})`)
+  return (await response.json()) as EventCalendarEntry[]
+}
+
 export const VENUE_REQUIREMENTS = [
   'Auditorium-type venue',
   'Lecture theatre-type venue',

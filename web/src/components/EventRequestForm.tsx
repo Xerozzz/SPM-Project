@@ -80,6 +80,7 @@ export default function EventRequestForm() {
       setValues(initialValues)
       setErrors({})
       void queryClient.invalidateQueries({ queryKey: ['event-requests', 'mine', token] })
+      void queryClient.invalidateQueries({ queryKey: ['organisation-calendar', token] })
       setOutcome(`“${request.name}” has been created.`)
     },
   })

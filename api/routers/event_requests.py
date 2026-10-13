@@ -18,6 +18,7 @@ from schemas.event_requests import (
     ActiveAssignmentRead,
     AssignableCoordinatorRead,
     AssignmentHistoryRead,
+    EventCalendarEntryRead,
     EventRequestAssign,
     EventRequestCreate,
     EventRequestDraftCreate,
@@ -209,6 +210,16 @@ def list_bookable_events(user: Coordinator, db: Db) -> list[EventRequestRead]:
     """Approved assigned requests this coordinator may submit for venue booking."""
     rows = service.list_bookable_for_coordinator(db, _coordinator_id(user))
     return [EventRequestRead.model_validate(row) for row in rows]
+
+
+@router.get("/organisation-calendar", response_model=list[EventCalendarEntryRead])
+def organisation_calendar(user: Organiser, db: Db) -> list[EventCalendarEntryRead]:
+    """SCRUM-87: dated events in the signed-in organiser's organisation."""
+    try:
+        rows = service.list_organisation_calendar(db, _organiser_id(user))
+    except _REFUSALS as exc:
+        raise _http_error(exc) from exc
+    return [EventCalendarEntryRead.model_validate(row) for row in rows]
 
 
 @router.get("/{request_id}", response_model=EventRequestRead)

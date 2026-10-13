@@ -12,7 +12,9 @@ async function signInAsOrganiser(page: Page) {
 }
 
 function row(page: Page, name: string) {
-  return page.getByRole('listitem').filter({ hasText: name })
+  return page.getByRole('listitem').filter({
+    has: page.getByRole('button', { name: `Edit draft ${name}`, exact: true }),
+  })
 }
 
 test('an organiser creates a complete event request as a draft', async ({ page }) => {

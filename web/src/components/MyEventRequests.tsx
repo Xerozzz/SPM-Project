@@ -70,6 +70,7 @@ export default function MyEventRequests() {
       )
       void queryClient.invalidateQueries({ queryKey })
       void queryClient.invalidateQueries({ queryKey: draftsQueryKey })
+      void queryClient.invalidateQueries({ queryKey: ['organisation-calendar', token] })
     },
     onError: (error, request) => {
       if (error instanceof SubmissionRejectedError) {
@@ -113,6 +114,7 @@ export default function MyEventRequests() {
       })
       void queryClient.invalidateQueries({ queryKey })
       void queryClient.invalidateQueries({ queryKey: draftsQueryKey })
+      void queryClient.invalidateQueries({ queryKey: ['organisation-calendar', token] })
     },
     onError: (error) => {
       setOutcome({ kind: 'failed', message: error.message })

@@ -123,6 +123,22 @@ def list_drafts_for_organisation(db: Session, organisation_id: uuid.UUID) -> lis
     return list(db.scalars(statement))
 
 
+def list_calendar_for_organisation(db: Session, organisation_id: uuid.UUID) -> list[EventRequest]:
+    """SCRUM-87: same-organisation VIEW scope (ADR-0009), with usable date ranges."""
+    statement = (
+        select(EventRequest)
+        .join(User, EventRequest.organiser_id == User.id)
+        .where(
+            User.organisation_id == organisation_id,
+            EventRequest.start_at.is_not(None),
+            EventRequest.end_at.is_not(None),
+            EventRequest.end_at > EventRequest.start_at,
+        )
+        .order_by(EventRequest.start_at.asc(), EventRequest.id.asc())
+    )
+    return list(db.scalars(statement))
+
+
 def add(db: Session, request: EventRequest) -> EventRequest:
     """Stage a new request in the current transaction (no commit)."""
     db.add(request)

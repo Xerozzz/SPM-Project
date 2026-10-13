@@ -97,6 +97,12 @@ def list_visible_drafts_for_organiser(db: Session, organiser_id: uuid.UUID) -> l
     return repo.list_drafts_for_organisation(db, organiser.organisation_id)
 
 
+def list_organisation_calendar(db: Session, organiser_id: uuid.UUID) -> list[EventRequest]:
+    """SCRUM-87: dated requests visible through the organiser's stored membership."""
+    organiser = _user_or_forbidden(db, organiser_id)
+    return repo.list_calendar_for_organisation(db, organiser.organisation_id)
+
+
 def create_draft(db: Session, organiser_id: uuid.UUID, fields: dict[str, object]) -> EventRequest:
     """SCRUM-29: save a new incomplete draft for the current organiser.
 
