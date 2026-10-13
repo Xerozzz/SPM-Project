@@ -30,12 +30,21 @@ class EquipmentNotFoundError(EquipmentError):
 
 
 def list_all(db: Session) -> list[Equipment]:
-    return repo.list_all(db)
+    return repo.list_active(db)
 
 
 def list_distinct_types(db: Session) -> list[str]:
-    """Equipment types organisers may request from the current catalogue."""
-    return repo.list_distinct_types(db)
+    """Equipment types organisers may request from the active catalogue."""
+    return repo.list_distinct_active_types(db)
+
+
+def deactivate(db: Session, equipment_id: uuid.UUID) -> Equipment:
+    """Remove an entry from new-work catalogues without deleting its history."""
+    equipment = repo.get(db, equipment_id)
+    if equipment is None:
+        raise EquipmentNotFoundError
+    equipment.is_active = False
+    return repo.save(db, equipment)
 
 
 def create(db: Session, fields: EquipmentFields) -> Equipment:

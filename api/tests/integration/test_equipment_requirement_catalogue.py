@@ -102,3 +102,58 @@ async def test_event_request_accepts_an_equipment_type_from_catalogue(
 
     assert response.status_code == 201
     assert response.json()["equipment_requirement"] == "Projector"
+
+
+@pytest.mark.story("SCRUM-103")
+async def test_active_equipment_type_remains_selectable_until_its_last_entry_is_deactivated(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    add_equipment(db, "Projector", "Media Store")
+    add_equipment(db, "Projector", "Lecture Theatre Store")
+    entries = db.query(Equipment).filter(Equipment.equipment_type == "Projector").all()
+
+    async with make_client(make_user("tech_support")) as staff:
+        first = await staff.post(f"/api/equipment/{entries[0].id}/deactivate")
+
+    async with make_client(make_user("organiser")) as organiser:
+        after_one = await organiser.get("/api/event-requests/equipment-types")
+
+    async with make_client(make_user("tech_support")) as staff:
+        second = await staff.post(f"/api/equipment/{entries[1].id}/deactivate")
+
+    async with make_client(make_user("organiser")) as organiser:
+        after_all = await organiser.get("/api/event-requests/equipment-types")
+        forged = await organiser.post("/api/event-requests", json=request_body())
+
+    assert first.status_code == 200
+    assert "Projector" in after_one.json()
+    assert second.status_code == 200
+    assert "Projector" not in after_all.json()
+    assert forged.status_code == 422
+    assert forged.json()["detail"] == [
+        {"field": "equipment_requirement", "reason": "is not a catalogue option"}
+    ]
+
+
+@pytest.mark.story("SCRUM-103")
+async def test_deactivation_does_not_change_equipment_on_a_submitted_event_request(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    add_equipment(db, "Projector", "Media Store")
+    equipment = db.query(Equipment).filter(Equipment.equipment_type == "Projector").one()
+    organiser = make_user("organiser")
+
+    async with make_client(organiser) as client:
+        created = await client.post("/api/event-requests", json=request_body())
+        submitted = await client.post(f"/api/event-requests/{created.json()['id']}/submit")
+    async with make_client(make_user("tech_support")) as staff:
+        deactivated = await staff.post(f"/api/equipment/{equipment.id}/deactivate")
+    async with make_client(organiser) as client:
+        fetched = await client.get(f"/api/event-requests/{created.json()['id']}")
+
+    assert created.status_code == 201
+    assert submitted.status_code == 200
+    assert deactivated.status_code == 200
+    assert fetched.status_code == 200
+    assert fetched.json()["status"] == "submitted"
+    assert fetched.json()["equipment_requirement"] == "Projector"

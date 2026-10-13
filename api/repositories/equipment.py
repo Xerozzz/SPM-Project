@@ -26,15 +26,24 @@ def get(db: Session, equipment_id: uuid.UUID) -> Equipment | None:
     return db.get(Equipment, equipment_id)
 
 
-def list_all(db: Session) -> list[Equipment]:
-    """Return the catalogue in a stable, readable order."""
-    statement = select(Equipment).order_by(Equipment.equipment_type, Equipment.location)
+def list_active(db: Session) -> list[Equipment]:
+    """Return entries that Technical Support can offer for new work."""
+    statement = (
+        select(Equipment)
+        .where(Equipment.is_active.is_(True))
+        .order_by(Equipment.equipment_type, Equipment.location)
+    )
     return list(db.scalars(statement))
 
 
-def list_distinct_types(db: Session) -> list[str]:
-    """Return catalogue types once each for new event requirements."""
-    statement = select(Equipment.equipment_type).distinct().order_by(Equipment.equipment_type)
+def list_distinct_active_types(db: Session) -> list[str]:
+    """Return types with at least one active entry, once each, for new requirements."""
+    statement = (
+        select(Equipment.equipment_type)
+        .where(Equipment.is_active.is_(True))
+        .distinct()
+        .order_by(Equipment.equipment_type)
+    )
     return list(db.scalars(statement))
 
 

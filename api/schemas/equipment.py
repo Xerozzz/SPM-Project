@@ -40,6 +40,7 @@ class EquipmentRead(BaseModel):
     total_quantity: int
     location: str
     operational_status: str
+    is_active: bool
 
 
 class EquipmentProblemRead(BaseModel):
