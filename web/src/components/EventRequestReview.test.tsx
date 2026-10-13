@@ -206,9 +206,9 @@ test('coordinator events include submitted and approved bookable requests', asyn
 })
 
 // SCRUM-71: coordinators see retained venue booking requests, while submission
-// behaviour stays owned by SCRUM-38.
+// behaviour stays owned by SCRUM-38, extended by SCRUM-78 for additional venues.
 
-test('pending venue booking history suppresses the submission form', async () => {
+test('SCRUM-78: pending venue booking history keeps the submission form available', async () => {
   signInAsCoordinator()
   renderExistingBookingReview([pendingBooking])
 
@@ -219,13 +219,8 @@ test('pending venue booking history suppresses the submission form', async () =>
   const bookingRecord = screen.getByRole('listitem')
   expect(await within(bookingRecord).findByText('Small Hall')).toBeInTheDocument()
   expect(within(bookingRecord).getByText(bookingPeriod(pendingBooking))).toBeInTheDocument()
-  expect(
-    screen.getByText(
-      'A request for this event is already pending. Submit another once it has been decided.',
-    ),
-  ).toBeInTheDocument()
-  expect(screen.queryByRole('heading', { name: 'Venue booking request' })).not.toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: 'Submit booking request' })).not.toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Venue booking request' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Submit booking request' })).toBeInTheDocument()
 })
 
 test('multiple venue bookings are displayed as independent records', async () => {
@@ -243,9 +238,8 @@ test('multiple venue bookings are displayed as independent records', async () =>
   expect(screen.getByText('venue-2')).toBeInTheDocument()
   expect(within(bookingRecords[1]).getByText(bookingPeriod(rejectedBooking))).toBeInTheDocument()
   expect(bookingRecords).toHaveLength(2)
-  expect(
-    screen.queryByRole('button', { name: 'Submit booking request' }),
-  ).not.toBeInTheDocument()
+  // SCRUM-78: independent history does not prevent another submission.
+  expect(screen.getByRole('button', { name: 'Submit booking request' })).toBeInTheDocument()
 })
 
 test('no existing venue booking keeps the normal submission form available', async () => {
@@ -287,17 +281,37 @@ test('rejected-only venue booking history keeps the normal submission form avail
   expect(screen.getByRole('button', { name: 'Submit booking request' })).toBeInTheDocument()
 })
 
-test('reloading the review fetches and displays the pending venue booking again', async () => {
+test('SCRUM-78: adds another venue, retains both records on reload and accepts a third', async () => {
   signInAsCoordinator()
+  const retainedBookings = [pendingBooking]
+  const suitable = {
+    ...suitability,
+    mismatch_codes: [],
+    venue_capacity: 300,
+    unavailable_facilities: [],
+  }
   const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const key = `${init?.method ?? 'GET'} ${String(input)}`
     if (key === 'GET /api/event-requests/reviewable') return json([])
     if (key === 'GET /api/event-requests/bookable') return json([approved])
-    if (key.startsWith('GET ') && key.endsWith('/venue-bookings')) return json([pendingBooking])
+    if (key.startsWith('GET ') && key.endsWith('/venue-bookings')) return json(retainedBookings)
     if (key === 'GET /api/venues') {
-      return json([{ id: 'venue-1', name: 'Small Hall', is_active: true }])
+      return json([
+        { id: 'venue-1', name: 'Small Hall', is_active: true },
+        { id: 'venue-2', name: 'Large Hall', is_active: true },
+        { id: 'venue-3', name: 'Studio', is_active: true },
+      ])
     }
     if (key.endsWith('/clarifications')) return json([])
+    if (key.includes('/venue-bookings/suitability?venue_id=')) {
+      return json(key.endsWith('venue-2') ? suitable : suitability)
+    }
+    if (key === 'POST /api/event-requests/req-1/venue-bookings') {
+      const { venue_id } = JSON.parse(String(init?.body)) as { venue_id: string }
+      const booking = { ...pendingBooking, id: `booking-${retainedBookings.length + 1}`, venue_id }
+      retainedBookings.push(booking)
+      return json({ ...booking, suitability: venue_id === 'venue-2' ? suitable : suitability }, 201)
+    }
     throw new Error(`unexpected request ${key}`)
   })
   const mount = () => {
@@ -315,25 +329,46 @@ test('reloading the review fetches and displays the pending venue booking again'
   expect(
     await screen.findByRole('heading', { name: 'Existing venue booking requests' }),
   ).toBeInTheDocument()
+  await screen.findByRole('option', { name: 'Large Hall' })
+  fireEvent.change(screen.getByLabelText('Active venue'), { target: { value: 'venue-2' } })
+  expect(await screen.findByText('Capacity and facilities are suitable.')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Submit booking request' }))
+  await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(2))
+  const records = screen.getAllByRole('listitem')
+  expect(within(records[0]).getByText('Small Hall')).toBeInTheDocument()
+  expect(within(records[1]).getByText('Large Hall')).toBeInTheDocument()
+  for (const record of records) {
+    expect(within(record).getByText('pending')).toBeInTheDocument()
+    expect(within(record).getByText(bookingPeriod(pendingBooking))).toBeInTheDocument()
+  }
+  expect(screen.getByRole('button', { name: 'Submit booking request' })).toBeDisabled()
+  // Changing the venue resets the successful mutation and evaluates the newly selected venue.
+  fireEvent.change(screen.getByLabelText('Active venue'), { target: { value: 'venue-3' } })
+  expect(await screen.findByText(/Capacity mismatch/)).toBeInTheDocument()
+  expect(screen.queryByText('Capacity and facilities are suitable.')).not.toBeInTheDocument()
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Submit booking request' })).toBeEnabled(),
+  )
   view.unmount()
   mount()
 
   expect(
     await screen.findByRole('heading', { name: 'Existing venue booking requests' }),
   ).toBeInTheDocument()
-  expect(
-    screen.getByText(
-      'A request for this event is already pending. Submit another once it has been decided.',
-    ),
-  ).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: 'Submit booking request' })).not.toBeInTheDocument()
-  await waitFor(() => {
-    const bookingReads = fetcher.mock.calls.filter(([input, init]) => {
-      const key = `${init?.method ?? 'GET'} ${String(input)}`
-      return key === 'GET /api/event-requests/req-1/venue-bookings'
-    })
-    expect(bookingReads).toHaveLength(2)
-  })
+  expect(screen.getAllByRole('listitem')).toHaveLength(2)
+  await screen.findByRole('option', { name: 'Studio' })
+  fireEvent.change(screen.getByLabelText('Active venue'), { target: { value: 'venue-3' } })
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Submit booking request' })).toBeEnabled(),
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Submit booking request' }))
+  await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3))
+  expect(within(screen.getAllByRole('listitem')[2]).getByText('Studio')).toBeInTheDocument()
+  const posts = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')
+  expect(posts.map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
+    { venue_id: 'venue-2' },
+    { venue_id: 'venue-3' },
+  ])
 })
 
 test('approved event assigned to another coordinator hides the booking UI', async () => {
@@ -375,9 +410,9 @@ test('approved event previews advisory warnings and submits a pending booking re
   expect(screen.getByRole('heading', { name: 'Venue booking request' })).toBeInTheDocument()
 })
 
-test('booking conflict shows the backend detail', async () => {
+test('booking authorization failure shows the backend detail', async () => {
   signInAsCoordinator()
-  renderBookingReview({ detail: 'A pending booking request already exists.' }, 409)
+  renderBookingReview({ detail: 'Forbidden' }, 403)
 
   await screen.findByRole('option', { name: 'Small Hall' })
   fireEvent.change(screen.getByLabelText('Active venue'), {
@@ -386,9 +421,7 @@ test('booking conflict shows the backend detail', async () => {
   await screen.findByText(/Capacity mismatch/)
   fireEvent.click(screen.getByRole('button', { name: 'Submit booking request' }))
 
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'A pending booking request already exists.',
-  )
+  expect(await screen.findByRole('alert')).toHaveTextContent('Forbidden')
 })
 
 test('booking failure with a non-JSON body shows the generic status error', async () => {

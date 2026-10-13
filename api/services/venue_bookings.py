@@ -30,10 +30,6 @@ class InvalidBookingRequestError(Exception):
         self.problems = problems
 
 
-class PendingBookingExistsError(Exception):
-    pass
-
-
 class BookingNotFoundError(Exception):
     """No venue booking has that id."""
 
@@ -70,8 +66,6 @@ def submit(
 ) -> tuple[VenueBooking, venue_suitability.SuitabilityResult]:
     locked = event_repo.get_for_update(db, event.id)
     assert locked is not None and locked.coordinator_id is not None
-    if booking_repo.pending_for_event(db, locked.id) is not None:
-        raise PendingBookingExistsError
     suitability = evaluate(db, locked, venue_id, now)
     assert locked.start_at is not None and locked.end_at is not None
     venue = venue_repo.get(db, venue_id)
