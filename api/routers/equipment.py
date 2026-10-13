@@ -43,6 +43,13 @@ def update(
     return _save(lambda: service.update(db, equipment_id, EquipmentFields(**body.model_dump())))
 
 
+@router.post("/{equipment_id}/deactivate", response_model=EquipmentRead)
+def deactivate(equipment_id: uuid.UUID, user: TechnicalSupport, db: Db) -> EquipmentRead:
+    """Remove an entry from active catalogues without deleting its stored record."""
+    del user
+    return _save(lambda: service.deactivate(db, equipment_id))
+
+
 def _save(action: Callable[[], object]) -> EquipmentRead:
     """Serialise the catalogue service's shared validation and identity errors."""
     try:

@@ -7,6 +7,7 @@ export interface Equipment {
   total_quantity: number
   location: string
   operational_status: OperationalStatus
+  is_active: boolean
 }
 
 export const OPERATIONAL_STATUSES = ['Operational', 'Damaged', 'Under Maintenance'] as const
@@ -70,6 +71,17 @@ export async function updateEquipment(
   input: EquipmentInput,
 ): Promise<Equipment> {
   return saveEquipment(`/api/equipment/${equipmentId}`, 'PUT', token, input, 200)
+}
+
+export async function deactivateEquipment(token: string, equipmentId: string): Promise<Equipment> {
+  const response = await fetch(`/api/equipment/${equipmentId}/deactivate`, {
+    method: 'POST',
+    headers: headers(token),
+  })
+  if (!response.ok) {
+    throw new Error(`The equipment entry could not be deactivated (${response.status})`)
+  }
+  return (await response.json()) as Equipment
 }
 
 async function saveEquipment(

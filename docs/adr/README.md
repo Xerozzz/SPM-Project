@@ -35,6 +35,7 @@ someone else made two weeks ago.
 | [0022](0022-notification-inbox.md) | Store private notifications for the in-app inbox | Proposed |
 | [0023](0023-equipment-catalogue-identity.md) | Identify equipment catalogue entries by type and location | Proposed |
 | [0024](0024-catalogue-backed-equipment-requirements.md) | Validate event equipment requirements against the catalogue | Proposed |
+| [0025](0025-equipment-soft-deactivation.md) | Deactivate equipment catalogue entries instead of deleting them | Proposed |
 
 ## When to write one
 

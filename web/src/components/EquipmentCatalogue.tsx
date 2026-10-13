@@ -3,6 +3,7 @@ import { type FormEvent, type ReactNode, useState } from 'react'
 
 import {
   createEquipment,
+  deactivateEquipment,
   listEquipment,
   OPERATIONAL_STATUSES,
   type EquipmentInput,
@@ -62,6 +63,15 @@ export default function EquipmentCatalogue() {
         setOutcome(error.message)
       }
     },
+  })
+
+  const deactivate = useMutation({
+    mutationFn: (equipment: Equipment) => deactivateEquipment(token ?? '', equipment.id),
+    onSuccess: (equipment) => {
+      setOutcome(`“${equipment.equipment_type}” has been deactivated and can no longer be selected.`)
+      void queryClient.invalidateQueries({ queryKey })
+    },
+    onError: (error: Error) => setOutcome(error.message),
   })
 
   function reasonFor(field: string) {
@@ -130,6 +140,15 @@ export default function EquipmentCatalogue() {
                 onClick={() => startEditing(equipment)}
               >
                 Edit
+              </button>
+              <button
+                type="button"
+                className="ml-2 mt-2 rounded border border-slate-300 px-2 py-1 text-sm"
+                disabled={deactivate.isPending || save.isPending}
+                onClick={() => deactivate.mutate(equipment)}
+                aria-label={`Deactivate ${equipment.equipment_type}`}
+              >
+                Deactivate
               </button>
             </li>
           ))}
