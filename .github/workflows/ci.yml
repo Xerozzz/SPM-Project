@@ -106,6 +106,13 @@ jobs:
       - uses: actions/checkout@v7
       - name: Start the whole stack the way a marker would
         run: docker compose up -d --build
+        
+      - name: Show API logs if startup fails
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs api --tail=200
+
       - name: Wait for the API
         run: |
           for i in $(seq 1 60); do
