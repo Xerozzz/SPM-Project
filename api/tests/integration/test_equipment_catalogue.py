@@ -63,6 +63,49 @@ async def test_description_is_optional(make_user: MakeUser, make_client: MakeCli
 
 
 @pytest.mark.story("SCRUM-84")
+async def test_text_at_database_column_limits_is_accepted(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    async with make_client(make_user("tech_support")) as client:
+        response = await client.post(
+            "/api/equipment",
+            json=equipment_body(
+                equipment_type="P" * 200,
+                description="D" * 1000,
+                location="L" * 200,
+            ),
+        )
+
+    assert response.status_code == 201
+
+
+@pytest.mark.story("SCRUM-84")
+@pytest.mark.parametrize(
+    ("field", "value", "reason"),
+    [
+        ("equipment_type", "P" * 201, "must be 200 characters or fewer"),
+        ("description", "D" * 1001, "must be 1000 characters or fewer"),
+        ("location", "L" * 201, "must be 200 characters or fewer"),
+        ("operational_status", "S" * 101, "must be 100 characters or fewer"),
+    ],
+)
+async def test_text_over_database_column_limit_has_a_field_specific_error(
+    db: Session,
+    make_user: MakeUser,
+    make_client: MakeClient,
+    field: str,
+    value: str,
+    reason: str,
+) -> None:
+    async with make_client(make_user("tech_support")) as client:
+        response = await client.post("/api/equipment", json=equipment_body(**{field: value}))
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == [{"field": field, "reason": reason}]
+    assert db.query(Equipment).count() == 0
+
+
+@pytest.mark.story("SCRUM-84")
 @pytest.mark.parametrize(
     ("field", "value"),
     [

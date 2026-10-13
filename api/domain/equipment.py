@@ -5,6 +5,10 @@ from dataclasses import dataclass
 from domain.validation import FieldProblem
 
 OPERATIONAL_STATUSES: tuple[str, ...] = ("Operational", "Damaged", "Under Maintenance")
+MAX_EQUIPMENT_TYPE_LENGTH = 200
+MAX_DESCRIPTION_LENGTH = 1000
+MAX_LOCATION_LENGTH = 200
+MAX_OPERATIONAL_STATUS_LENGTH = 100
 
 
 @dataclass(frozen=True)
@@ -26,9 +30,22 @@ def validate_equipment(equipment: EquipmentFields) -> list[FieldProblem]:
         if _is_blank(getattr(equipment, field)):
             problems.append(FieldProblem(field, "is required"))
 
+    problems.extend(
+        _text_length_problems(
+            equipment,
+            (
+                ("equipment_type", MAX_EQUIPMENT_TYPE_LENGTH),
+                ("description", MAX_DESCRIPTION_LENGTH),
+                ("location", MAX_LOCATION_LENGTH),
+                ("operational_status", MAX_OPERATIONAL_STATUS_LENGTH),
+            ),
+        )
+    )
+
     if (
         equipment.operational_status is not None
         and equipment.operational_status.strip()
+        and len(equipment.operational_status.strip()) <= MAX_OPERATIONAL_STATUS_LENGTH
         and equipment.operational_status.strip() not in OPERATIONAL_STATUSES
     ):
         problems.append(
@@ -52,3 +69,14 @@ def validate_equipment(equipment: EquipmentFields) -> list[FieldProblem]:
 
 def _is_blank(value: str | None) -> bool:
     return value is None or not value.strip()
+
+
+def _text_length_problems(
+    equipment: EquipmentFields, limits: tuple[tuple[str, int], ...]
+) -> list[FieldProblem]:
+    """Keep values that would exceed the database columns out of persistence."""
+    return [
+        FieldProblem(field, f"must be {maximum} characters or fewer")
+        for field, maximum in limits
+        if (value := getattr(equipment, field)) is not None and len(value.strip()) > maximum
+    ]
