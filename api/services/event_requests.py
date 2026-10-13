@@ -24,6 +24,7 @@ from models.event_coordinator_assignment import EventCoordinatorAssignment
 from models.event_request import EventRequest
 from models.user import User
 from repositories import coordinator_assignments as history_repo
+from repositories import equipment as equipment_repo
 from repositories import event_requests as repo
 from repositories import users as users_repo
 
@@ -84,7 +85,7 @@ def create(
     db: Session, organiser_id: uuid.UUID, fields: EventRequestFields, now: datetime
 ) -> EventRequest:
     """Create a new request without submitting or allocating anything."""
-    problems = validate_event_request(fields, now)
+    problems = validate_event_request(fields, now, equipment_repo.list_distinct_types(db))
     if problems:
         raise IncompleteEventRequestError(problems)
     request = EventRequest(organiser_id=organiser_id, **fields.__dict__)
@@ -123,7 +124,9 @@ def update_draft(
         venue_requirement=cast(str | None, changes.get("venue_requirement")),
         equipment_requirement=cast(str | None, changes.get("equipment_requirement")),
     )
-    problems = validate_catalogue_requirements(catalogue_changes)
+    problems = validate_catalogue_requirements(
+        catalogue_changes, equipment_repo.list_distinct_types(db)
+    )
     if problems:
         raise IncompleteEventRequestError(problems)
     for name in field_names():
@@ -146,7 +149,9 @@ def submit(
     # serialise here, and the second sees SUBMITTED and gets a 409 rather than a second
     # success. See repositories.event_requests.get_for_update.
     request = _owned_by(db, request_id, organiser_id, lock=True)
-    problems = validate_event_request(_fields_of(request), now)
+    problems = validate_event_request(
+        _fields_of(request), now, equipment_repo.list_distinct_types(db)
+    )
     if problems:
         raise IncompleteEventRequestError(problems)
     # The only place status changes, and the value comes from the state machine

@@ -29,6 +29,7 @@ from schemas.event_requests import (
     FieldProblemRead,
     UnassignedEventRequestRead,
 )
+from services import equipment as equipment_service
 from services import event_requests as service
 
 router = APIRouter(prefix="/event-requests", tags=["event-requests"])
@@ -220,6 +221,12 @@ def organisation_calendar(user: Organiser, db: Db) -> list[EventCalendarEntryRea
     except _REFUSALS as exc:
         raise _http_error(exc) from exc
     return [EventCalendarEntryRead.model_validate(row) for row in rows]
+
+
+@router.get("/equipment-types", response_model=list[str])
+def list_equipment_types(_user: Organiser, db: Db) -> list[str]:
+    """Catalogue equipment types an organiser may select for a new request."""
+    return equipment_service.list_distinct_types(db)
 
 
 @router.get("/{request_id}", response_model=EventRequestRead)

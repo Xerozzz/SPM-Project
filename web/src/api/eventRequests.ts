@@ -29,13 +29,6 @@ export const VENUE_REQUIREMENTS = [
   'Outdoor event space',
 ] as const
 
-export const EQUIPMENT_REQUIREMENTS = [
-  'Projector-type requirement',
-  'Microphone-type requirement',
-  'PA system-type requirement',
-  'Display screen-type requirement',
-] as const
-
 export interface EventRequest {
   id: string
   status: EventStatus
@@ -195,6 +188,14 @@ export async function listMyEventRequests(token: string): Promise<EventRequest[]
     throw new Error(`/api/event-requests responded ${response.status}`)
   }
   return (await response.json()) as EventRequest[]
+}
+
+export async function listEquipmentRequirementTypes(token: string): Promise<string[]> {
+  const response = await fetch('/api/event-requests/equipment-types', {
+    headers: authHeaders(token),
+  })
+  if (!response.ok) throw new Error(`Could not load equipment types (${response.status})`)
+  return (await response.json()) as string[]
 }
 
 export async function listRequestsForReview(token: string): Promise<EventRequest[]> {

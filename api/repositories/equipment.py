@@ -32,6 +32,12 @@ def list_all(db: Session) -> list[Equipment]:
     return list(db.scalars(statement))
 
 
+def list_distinct_types(db: Session) -> list[str]:
+    """Return catalogue types once each for new event requirements."""
+    statement = select(Equipment.equipment_type).distinct().order_by(Equipment.equipment_type)
+    return list(db.scalars(statement))
+
+
 def save(db: Session, equipment: Equipment) -> Equipment:
     """Commit an added or edited entry and refresh its persisted values."""
     db.add(equipment)
