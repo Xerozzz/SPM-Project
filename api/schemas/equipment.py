@@ -17,6 +17,18 @@ class EquipmentCreate(BaseModel):
     operational_status: str | None = None
 
 
+class EquipmentUpdate(BaseModel):
+    """Everything Technical Support Staff may change on a catalogue entry."""
+
+    equipment_type: str | None = None
+    description: str | None = None
+    # Keep invalid scalar JSON values intact so the domain validator can return the
+    # catalogue's consistent {field, reason} error response.
+    total_quantity: int | float | str | bool | None = None
+    location: str | None = None
+    operational_status: str | None = None
+
+
 class EquipmentRead(BaseModel):
     """An equipment entry as shown in the catalogue."""
 

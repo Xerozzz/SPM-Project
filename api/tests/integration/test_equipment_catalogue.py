@@ -53,6 +53,129 @@ async def test_technical_support_can_create_and_view_equipment(
     assert catalogue_response.json() == [created]
 
 
+@pytest.mark.story("SCRUM-93")
+async def test_technical_support_can_edit_equipment_and_catalogue_shows_changes(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    async with make_client(make_user("tech_support")) as client:
+        created = (await client.post("/api/equipment", json=equipment_body())).json()
+        response = await client.put(
+            f"/api/equipment/{created['id']}",
+            json=equipment_body(
+                equipment_type="Document camera",
+                description=None,
+                total_quantity=2,
+                location="Lecture Theatre Store",
+                operational_status="Damaged",
+            ),
+        )
+        catalogue_response = await client.get("/api/equipment")
+
+    assert response.status_code == 200
+    updated = response.json()
+    assert updated == {
+        "id": created["id"],
+        "equipment_type": "Document camera",
+        "description": None,
+        "total_quantity": 2,
+        "location": "Lecture Theatre Store",
+        "operational_status": "Damaged",
+    }
+    assert db.get(Equipment, uuid.UUID(created["id"])) is not None
+    assert catalogue_response.json() == [updated]
+
+
+@pytest.mark.story("SCRUM-93")
+async def test_edit_keeps_its_own_type_and_location_combination(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    async with make_client(make_user("tech_support")) as client:
+        created = (await client.post("/api/equipment", json=equipment_body())).json()
+        response = await client.put(
+            f"/api/equipment/{created['id']}", json=equipment_body(total_quantity=3)
+        )
+
+    assert response.status_code == 200
+    assert response.json()["total_quantity"] == 3
+
+
+@pytest.mark.story("SCRUM-93")
+async def test_edit_rejects_another_entries_type_and_location(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    async with make_client(make_user("tech_support")) as client:
+        first = (await client.post("/api/equipment", json=equipment_body())).json()
+        second = (
+            await client.post(
+                "/api/equipment",
+                json=equipment_body(equipment_type="Microphone", location="Audio Store"),
+            )
+        ).json()
+        response = await client.put(f"/api/equipment/{second['id']}", json=equipment_body())
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Equipment with this type and location already exists"
+    assert first["id"] != second["id"]
+
+
+@pytest.mark.story("SCRUM-93")
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("equipment_type", ""),
+        ("location", None),
+        ("operational_status", "Unavailable"),
+        ("total_quantity", -1),
+        ("total_quantity", 1.5),
+    ],
+)
+async def test_edit_rejects_invalid_mandatory_equipment_values(
+    make_user: MakeUser, make_client: MakeClient, field: str, value: object
+) -> None:
+    async with make_client(make_user("tech_support")) as client:
+        created = (await client.post("/api/equipment", json=equipment_body())).json()
+        response = await client.put(
+            f"/api/equipment/{created['id']}", json=equipment_body(**{field: value})
+        )
+
+    assert response.status_code == 422
+    assert field in {problem["field"] for problem in response.json()["detail"]}
+
+
+@pytest.mark.story("SCRUM-93")
+@pytest.mark.parametrize("role", ["organiser", "coordinator", "venue_staff", "attendee"])
+async def test_non_technical_support_users_cannot_edit_equipment(
+    make_user: MakeUser, make_client: MakeClient, role: str
+) -> None:
+    async with make_client(make_user("tech_support")) as client:
+        created = (await client.post("/api/equipment", json=equipment_body())).json()
+
+    async with make_client(make_user(role)) as client:
+        response = await client.put(
+            f"/api/equipment/{created['id']}", json=equipment_body(total_quantity=3)
+        )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.story("SCRUM-93")
+async def test_missing_equipment_cannot_be_edited(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    async with make_client(make_user("tech_support")) as client:
+        response = await client.put(f"/api/equipment/{uuid.uuid4()}", json=equipment_body())
+
+    assert response.status_code == 404
+
+
+@pytest.mark.story("SCRUM-93")
+async def test_unauthenticated_users_cannot_edit_equipment(make_client: MakeClient) -> None:
+    async with make_client(None) as client:
+        response = await client.put(f"/api/equipment/{uuid.uuid4()}", json=equipment_body())
+
+    assert response.status_code == 401
+
+
 @pytest.mark.story("SCRUM-84")
 async def test_description_is_optional(make_user: MakeUser, make_client: MakeClient) -> None:
     async with make_client(make_user("tech_support")) as client:

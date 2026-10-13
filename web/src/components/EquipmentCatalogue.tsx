@@ -8,6 +8,8 @@ import {
   type EquipmentInput,
   type EquipmentProblem,
   EquipmentRejectedError,
+  type Equipment,
+  updateEquipment,
 } from '../api/equipment'
 import { useAuth } from '../auth/useAuth'
 
@@ -27,6 +29,7 @@ export default function EquipmentCatalogue() {
   const [values, setValues] = useState<EquipmentInput>(emptyForm)
   const [problems, setProblems] = useState<EquipmentProblem[]>([])
   const [outcome, setOutcome] = useState<string | null>(null)
+  const [editing, setEditing] = useState<Equipment | null>(null)
   const catalogue = useQuery({
     queryKey,
     queryFn: () => listEquipment(token ?? ''),
@@ -34,11 +37,20 @@ export default function EquipmentCatalogue() {
   })
 
   const save = useMutation({
-    mutationFn: () => createEquipment(token ?? '', values),
+    mutationFn: () =>
+      editing === null
+        ? createEquipment(token ?? '', values)
+        : updateEquipment(token ?? '', editing.id, values),
     onSuccess: (equipment) => {
       setValues(emptyForm)
+      const wasEditing = editing !== null
+      setEditing(null)
       setProblems([])
-      setOutcome(`“${equipment.equipment_type}” has been added to the catalogue.`)
+      setOutcome(
+        wasEditing
+          ? `“${equipment.equipment_type}” has been updated in the catalogue.`
+          : `“${equipment.equipment_type}” has been added to the catalogue.`,
+      )
       void queryClient.invalidateQueries({ queryKey })
     },
     onError: (error: Error) => {
@@ -59,6 +71,25 @@ export default function EquipmentCatalogue() {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     save.mutate()
+  }
+
+  function startEditing(equipment: Equipment) {
+    setEditing(equipment)
+    setValues({
+      equipment_type: equipment.equipment_type,
+      description: equipment.description,
+      total_quantity: equipment.total_quantity,
+      location: equipment.location,
+      operational_status: equipment.operational_status,
+    })
+    setProblems([])
+    setOutcome(null)
+  }
+
+  function cancelEditing() {
+    setEditing(null)
+    setValues(emptyForm)
+    setProblems([])
   }
 
   return (
@@ -93,13 +124,20 @@ export default function EquipmentCatalogue() {
                 <span className="font-medium">Operational status: </span>
                 {equipment.operational_status}
               </p>
+              <button
+                type="button"
+                className="mt-2 rounded border border-slate-300 px-2 py-1 text-sm"
+                onClick={() => startEditing(equipment)}
+              >
+                Edit
+              </button>
             </li>
           ))}
         </ul>
       )}
 
       <form className="mt-4 space-y-3 border-t border-slate-200 pt-4" noValidate onSubmit={submit}>
-        <h3 className="text-sm font-medium">Add equipment</h3>
+        <h3 className="text-sm font-medium">{editing === null ? 'Add equipment' : 'Edit equipment'}</h3>
         <Field label="Equipment type" error={reasonFor('equipment_type')}>
           <input
             value={values.equipment_type}
@@ -150,9 +188,20 @@ export default function EquipmentCatalogue() {
             ))}
           </select>
         </Field>
-        <button type="submit" className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white">
-          Add equipment
-        </button>
+        <div className="flex gap-2">
+          <button type="submit" className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white">
+            {editing === null ? 'Add equipment' : 'Save changes'}
+          </button>
+          {editing !== null && (
+            <button
+              type="button"
+              className="rounded border border-slate-300 px-3 py-1.5 text-sm"
+              onClick={cancelEditing}
+            >
+              Cancel edit
+            </button>
+          )}
+        </div>
       </form>
       {outcome && (
         <p className="mt-3 text-sm" role="status">

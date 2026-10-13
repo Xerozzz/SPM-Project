@@ -61,8 +61,26 @@ export async function listEquipment(token: string): Promise<Equipment[]> {
 }
 
 export async function createEquipment(token: string, input: EquipmentInput): Promise<Equipment> {
-  const response = await fetch('/api/equipment', {
-    method: 'POST',
+  return saveEquipment('/api/equipment', 'POST', token, input, 201)
+}
+
+export async function updateEquipment(
+  token: string,
+  equipmentId: string,
+  input: EquipmentInput,
+): Promise<Equipment> {
+  return saveEquipment(`/api/equipment/${equipmentId}`, 'PUT', token, input, 200)
+}
+
+async function saveEquipment(
+  url: string,
+  method: 'POST' | 'PUT',
+  token: string,
+  input: EquipmentInput,
+  successStatus: number,
+): Promise<Equipment> {
+  const response = await fetch(url, {
+    method,
     headers: headers(token, true),
     body: JSON.stringify(input),
   })
@@ -75,6 +93,8 @@ export async function createEquipment(token: string, input: EquipmentInput): Pro
       { field: 'equipment_type', reason: 'is already recorded at this location' },
     ])
   }
-  if (!response.ok) throw new Error(`The equipment entry could not be saved (${response.status})`)
+  if (response.status !== successStatus) {
+    throw new Error(`The equipment entry could not be saved (${response.status})`)
+  }
   return (await response.json()) as Equipment
 }
