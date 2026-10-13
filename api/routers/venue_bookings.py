@@ -68,10 +68,6 @@ def submit_venue_booking(
         booking, suitability = service.submit(db, event, body.venue_id, datetime.now(UTC))
     except service.InvalidBookingRequestError as exc:
         raise _validation_error(exc) from exc
-    except service.PendingBookingExistsError as exc:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, "A pending booking request already exists"
-        ) from exc
     return VenueBookingSubmissionRead(
         id=booking.id,
         venue_id=booking.venue_id,

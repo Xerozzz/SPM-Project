@@ -80,15 +80,6 @@ def venue_ids_with_unavailability_overlap(
     return set(db.scalars(statement))
 
 
-def pending_for_event(db: Session, event_request_id: uuid.UUID) -> VenueBooking | None:
-    """Return the event's current pending request, if any."""
-    statement = select(VenueBooking).where(
-        VenueBooking.event_request_id == event_request_id,
-        VenueBooking.status == BookingStatus.PENDING,
-    )
-    return db.scalars(statement).first()
-
-
 def list_bookings_for_event(db: Session, event_request_id: uuid.UUID) -> list[VenueBooking]:
     """Return every booking request retained for one event, oldest first."""
     statement = (

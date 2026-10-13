@@ -1,4 +1,4 @@
-"""SCRUM-38: submit one pending venue request for an approved event."""
+"""SCRUM-38/71/78: submit and retrieve venue requests for an approved event."""
 
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -182,22 +182,32 @@ async def test_suitability_warning_remains_advisory(
     assert created.json()["suitability"] == suitability
 
 
-@pytest.mark.story("SCRUM-38")
-async def test_duplicate_pending_request_is_rejected(
+@pytest.mark.story("SCRUM-78")
+async def test_additional_venue_request_keeps_existing_pending_booking(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     coordinator = make_user("coordinator")
     event = approved_event(db, make_user("organiser"), coordinator)
     venue = make_venue(db)
+    additional_venue = make_venue(db, name="Hall B")
 
     async with make_client(coordinator) as client:
         first = await submit(client, event, venue.id)
-        duplicate = await submit(client, event, venue.id)
+        original = bookings(db)[0]
+        original_values = (original.id, original.venue_id, original.start_at, original.end_at)
+        additional = await submit(client, event, additional_venue.id)
+        history = await list_venue_bookings(client, event)
 
-    assert first.status_code == 201
-    assert duplicate.status_code == 409
-    assert duplicate.json()["detail"] == "A pending booking request already exists"
-    assert [row.status for row in bookings(db)] == [BookingStatus.PENDING]
+    assert first.status_code == additional.status_code == 201
+    rows = bookings(db)
+    assert len(rows) == 2
+    assert rows[0].id != rows[1].id
+    assert [row.event_request_id for row in rows] == [event.id, event.id]
+    assert [row.venue_id for row in rows] == [venue.id, additional_venue.id]
+    assert [row.status for row in rows] == [BookingStatus.PENDING, BookingStatus.PENDING]
+    assert (rows[0].id, rows[0].venue_id, rows[0].start_at, rows[0].end_at) == original_values
+    assert history.status_code == 200
+    assert [row["id"] for row in history.json()] == [first.json()["id"], additional.json()["id"]]
 
 
 @pytest.mark.story("SCRUM-38")

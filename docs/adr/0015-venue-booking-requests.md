@@ -1,6 +1,6 @@
 # ADR-0015: Adopt venue_bookings for pending venue requests
 
-- **Status:** Proposed
+- **Status:** Superseded by ADR-0026 (per-event pending-request restriction)
 - **Date:** 2026-09-28
 - **Deciders:** ConnectSphere team
 - **Related stories:** SCRUM-38, SCRUM-40, SCRUM-41
