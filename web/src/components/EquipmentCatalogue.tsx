@@ -30,6 +30,7 @@ export default function EquipmentCatalogue() {
   const [values, setValues] = useState<EquipmentInput>(emptyForm)
   const [problems, setProblems] = useState<EquipmentProblem[]>([])
   const [outcome, setOutcome] = useState<string | null>(null)
+  const [deactivationOutcome, setDeactivationOutcome] = useState<string | null>(null)
   const [editing, setEditing] = useState<Equipment | null>(null)
   const catalogue = useQuery({
     queryKey,
@@ -68,7 +69,9 @@ export default function EquipmentCatalogue() {
   const deactivate = useMutation({
     mutationFn: (equipment: Equipment) => deactivateEquipment(token ?? '', equipment.id),
     onSuccess: (equipment) => {
-      setOutcome(`“${equipment.equipment_type}” has been deactivated and can no longer be selected.`)
+      setDeactivationOutcome(
+        `“${equipment.equipment_type}” has been deactivated and can no longer be selected.`,
+      )
       void queryClient.invalidateQueries({ queryKey })
     },
     onError: (error: Error) => setOutcome(error.message),
@@ -153,6 +156,12 @@ export default function EquipmentCatalogue() {
             </li>
           ))}
         </ul>
+      )}
+
+      {deactivationOutcome && (
+        <p className="mt-3 text-sm text-red-700" role="status">
+          {deactivationOutcome}
+        </p>
       )}
 
       <form className="mt-4 space-y-3 border-t border-slate-200 pt-4" noValidate onSubmit={submit}>
