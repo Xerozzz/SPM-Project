@@ -1,5 +1,7 @@
 """Equipment catalogue orchestration for SCRUM-84."""
 
+import uuid
+
 from core.database import Session
 from domain.equipment import EquipmentFields, validate_equipment
 from domain.validation import FieldProblem
@@ -23,6 +25,10 @@ class InvalidEquipmentError(EquipmentError):
         self.problems = problems
 
 
+class EquipmentNotFoundError(EquipmentError):
+    """The requested catalogue entry does not exist."""
+
+
 def list_all(db: Session) -> list[Equipment]:
     return repo.list_all(db)
 
@@ -44,6 +50,31 @@ def create(db: Session, fields: EquipmentFields) -> Equipment:
     except repo.DuplicateEquipmentConstraintError as exc:
         # The preflight check gives a useful response; the database constraint makes the
         # same rule hold if two requests pass that check at the same time.
+        raise DuplicateEquipmentError from exc
+
+
+def update(db: Session, equipment_id: uuid.UUID, fields: EquipmentFields) -> Equipment:
+    """Validate and persist an edit without replacing the catalogue record."""
+    problems = validate_equipment(fields)
+    if problems:
+        raise InvalidEquipmentError(problems)
+
+    equipment = repo.get(db, equipment_id)
+    if equipment is None:
+        raise EquipmentNotFoundError
+
+    assert fields.equipment_type is not None
+    assert fields.location is not None
+    matching_entry = repo.get_by_type_and_location(db, fields.equipment_type, fields.location)
+    if matching_entry is not None and matching_entry.id != equipment.id:
+        raise DuplicateEquipmentError
+
+    for field, value in _stored_values(fields).items():
+        setattr(equipment, field, value)
+    try:
+        return repo.save(db, equipment)
+    except repo.DuplicateEquipmentConstraintError as exc:
+        # The database remains the final guard if a competing update wins the same identity.
         raise DuplicateEquipmentError from exc
 
 

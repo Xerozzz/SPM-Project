@@ -1,5 +1,7 @@
 """Database access for equipment catalogue entries (SCRUM-84)."""
 
+import uuid
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -19,6 +21,11 @@ def get_by_type_and_location(db: Session, equipment_type: str, location: str) ->
     return db.scalars(statement).first()
 
 
+def get(db: Session, equipment_id: uuid.UUID) -> Equipment | None:
+    """Return one catalogue entry by its stable identifier."""
+    return db.get(Equipment, equipment_id)
+
+
 def list_all(db: Session) -> list[Equipment]:
     """Return the catalogue in a stable, readable order."""
     statement = select(Equipment).order_by(Equipment.equipment_type, Equipment.location)
@@ -26,7 +33,7 @@ def list_all(db: Session) -> list[Equipment]:
 
 
 def save(db: Session, equipment: Equipment) -> Equipment:
-    """Commit a new entry and refresh values set by the database."""
+    """Commit an added or edited entry and refresh its persisted values."""
     db.add(equipment)
     try:
         db.commit()

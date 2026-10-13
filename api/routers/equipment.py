@@ -1,5 +1,7 @@
 """HTTP endpoints for the Technical Support equipment catalogue (SCRUM-84)."""
 
+import uuid
+from collections.abc import Callable
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -9,7 +11,7 @@ from core.database import get_db
 from core.dependencies import require_role
 from domain.equipment import EquipmentFields
 from domain.roles import Role
-from schemas.equipment import EquipmentCreate, EquipmentProblemRead, EquipmentRead
+from schemas.equipment import EquipmentCreate, EquipmentProblemRead, EquipmentRead, EquipmentUpdate
 from services import equipment as service
 
 router = APIRouter(prefix="/equipment", tags=["equipment"])
@@ -29,10 +31,24 @@ def list_catalogue(user: TechnicalSupport, db: Db) -> list[EquipmentRead]:
 def create(body: EquipmentCreate, user: TechnicalSupport, db: Db) -> EquipmentRead:
     """Add one validated equipment entry to the catalogue."""
     del user
+    return _save(lambda: service.create(db, EquipmentFields(**body.model_dump())))
+
+
+@router.put("/{equipment_id}", response_model=EquipmentRead)
+def update(
+    equipment_id: uuid.UUID, body: EquipmentUpdate, user: TechnicalSupport, db: Db
+) -> EquipmentRead:
+    """Edit one existing catalogue entry while retaining its identity."""
+    del user
+    return _save(lambda: service.update(db, equipment_id, EquipmentFields(**body.model_dump())))
+
+
+def _save(action: Callable[[], object]) -> EquipmentRead:
+    """Serialise the catalogue service's shared validation and identity errors."""
     try:
-        return EquipmentRead.model_validate(
-            service.create(db, EquipmentFields(**body.model_dump()))
-        )
+        return EquipmentRead.model_validate(action())
+    except service.EquipmentNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipment not found") from exc
     except service.DuplicateEquipmentError as exc:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
