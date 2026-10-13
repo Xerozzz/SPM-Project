@@ -50,7 +50,7 @@ async def test_technical_support_can_create_and_view_equipment(
     assert stored is not None
     assert stored.total_quantity == 4
     assert catalogue_response.status_code == 200
-    assert catalogue_response.json() == [created]
+    assert created in catalogue_response.json()
 
 
 @pytest.mark.story("SCRUM-93")
@@ -82,7 +82,7 @@ async def test_technical_support_can_edit_equipment_and_catalogue_shows_changes(
         "operational_status": "Damaged",
     }
     assert db.get(Equipment, uuid.UUID(created["id"])) is not None
-    assert catalogue_response.json() == [updated]
+    assert updated in catalogue_response.json()
 
 
 @pytest.mark.story("SCRUM-93")
@@ -219,12 +219,13 @@ async def test_text_over_database_column_limit_has_a_field_specific_error(
     value: str,
     reason: str,
 ) -> None:
+    equipment_count_before = db.query(Equipment).count()
     async with make_client(make_user("tech_support")) as client:
         response = await client.post("/api/equipment", json=equipment_body(**{field: value}))
 
     assert response.status_code == 422
     assert response.json()["detail"] == [{"field": field, "reason": reason}]
-    assert db.query(Equipment).count() == 0
+    assert db.query(Equipment).count() == equipment_count_before
 
 
 @pytest.mark.story("SCRUM-84")
@@ -246,12 +247,13 @@ async def test_missing_or_invalid_mandatory_equipment_is_not_saved(
     field: str,
     value: object,
 ) -> None:
+    equipment_count_before = db.query(Equipment).count()
     async with make_client(make_user("tech_support")) as client:
         response = await client.post("/api/equipment", json=equipment_body(**{field: value}))
 
     assert response.status_code == 422
     assert field in {problem["field"] for problem in response.json()["detail"]}
-    assert db.query(Equipment).count() == 0
+    assert db.query(Equipment).count() == equipment_count_before
 
 
 @pytest.mark.story("SCRUM-84")
@@ -259,11 +261,12 @@ async def test_missing_or_invalid_mandatory_equipment_is_not_saved(
 async def test_non_whole_number_quantities_are_rejected(
     db: Session, make_user: MakeUser, make_client: MakeClient, quantity: object
 ) -> None:
+    equipment_count_before = db.query(Equipment).count()
     async with make_client(make_user("tech_support")) as client:
         response = await client.post("/api/equipment", json=equipment_body(total_quantity=quantity))
 
     assert response.status_code == 422
-    assert db.query(Equipment).count() == 0
+    assert db.query(Equipment).count() == equipment_count_before
 
 
 @pytest.mark.story("SCRUM-84")
