@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from domain.event_status import EventStatus
+from models.equipment import Equipment
 from models.event_request import EventRequest
 from models.user import User
 
@@ -32,11 +33,34 @@ def request_body(**overrides: object) -> dict[str, object]:
     return values
 
 
+def add_projector(db: Session) -> None:
+    if (
+        db.query(Equipment)
+        .filter(
+            Equipment.equipment_type == "Projector-type requirement",
+            Equipment.location == "Test Store",
+        )
+        .first()
+        is None
+    ):
+        db.add(
+            Equipment(
+                equipment_type="Projector-type requirement",
+                description=None,
+                total_quantity=1,
+                location="Test Store",
+                operational_status="Operational",
+            )
+        )
+        db.flush()
+
+
 @pytest.mark.story("SCRUM-28")
 async def test_an_organiser_creates_a_complete_unsubmitted_event_request(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     organiser = make_user("organiser")
+    add_projector(db)
 
     async with make_client(organiser) as client:
         response = await client.post("/api/event-requests", json=request_body())
@@ -62,6 +86,7 @@ async def test_missing_or_invalid_fields_are_identified_without_creating_a_draft
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     organiser = make_user("organiser")
+    add_projector(db)
     invalid = request_body(name="", end_at="2026-12-01T08:00:00+08:00", expected_attendance=0)
 
     async with make_client(organiser) as client:

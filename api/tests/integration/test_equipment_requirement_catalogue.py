@@ -58,7 +58,10 @@ async def test_organiser_sees_distinct_catalogue_equipment_types(
         response = await client.get("/api/event-requests/equipment-types")
 
     assert response.status_code == 200
-    assert response.json() == ["Microphone", "Projector"]
+    equipment_types = response.json()
+    assert equipment_types == sorted(equipment_types)
+    assert equipment_types.count("Microphone") == 1
+    assert equipment_types.count("Projector") == 1
 
 
 @pytest.mark.story("SCRUM-90")

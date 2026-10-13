@@ -17,6 +17,7 @@ from core.database import SessionLocal
 from core.security import hash_password
 from domain.event_request import field_names
 from domain.event_status import EventStatus, InvalidTransitionError
+from models.equipment import Equipment
 from models.event_request import EventRequest
 from models.organisation import Organisation
 from models.user import User
@@ -28,6 +29,7 @@ MakeClient = Callable[[User | None], httpx.AsyncClient]
 
 def make_draft(db: Session, organiser: User, **overrides: object) -> EventRequest:
     """A complete draft owned by `organiser`; pass field=None to make it incomplete."""
+    _add_catalogue_type(db, "Projector-type requirement")
     start = datetime.now(UTC) + timedelta(days=30)
     values: dict[str, object] = {
         "name": "Orientation Day",
@@ -47,6 +49,26 @@ def make_draft(db: Session, organiser: User, **overrides: object) -> EventReques
     db.add(draft)
     db.flush()
     return draft
+
+
+def _add_catalogue_type(db: Session, equipment_type: str) -> None:
+    """Arrange the catalogue type required by this legacy event-request fixture."""
+    if (
+        db.query(Equipment)
+        .filter(Equipment.equipment_type == equipment_type, Equipment.location == "Test Store")
+        .first()
+        is None
+    ):
+        db.add(
+            Equipment(
+                equipment_type=equipment_type,
+                description=None,
+                total_quantity=1,
+                location="Test Store",
+                operational_status="Operational",
+            )
+        )
+        db.flush()
 
 
 def content_of(request: EventRequest) -> dict[str, object]:
