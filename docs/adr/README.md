@@ -33,6 +33,7 @@ someone else made two weeks ago.
 | [0020](0020-manual-coordinator-assignment-queue.md) | Assign event coordinators manually via a Coordinator Lead queue | Proposed |
 | [0021](0021-coordinator-assignment-history.md) | Retain coordinator assignment history as an append-only audit trail | Proposed |
 | [0022](0022-notification-inbox.md) | Store private notifications for the in-app inbox | Proposed |
+| [0023](0023-equipment-catalogue-identity.md) | Identify equipment catalogue entries by type and location | Proposed |
 
 ## When to write one
 

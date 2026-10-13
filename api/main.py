@@ -14,6 +14,7 @@ from core.config import get_settings
 from core.database import engine
 from routers import (
     auth,
+    equipment,
     event_clarifications,
     event_requests,
     notifications,
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
 
     # Feature routers are registered here, one line each, as stories land:
     app.include_router(auth.router, prefix="/api")
+    app.include_router(equipment.router, prefix="/api")
     app.include_router(event_clarifications.router, prefix="/api")
     app.include_router(notifications.router)
     app.include_router(event_requests.router, prefix="/api")

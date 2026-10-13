@@ -10,6 +10,7 @@ Add each new model here as you write it:
 """
 
 from core.database import Base as Base
+from models.equipment import Equipment as Equipment
 from models.event_clarification import EventClarification as EventClarification
 from models.event_coordinator_assignment import (
     EventCoordinatorAssignment as EventCoordinatorAssignment,
