@@ -102,6 +102,19 @@ async def test_non_whole_number_quantities_are_rejected(
 
 
 @pytest.mark.story("SCRUM-84")
+async def test_fractional_quantity_uses_the_catalogue_validation_error_shape(
+    make_user: MakeUser, make_client: MakeClient
+) -> None:
+    async with make_client(make_user("tech_support")) as client:
+        response = await client.post("/api/equipment", json=equipment_body(total_quantity=1.5))
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == [
+        {"field": "total_quantity", "reason": "must be a whole number"}
+    ]
+
+
+@pytest.mark.story("SCRUM-84")
 async def test_duplicate_equipment_type_and_location_is_rejected(
     make_user: MakeUser, make_client: MakeClient
 ) -> None:

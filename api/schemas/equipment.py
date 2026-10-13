@@ -2,7 +2,7 @@
 
 import uuid
 
-from pydantic import BaseModel, ConfigDict, StrictInt
+from pydantic import BaseModel, ConfigDict
 
 
 class EquipmentCreate(BaseModel):
@@ -10,7 +10,9 @@ class EquipmentCreate(BaseModel):
 
     equipment_type: str | None = None
     description: str | None = None
-    total_quantity: StrictInt | None = None
+    # Keep invalid scalar JSON values intact so the domain validator can return the
+    # catalogue's consistent {field, reason} error response.
+    total_quantity: int | float | str | bool | None = None
     location: str | None = None
     operational_status: str | None = None
 

@@ -13,7 +13,7 @@ class EquipmentFields:
 
     equipment_type: str | None = None
     description: str | None = None
-    total_quantity: int | None = None
+    total_quantity: int | float | str | bool | None = None
     location: str | None = None
     operational_status: str | None = None
 
@@ -40,6 +40,10 @@ def validate_equipment(equipment: EquipmentFields) -> list[FieldProblem]:
 
     if equipment.total_quantity is None:
         problems.append(FieldProblem("total_quantity", "is required"))
+    elif not isinstance(equipment.total_quantity, int) or isinstance(
+        equipment.total_quantity, bool
+    ):
+        problems.append(FieldProblem("total_quantity", "must be a whole number"))
     elif equipment.total_quantity < 0:
         problems.append(FieldProblem("total_quantity", "must be zero or more"))
 
