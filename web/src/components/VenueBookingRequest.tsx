@@ -11,6 +11,7 @@ import {
   type VenueSuitability,
 } from '../api/eventRequests'
 import { listVenues, type Venue } from '../api/venues'
+import { describeConflict } from '../api/venueBookingDecisions'
 import { useAuth } from '../auth/useAuth'
 
 export default function VenueBookingRequest({ event }: { event: EventRequest }) {
@@ -177,6 +178,12 @@ function ExistingVenueBookings({
                 </dd>
               </div>
             </dl>
+            {booking.conflict && (
+              <p className="mt-2 rounded bg-amber-50 p-2 text-amber-800" role="status">
+                Needs attention. {describeConflict(booking.conflict)} Venue Staff have been
+                told; contact them to agree what moves.
+              </p>
+            )}
           </li>
         ))}
       </ul>

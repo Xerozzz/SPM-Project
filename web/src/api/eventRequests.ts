@@ -1,3 +1,5 @@
+import type { BookingConflict } from './venueBookingDecisions'
+
 /**
  * Event request API calls for organisers. Mirrors api/schemas/event_requests.py.
  */
@@ -120,6 +122,12 @@ export interface VenueBooking {
   start_at: string
   end_at: string
   status: BookingStatus
+  /**
+   * SCRUM-89 AC4: what this booking now clashes with at its venue, or null when nothing.
+   * Derived by the API on every read, so it appears and clears on its own as the venue's
+   * setup and turnaround times change.
+   */
+  conflict: BookingConflict | null
 }
 
 /** Thrown when the API answers 422 with field-level validation problems. */

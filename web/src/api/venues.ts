@@ -1,3 +1,5 @@
+import type { BookingConflict } from './venueBookingDecisions'
+
 /**
  * Venue catalogue API calls (SCRUM-59). Mirrors api/schemas/venues.py.
  */
@@ -268,4 +270,38 @@ export async function searchVenues(token: string, input: VenueSearchInput): Prom
   const response = await fetch(`/api/venues/search?${params}`, { headers: authHeaders(token) })
   if (!response.ok) throw new Error(`Could not search venues (${response.status})`)
   return (await response.json()) as Venue[]
+}
+
+
+/** SCRUM-89 AC4: one booking that cannot stand under its venue's current buffers. */
+export interface ProblemBooking {
+  booking_id: string
+  start_at: string
+  end_at: string
+  conflict: BookingConflict
+}
+
+/** SCRUM-89 AC4: a venue and everything at it that needs attention. */
+export interface VenueProblems {
+  venue_id: string
+  venue_name: string
+  venue_location: string
+  setup_minutes: number
+  turnaround_minutes: number
+  is_active: boolean
+  problems: ProblemBooking[]
+}
+
+/**
+ * SCRUM-89 AC4: every booking anywhere needing attention, venues with none left out.
+ *
+ * Worked out by the API on each request rather than read from a stored flag, so an empty
+ * list means nothing needs attention right now, not that nothing was ever flagged.
+ */
+export async function listBookingProblems(token: string): Promise<VenueProblems[]> {
+  const response = await fetch('/api/venues/booking-problems', {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new Error(`Could not load booking problems (status ${response.status})`)
+  return (await response.json()) as VenueProblems[]
 }
