@@ -45,6 +45,8 @@ class VenueBookingRead(BaseModel):
     start_at: datetime
     end_at: datetime
     status: BookingStatus
+    # SCRUM-83 AC2: when a tentative hold on this request ends.
+    expires_at: datetime | None = None
     # SCRUM-89 AC4: set when the venue's current buffers mean this booking can no longer
     # stand beside everything else at that venue. Derived on every read rather than
     # stored, so it appears and disappears on its own as the venue changes (AC3, AC7).

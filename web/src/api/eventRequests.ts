@@ -105,7 +105,7 @@ export interface VenueSuitability {
   venue_layouts: string[]
 }
 
-export type BookingStatus = 'pending' | 'confirmed' | 'rejected' | 'cancelled'
+export type BookingStatus = 'pending' | 'tentative' | 'confirmed' | 'rejected' | 'cancelled'
 
 export interface VenueBookingSubmission {
   id: string
@@ -122,6 +122,8 @@ export interface VenueBooking {
   start_at: string
   end_at: string
   status: BookingStatus
+  /** SCRUM-83 AC2: when a tentative hold on this request ends. */
+  expires_at?: string | null
   /**
    * SCRUM-89 AC4: what this booking now clashes with at its venue, or null when nothing.
    * Derived by the API on every read, so it appears and clears on its own as the venue's

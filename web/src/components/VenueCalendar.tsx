@@ -18,6 +18,7 @@ import { useAuth } from '../auth/useAuth'
 
 const STATUS_STYLES: Record<CalendarStatus, string> = {
   confirmed: 'border-blue-300 bg-blue-50 text-blue-900',
+  tentative: 'border-violet-300 bg-violet-50 text-violet-900',
   pending: 'border-amber-300 bg-amber-50 text-amber-900',
   unavailable: 'border-slate-300 bg-slate-100 text-slate-800',
 }
@@ -139,6 +140,12 @@ export default function VenueCalendar() {
               {entry.venue_name}
               <br />
               {formatSingaporeTime(entry.start_at)} to {formatSingaporeTime(entry.end_at)}
+              {entry.expires_at && (
+                <>
+                  <br />
+                  <span>Held until {formatSingaporeTime(entry.expires_at)}</span>
+                </>
+              )}
               {hasBuffer(entry) && (
                 <>
                   <br />
@@ -203,6 +210,12 @@ function EntryDetails({ entry }: { entry: CalendarEntry }) {
             <dt className="inline font-medium">Status: </dt>
             <dd className="inline">{DETAILS_LABELS[details.data.status]}</dd>
           </div>
+          {details.data.expires_at && (
+            <div>
+              <dt className="inline font-medium">Held until: </dt>
+              <dd className="inline">{formatSingaporeTime(details.data.expires_at)}</dd>
+            </div>
+          )}
           {details.data.reason && (
             <div>
               <dt className="inline font-medium">Reason: </dt>
