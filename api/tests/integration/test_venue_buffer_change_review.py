@@ -210,7 +210,12 @@ async def test_reducing_a_buffer_clears_what_it_had_identified(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     # AC7: nothing has to clear a marker, because the answer is recomputed each time.
-    venue = make_venue(db, turnaround_minutes=_TURNAROUND)
+    #
+    # The venue starts with no buffers, which is not incidental: the overlap constraint
+    # from ADR-0019 refuses two confirmed bookings that already overlap, so a venue whose
+    # buffers are high enough to clash cannot have these two bookings created on it. They
+    # can only come about the way this story describes, by the buffers growing afterwards.
+    venue = make_venue(db)
     back_to_back(db, make_user("coordinator"), venue)
 
     async with make_client(make_user("venue_staff")) as client:
@@ -228,8 +233,14 @@ async def test_reducing_a_buffer_clears_what_it_had_identified(
 async def test_the_change_is_recorded_with_the_actor_and_both_values(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
-    venue = make_venue(db, setup_minutes=10)
+    venue = make_venue(db)
     first, second = back_to_back(db, make_user("coordinator"), venue)
+    # The 10 minutes has to be set after the bookings exist, for the reason in
+    # test_reducing_a_buffer_clears_what_it_had_identified: they could not be created on a
+    # venue that already held them apart. Set on the model rather than through the API so
+    # this arrangement does not itself produce an audit row for the test to filter out.
+    venue.setup_minutes = 10
+    db.flush()
     staff = make_user("venue_staff")
     before = datetime.now(UTC)
 
