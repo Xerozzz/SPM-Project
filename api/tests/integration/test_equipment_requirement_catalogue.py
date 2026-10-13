@@ -8,7 +8,6 @@ import pytest
 from sqlalchemy.orm import Session
 
 from models.equipment import Equipment
-from models.event_request import EventRequest
 from models.user import User
 
 MakeUser = Callable[..., User]
@@ -137,19 +136,24 @@ async def test_active_equipment_type_remains_selectable_until_its_last_entry_is_
 
 
 @pytest.mark.story("SCRUM-103")
-async def test_deactivation_does_not_change_an_existing_event_requirement(
+async def test_deactivation_does_not_change_equipment_on_a_submitted_event_request(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     add_equipment(db, "Projector", "Media Store")
     equipment = db.query(Equipment).filter(Equipment.equipment_type == "Projector").one()
+    organiser = make_user("organiser")
 
-    async with make_client(make_user("organiser")) as organiser:
-        created = await organiser.post("/api/event-requests", json=request_body())
+    async with make_client(organiser) as client:
+        created = await client.post("/api/event-requests", json=request_body())
+        submitted = await client.post(f"/api/event-requests/{created.json()['id']}/submit")
     async with make_client(make_user("tech_support")) as staff:
         deactivated = await staff.post(f"/api/equipment/{equipment.id}/deactivate")
+    async with make_client(organiser) as client:
+        fetched = await client.get(f"/api/event-requests/{created.json()['id']}")
 
     assert created.status_code == 201
+    assert submitted.status_code == 200
     assert deactivated.status_code == 200
-    saved = db.get(EventRequest, created.json()["id"])
-    assert saved is not None
-    assert saved.equipment_requirement == "Projector"
+    assert fetched.status_code == 200
+    assert fetched.json()["status"] == "submitted"
+    assert fetched.json()["equipment_requirement"] == "Projector"
