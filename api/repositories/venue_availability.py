@@ -99,6 +99,27 @@ def list_bookings_for_event(db: Session, event_request_id: uuid.UUID) -> list[Ve
     return list(db.scalars(statement))
 
 
+def confirmed_bookings_from(db: Session, venue_id: uuid.UUID, now: datetime) -> list[VenueBooking]:
+    """SCRUM-89 AC1: confirmed bookings at this venue that have not finished yet.
+
+    Past bookings are left out because nothing can be done about them: the venue was
+    occupied when it was occupied, and flagging history as needing action would be noise.
+    A booking already under way is included, since its remaining time is still at stake.
+
+    Ordered so the review reports the same bookings in the same order every time.
+    """
+    statement = (
+        select(VenueBooking)
+        .where(
+            VenueBooking.venue_id == venue_id,
+            VenueBooking.status == BookingStatus.CONFIRMED,
+            VenueBooking.end_at > now,
+        )
+        .order_by(VenueBooking.start_at, VenueBooking.id)
+    )
+    return list(db.scalars(statement))
+
+
 def get_booking(db: Session, booking_id: uuid.UUID) -> VenueBooking | None:
     """Return the booking with this id, or None."""
     return db.get(VenueBooking, booking_id)
