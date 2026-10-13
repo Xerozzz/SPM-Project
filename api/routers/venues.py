@@ -16,16 +16,19 @@ from core.database import get_db
 from core.dependencies import get_current_user, require_role
 from domain.roles import Role
 from domain.venue import VenueFields
+from domain.venue_buffer_review import ProblematicBooking
 from schemas.venue_booking_decisions import ConflictRead
 from schemas.venues import (
     BufferChangeRead,
     ProblemBookingRead,
     VenueCreate,
     VenueProblemRead,
+    VenueProblemsRead,
     VenueRead,
     VenueUpdate,
     VenueUpdateRead,
 )
+from services import venue_buffer_review as buffer_review
 from services import venue_search as search_service
 from services import venues as service
 
@@ -37,6 +40,16 @@ AnyUser = Annotated[dict[str, object], Depends(get_current_user)]
 Db = Annotated[Session, Depends(get_db)]
 
 _REFUSALS = (service.VenueError,)
+
+
+def _problem_read(problem: ProblematicBooking) -> ProblemBookingRead:
+    """One problematic booking as the API reports it, wherever it is reported."""
+    return ProblemBookingRead(
+        booking_id=problem.booking.id,
+        start_at=problem.booking.start_at,
+        end_at=problem.booking.end_at,
+        conflict=ConflictRead.from_error(problem.conflict),
+    )
 
 
 def _user_id(user: dict[str, object]) -> uuid.UUID:
@@ -115,6 +128,31 @@ def _search_period_problems(start_at: datetime, end_at: datetime) -> list[dict[s
     return problems
 
 
+@router.get("/booking-problems", response_model=list[VenueProblemsRead])
+def booking_problems(user: VenueStaff, db: Db) -> list[VenueProblemsRead]:
+    """SCRUM-89 AC4: every booking anywhere that cannot stand under its venue's buffers.
+
+    Declared before `/{venue_id}` so "booking-problems" is not read as a venue id.
+
+    Computed on each request rather than read from a stored marker, so it is right the
+    moment it is asked and needs nothing to clear it when a buffer is lowered or a
+    clashing booking is cancelled (AC3, AC7).
+    """
+    del user
+    return [
+        VenueProblemsRead(
+            venue_id=entry.venue.id,
+            venue_name=entry.venue.name,
+            venue_location=entry.venue.location,
+            setup_minutes=entry.venue.setup_minutes,
+            turnaround_minutes=entry.venue.turnaround_minutes,
+            is_active=entry.venue.is_active,
+            problems=[_problem_read(problem) for problem in entry.problems],
+        )
+        for entry in buffer_review.review_every_venue(db, datetime.now(UTC))
+    ]
+
+
 @router.get("", response_model=list[VenueRead])
 def list_selectable(user: AnyUser, db: Db) -> list[VenueRead]:
     """The venues that may be chosen for new work (AC2, AC3)."""
@@ -159,15 +197,7 @@ def update(venue_id: uuid.UUID, body: VenueUpdate, user: VenueStaff, db: Db) -> 
         **VenueRead.model_validate(venue).model_dump(),
         buffer_change=BufferChangeRead(
             changed=result.changed,
-            problems=[
-                ProblemBookingRead(
-                    booking_id=problem.booking.id,
-                    start_at=problem.booking.start_at,
-                    end_at=problem.booking.end_at,
-                    conflict=ConflictRead.from_error(problem.conflict),
-                )
-                for problem in result.problems
-            ],
+            problems=[_problem_read(problem) for problem in result.problems],
         ),
     )
 

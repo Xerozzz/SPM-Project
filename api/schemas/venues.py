@@ -101,3 +101,15 @@ class VenueUpdateRead(VenueRead):
     """
 
     buffer_change: BufferChangeRead
+
+
+class VenueProblemsRead(BaseModel):
+    """SCRUM-89 AC4: one venue and the bookings there that need attention."""
+
+    venue_id: uuid.UUID
+    venue_name: str
+    venue_location: str
+    setup_minutes: int
+    turnaround_minutes: int
+    is_active: bool
+    problems: list[ProblemBookingRead]

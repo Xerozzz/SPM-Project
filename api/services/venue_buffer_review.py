@@ -17,6 +17,7 @@ exactly as it was (AC5), which is why it can never be refused.
 """
 
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -26,9 +27,11 @@ from domain.booking_conflict import BookedPeriod, UnavailablePeriod
 from domain.venue_buffer import VenueBuffers
 from domain.venue_buffer_review import ProblematicBooking, problematic_bookings
 from models.venue import Venue
+from models.venue_booking import VenueBooking
 from models.venue_buffer_change import VenueBufferChange
 from repositories import venue_availability as booking_repo
 from repositories import venue_unavailabilities as closure_repo
+from repositories import venues as venue_repo
 
 
 @dataclass(frozen=True)
@@ -107,3 +110,48 @@ def record_change(
         )
     )
     return BufferChangeResult(changed=True, problems=problems)
+
+
+@dataclass(frozen=True)
+class VenueProblems:
+    """One venue and the bookings there that cannot stand under its current buffers."""
+
+    venue: Venue
+    problems: list[ProblematicBooking]
+
+
+def review_every_venue(db: Session, now: datetime) -> list[VenueProblems]:
+    """AC4: every venue with something needing attention, by venue name.
+
+    Venues with nothing to report are left out, so an empty list means nothing anywhere
+    needs attention rather than "no venues exist".
+
+    Deactivated venues are included. A venue taken out of the catalogue under ADR-0012
+    keeps the bookings already made for it, and those are exactly the ones nobody is
+    watching, so dropping them here would hide the problems most likely to be missed.
+    """
+    reviewed = [VenueProblems(venue, review(db, venue, now)) for venue in venue_repo.list_all(db)]
+    return [entry for entry in reviewed if entry.problems]
+
+
+def problems_by_booking(
+    db: Session, bookings: Iterable[VenueBooking], now: datetime
+) -> dict[uuid.UUID, ProblematicBooking]:
+    """AC4: for a set of bookings, which of them need action, keyed by booking id.
+
+    Reviews each venue once rather than each booking, because the answer for one booking
+    is a question about every other booking at the same venue. An event with three
+    bookings at one venue costs one review, not three.
+    """
+    by_venue: dict[uuid.UUID, Venue] = {}
+    for booking in bookings:
+        if booking.venue_id not in by_venue:
+            venue = venue_repo.get(db, booking.venue_id)
+            assert venue is not None  # a booking cannot exist without its venue.
+            by_venue[booking.venue_id] = venue
+
+    found: dict[uuid.UUID, ProblematicBooking] = {}
+    for venue in by_venue.values():
+        for problem in review(db, venue, now):
+            found[problem.booking.id] = problem
+    return found

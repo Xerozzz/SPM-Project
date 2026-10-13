@@ -6,6 +6,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 from domain.venue_booking import BookingStatus
+from schemas.venue_booking_decisions import ConflictRead
 
 
 class VenueBookingCreate(BaseModel):
@@ -44,3 +45,11 @@ class VenueBookingRead(BaseModel):
     start_at: datetime
     end_at: datetime
     status: BookingStatus
+    # SCRUM-89 AC4: set when the venue's current buffers mean this booking can no longer
+    # stand beside everything else at that venue. Derived on every read rather than
+    # stored, so it appears and disappears on its own as the venue changes (AC3, AC7).
+    conflict: ConflictRead | None = None
+
+    @property
+    def requires_action(self) -> bool:
+        return self.conflict is not None

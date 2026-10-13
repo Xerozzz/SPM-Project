@@ -15,6 +15,7 @@ from domain.roles import Role
 from domain.venue_booking import InvalidBookingTransitionError
 from models.event_request import EventRequest
 from schemas.event_requests import FieldProblemRead
+from schemas.venue_booking_decisions import ConflictRead
 from schemas.venue_bookings import (
     SuitabilityRead,
     VenueBookingCreate,
@@ -22,6 +23,7 @@ from schemas.venue_bookings import (
     VenueBookingSubmissionRead,
 )
 from services import venue_bookings as service
+from services import venue_buffer_review as buffer_review
 
 router = APIRouter(prefix="/event-requests", tags=["venue-bookings"])
 decisions = APIRouter(prefix="/venue-bookings", tags=["venue-bookings"])
@@ -43,8 +45,23 @@ def _validation_error(exc: service.InvalidBookingRequestError) -> HTTPException:
 
 @router.get("/{request_id}/venue-bookings", response_model=list[VenueBookingRead])
 def list_venue_bookings(event: PlanningEvent, db: Db) -> list[VenueBookingRead]:
-    """SCRUM-71: existing booking requests for this assigned approved event."""
-    return [VenueBookingRead.model_validate(row) for row in service.list_for_event(db, event)]
+    """SCRUM-71: existing booking requests for this assigned approved event.
+
+    SCRUM-89 AC4: each one also carries what it now clashes with, if anything, so the
+    assigned Coordinator sees a booking needing attention on their own event rather than
+    having to be told about it separately.
+    """
+    rows = service.list_for_event(db, event)
+    problems = buffer_review.problems_by_booking(db, rows, datetime.now(UTC))
+    return [
+        VenueBookingRead(
+            **VenueBookingRead.model_validate(row).model_dump(exclude={"conflict"}),
+            conflict=(
+                ConflictRead.from_error(problems[row.id].conflict) if row.id in problems else None
+            ),
+        )
+        for row in rows
+    ]
 
 
 @router.get("/{request_id}/venue-bookings/suitability", response_model=SuitabilityRead)

@@ -329,3 +329,132 @@ async def test_bookings_at_another_venue_are_not_reviewed(
 
     assert response.json()["buffer_change"]["problems"] == []
     assert uuid.UUID(response.json()["id"]) == venue.id
+
+
+# --------------------------------------------------------------------------- AC4
+
+
+@pytest.mark.story("SCRUM-89")
+async def test_venue_staff_see_every_booking_needing_attention(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    venue = make_venue(db)
+    first, second = back_to_back(db, make_user("coordinator"), venue)
+    venue.turnaround_minutes = _TURNAROUND
+    db.flush()
+
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.get("/api/venues/booking-problems")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["venue_id"] == str(venue.id)
+    assert body[0]["turnaround_minutes"] == _TURNAROUND
+    assert sorted(p["booking_id"] for p in body[0]["problems"]) == sorted(
+        [str(first.id), str(second.id)]
+    )
+
+
+@pytest.mark.story("SCRUM-89")
+async def test_a_venue_with_nothing_wrong_is_left_out(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # An empty list means nothing anywhere needs attention, not that no venues exist.
+    make_venue(db)
+    booking_for(db, make_user("coordinator"), make_venue(db, name="Hall B"), at(10), at(12))
+
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.get("/api/venues/booking-problems")
+
+    assert response.json() == []
+
+
+@pytest.mark.story("SCRUM-89")
+async def test_a_deactivated_venue_still_reports_its_problems(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # A venue retired under ADR-0012 keeps the bookings already made for it, and those are
+    # the ones nobody is watching, so leaving them out would hide the worst cases.
+    venue = make_venue(db)
+    back_to_back(db, make_user("coordinator"), venue)
+    venue.turnaround_minutes = _TURNAROUND
+    venue.is_active = False
+    db.flush()
+
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.get("/api/venues/booking-problems")
+
+    assert [entry["venue_id"] for entry in response.json()] == [str(venue.id)]
+    assert response.json()[0]["is_active"] is False
+
+
+@pytest.mark.story("SCRUM-89")
+@pytest.mark.parametrize("role", ["coordinator", "organiser", "attendee"])
+async def test_only_venue_staff_may_list_booking_problems(
+    make_user: MakeUser, make_client: MakeClient, role: str
+) -> None:
+    async with make_client(make_user(role)) as client:
+        response = await client.get("/api/venues/booking-problems")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.story("SCRUM-89")
+async def test_the_assigned_coordinator_sees_the_marker_on_their_own_event(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # AC4's other half: the Coordinator who has to act finds out on the event they own,
+    # without being sent to a Venue Staff screen they cannot see.
+    venue = make_venue(db)
+    coordinator = make_user("coordinator")
+    first, second = back_to_back(db, coordinator, venue)
+    venue.turnaround_minutes = _TURNAROUND
+    db.flush()
+
+    async with make_client(coordinator) as client:
+        response = await client.get(f"/api/event-requests/{first.event_request_id}/venue-bookings")
+
+    assert response.status_code == 200, response.text
+    booking = next(b for b in response.json() if b["id"] == str(first.id))
+    assert booking["conflict"] is not None
+    assert booking["conflict"]["id"] == str(second.id)
+
+
+@pytest.mark.story("SCRUM-89")
+async def test_a_booking_with_nothing_wrong_carries_no_marker(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    venue = make_venue(db)
+    coordinator = make_user("coordinator")
+    booking = booking_for(db, coordinator, venue, at(10), at(12))
+
+    async with make_client(coordinator) as client:
+        response = await client.get(
+            f"/api/event-requests/{booking.event_request_id}/venue-bookings"
+        )
+
+    assert [b["conflict"] for b in response.json()] == [None]
+
+
+@pytest.mark.story("SCRUM-89")
+async def test_lowering_the_buffer_removes_the_marker_the_coordinator_sees(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # AC7 through the read surface rather than the save response: nothing cleared the
+    # marker, the question simply has a different answer now.
+    venue = make_venue(db)
+    coordinator = make_user("coordinator")
+    first, _ = back_to_back(db, coordinator, venue)
+    venue.turnaround_minutes = _TURNAROUND
+    db.flush()
+    url = f"/api/event-requests/{first.event_request_id}/venue-bookings"
+
+    async with make_client(coordinator) as client:
+        flagged_now = await client.get(url)
+        venue.turnaround_minutes = 0
+        db.flush()
+        cleared = await client.get(url)
+
+    assert next(b for b in flagged_now.json() if b["id"] == str(first.id))["conflict"] is not None
+    assert next(b for b in cleared.json() if b["id"] == str(first.id))["conflict"] is None
