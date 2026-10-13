@@ -112,3 +112,43 @@ test('technical support can edit an equipment entry and sees the saved values', 
   expect(screen.getByRole('listitem')).toHaveTextContent('Total quantity: 2')
   expect(screen.getByRole('listitem')).toHaveTextContent('Operational status: Damaged')
 })
+
+test('editing the second catalogue entry sends only its identifier', async () => {
+  let saved = [
+    {
+      id: 'equipment-1',
+      equipment_type: 'Camera',
+      description: null,
+      total_quantity: 1,
+      location: 'Media Store',
+      operational_status: 'Operational',
+    },
+    {
+      id: 'equipment-2',
+      equipment_type: 'Projector',
+      description: null,
+      total_quantity: 2,
+      location: 'Lecture Theatre Store',
+      operational_status: 'Operational',
+    },
+  ]
+  let updatedUrl = ''
+  renderCatalogue(async (input, init) => {
+    if ((init?.method ?? 'GET') === 'GET') return json(saved)
+    updatedUrl = String(input)
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    saved = saved.map((equipment) =>
+      `/api/equipment/${equipment.id}` === updatedUrl ? { ...equipment, ...body } : equipment,
+    )
+    return json(saved.find((equipment) => `/api/equipment/${equipment.id}` === updatedUrl))
+  })
+
+  fireEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[1])
+  expect(screen.getByLabelText(/^Equipment type/)).toHaveValue('Projector')
+  fireEvent.change(screen.getByLabelText(/^Total quantity/), { target: { value: '3' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+  await waitFor(() => expect(updatedUrl).toBe('/api/equipment/equipment-2'))
+  expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('Total quantity: 1')
+  expect(screen.getAllByRole('listitem')[1]).toHaveTextContent('Total quantity: 3')
+})
