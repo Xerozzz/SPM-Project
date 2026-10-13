@@ -1,8 +1,6 @@
 """Equipment catalogue orchestration for SCRUM-84."""
 
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
-
+from core.database import Session
 from domain.equipment import EquipmentFields, validate_equipment
 from domain.validation import FieldProblem
 from models.equipment import Equipment
@@ -43,10 +41,9 @@ def create(db: Session, fields: EquipmentFields) -> Equipment:
     equipment = Equipment(**_stored_values(fields))
     try:
         return repo.save(db, equipment)
-    except IntegrityError as exc:
+    except repo.DuplicateEquipmentConstraintError as exc:
         # The preflight check gives a useful response; the database constraint makes the
         # same rule hold if two requests pass that check at the same time.
-        db.rollback()
         raise DuplicateEquipmentError from exc
 
 

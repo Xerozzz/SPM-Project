@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from models.equipment import Equipment
 from models.user import User
+from services import equipment as equipment_service
 
 MakeUser = Callable[..., User]
 MakeClient = Callable[[User | None], httpx.AsyncClient]
@@ -109,6 +110,24 @@ async def test_duplicate_equipment_type_and_location_is_rejected(
         response = await client.post(
             "/api/equipment", json=equipment_body(description="A duplicate record")
         )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Equipment with this type and location already exists"
+
+
+@pytest.mark.story("SCRUM-84")
+async def test_database_identity_constraint_reports_a_concurrent_duplicate(
+    make_user: MakeUser, make_client: MakeClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The repository maps only the named constraint if the friendly check misses a race."""
+    async with make_client(make_user("tech_support")) as client:
+        assert (await client.post("/api/equipment", json=equipment_body())).status_code == 201
+        monkeypatch.setattr(
+            equipment_service.repo,
+            "get_by_type_and_location",
+            lambda db, equipment_type, location: None,
+        )
+        response = await client.post("/api/equipment", json=equipment_body())
 
     assert response.status_code == 409
     assert response.json()["detail"] == "Equipment with this type and location already exists"
