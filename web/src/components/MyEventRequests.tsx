@@ -9,6 +9,7 @@ import {
   type FieldProblem,
   getEventRequest,
   listDraftEventRequests,
+  listEquipmentRequirementTypes,
   listMyEventRequests,
   submitEventRequest,
   SubmissionRejectedError,
@@ -47,6 +48,11 @@ export default function MyEventRequests() {
   const visibleDrafts = useQuery({
     queryKey: draftsQueryKey,
     queryFn: () => listDraftEventRequests(token ?? ''),
+    enabled: token !== null,
+  })
+  const equipmentTypes = useQuery({
+    queryKey: ['equipment-types', token],
+    queryFn: () => listEquipmentRequirementTypes(token ?? ''),
     enabled: token !== null,
   })
 
@@ -210,6 +216,8 @@ export default function MyEventRequests() {
           }
           isSaving={saveDraft.isPending}
           isSubmitting={submit.isPending}
+          equipmentTypes={equipmentTypes.data ?? []}
+          equipmentTypesError={equipmentTypes.isError ? equipmentTypes.error.message : undefined}
         />
       )}
 
@@ -332,6 +340,8 @@ function DraftForm({
   onSubmit,
   isSaving,
   isSubmitting,
+  equipmentTypes,
+  equipmentTypesError,
 }: {
   state: EditingState
   onChange: (state: EditingState) => void
@@ -340,6 +350,8 @@ function DraftForm({
   onSubmit: () => void
   isSaving: boolean
   isSubmitting: boolean
+  equipmentTypes: string[]
+  equipmentTypesError?: string
 }) {
   const update = (field: keyof DraftFormValues, value: string) => {
     onChange({ ...state, values: { ...state.values, [field]: value } })
@@ -403,11 +415,26 @@ function DraftForm({
           value={state.values.accessibility_requirement}
           onChange={(value) => update('accessibility_requirement', value)}
         />
-        <Field
-          label="Equipment requirement"
-          value={state.values.equipment_requirement}
-          onChange={(value) => update('equipment_requirement', value)}
-        />
+        <label>
+          <span className="text-sm font-medium text-slate-700">Equipment requirement</span>
+          <select
+            value={state.values.equipment_requirement}
+            onChange={(event) => update('equipment_requirement', event.target.value)}
+            className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm"
+          >
+            <option value="">Select equipment</option>
+            {equipmentTypes.map((equipmentType) => (
+              <option key={equipmentType} value={equipmentType}>
+                {equipmentType}
+              </option>
+            ))}
+          </select>
+          {equipmentTypesError && (
+            <span role="alert" className="mt-1 block text-sm text-red-600">
+              {equipmentTypesError}
+            </span>
+          )}
+        </label>
         <Field
           label="Layout requirement"
           value={state.values.layout_requirement}

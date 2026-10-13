@@ -15,6 +15,18 @@ function renderForm() {
     'connectsphere.token',
     JSON.stringify({ token: 'token', userId: 'user-1', roles: ['organiser'] }),
   )
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    if (String(input) === '/api/event-requests/equipment-types') {
+      return new Response(JSON.stringify(['Projector']), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+    return new Response(JSON.stringify({ id: 'request-1', name: 'Orientation Day', status: 'draft' }), {
+      status: 201,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
@@ -25,7 +37,8 @@ function renderForm() {
   )
 }
 
-function fillValidForm() {
+async function fillValidForm() {
+  await screen.findByRole('option', { name: 'Projector' })
   const values: Record<string, string> = {
     Name: 'Orientation Day',
     Purpose: 'Welcome new students',
@@ -35,7 +48,7 @@ function fillValidForm() {
     'Expected attendance': '200',
     'Venue requirement': 'Auditorium-type venue',
     'Accessibility requirement': 'Step-free access',
-    'Equipment requirement': 'Projector-type requirement',
+    'Equipment requirement': 'Projector',
     'Layout requirement': 'Theatre style',
     'Registration requirement': 'Open registration',
   }
@@ -44,8 +57,9 @@ function fillValidForm() {
   }
 }
 
-test('shows every required field error and keeps entered details for correction', () => {
+test('shows every required field error and keeps entered details for correction', async () => {
   renderForm()
+  await screen.findByRole('option', { name: 'Projector' })
   fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'Orientation Day' } })
   fireEvent.click(screen.getByRole('button', { name: 'Create event request' }))
 
@@ -53,9 +67,9 @@ test('shows every required field error and keeps entered details for correction'
   expect(screen.getByLabelText('Name *')).toHaveValue('Orientation Day')
 })
 
-test('identifies an end time before the start and a non-whole attendance value', () => {
+test('identifies an end time before the start and a non-whole attendance value', async () => {
   renderForm()
-  fillValidForm()
+  await fillValidForm()
   fireEvent.change(screen.getByLabelText('End date and time *'), {
     target: { value: '2026-12-01T08:00' },
   })
@@ -71,9 +85,9 @@ test('identifies an end time before the start and a non-whole attendance value',
   )
 })
 
-test('identifies an end time equal to the start time', () => {
+test('identifies an end time equal to the start time', async () => {
   renderForm()
-  fillValidForm()
+  await fillValidForm()
   fireEvent.change(screen.getByLabelText('End date and time *'), {
     target: { value: '2026-12-01T09:00' },
   })
@@ -85,16 +99,10 @@ test('identifies an end time equal to the start time', () => {
 })
 
 test('rejects zero attendance and accepts the minimum value of one', async () => {
-  const fetchMock = vi
-    .spyOn(globalThis, 'fetch')
-    .mockResolvedValueOnce(
-      new Response(JSON.stringify({ id: 'request-1', name: 'Orientation Day', status: 'draft' }), {
-        status: 201,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    )
   renderForm()
-  fillValidForm()
+  await fillValidForm()
+  const fetchMock = vi.mocked(globalThis.fetch)
+  fetchMock.mockClear()
   const attendance = screen.getByLabelText('Expected attendance *')
   fireEvent.change(attendance, { target: { value: '0' } })
   fireEvent.click(screen.getByRole('button', { name: 'Create event request' }))
@@ -107,16 +115,10 @@ test('rejects zero attendance and accepts the minimum value of one', async () =>
 })
 
 test('creates a complete event request without submitting it', async () => {
-  const fetchMock = vi
-    .spyOn(globalThis, 'fetch')
-    .mockResolvedValueOnce(
-      new Response(JSON.stringify({ id: 'request-1', name: 'Orientation Day', status: 'draft' }), {
-        status: 201,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    )
   renderForm()
-  fillValidForm()
+  await fillValidForm()
+  const fetchMock = vi.mocked(globalThis.fetch)
+  fetchMock.mockClear()
   fireEvent.click(screen.getByRole('button', { name: 'Create event request' }))
 
   await waitFor(() => {
@@ -131,14 +133,16 @@ test('creates a complete event request without submitting it', async () => {
 })
 
 test('shows server validation errors beside the relevant fields', async () => {
-  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+  renderForm()
+  await fillValidForm()
+  const fetchMock = vi.mocked(globalThis.fetch)
+  fetchMock.mockClear()
+  fetchMock.mockResolvedValueOnce(
     new Response(
       JSON.stringify({ detail: [{ field: 'name', reason: 'must be unique' }] }),
       { status: 422, headers: { 'Content-Type': 'application/json' } },
     ),
   )
-  renderForm()
-  fillValidForm()
   fireEvent.click(screen.getByRole('button', { name: 'Create event request' }))
 
   await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
@@ -146,33 +150,38 @@ test('shows server validation errors beside the relevant fields', async () => {
 })
 
 test('maps missing-field server errors beside the relevant fields', async () => {
-  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+  renderForm()
+  await fillValidForm()
+  const fetchMock = vi.mocked(globalThis.fetch)
+  fetchMock.mockClear()
+  fetchMock.mockResolvedValueOnce(
     new Response(
       JSON.stringify({ detail: [{ loc: ['body', 'name'], msg: 'Field required' }] }),
       { status: 422, headers: { 'Content-Type': 'application/json' } },
     ),
   )
-  renderForm()
-  fillValidForm()
   fireEvent.click(screen.getByRole('button', { name: 'Create event request' }))
 
   await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
   expect(screen.getByLabelText('Name *').parentElement).toHaveTextContent('Field required')
 })
 
-test('does not create an incomplete form', () => {
-  const fetchMock = vi.spyOn(globalThis, 'fetch')
+test('does not create an incomplete form', async () => {
   renderForm()
+  await screen.findByRole('option', { name: 'Projector' })
+  const fetchMock = vi.mocked(globalThis.fetch)
+  fetchMock.mockClear()
   fireEvent.click(screen.getByRole('button', { name: 'Create event request' }))
 
   expect(screen.getAllByText('This field is required.')).toHaveLength(11)
   expect(fetchMock).not.toHaveBeenCalled()
 })
 
-test('rejects a start date in the past before creating a request', () => {
-  const fetchMock = vi.spyOn(globalThis, 'fetch')
+test('rejects a start date in the past before creating a request', async () => {
   renderForm()
-  fillValidForm()
+  await fillValidForm()
+  const fetchMock = vi.mocked(globalThis.fetch)
+  fetchMock.mockClear()
   fireEvent.change(screen.getByLabelText('Start date and time *'), {
     target: { value: '2020-12-01T09:00' },
   })
@@ -182,12 +191,10 @@ test('rejects a start date in the past before creating a request', () => {
   expect(fetchMock).not.toHaveBeenCalled()
 })
 
-test('offers catalogue requirement choices without offering a specific resource', () => {
+test('shows distinct equipment types loaded from the catalogue', async () => {
   renderForm()
 
   expect(screen.getByLabelText('Venue requirement *')).toHaveTextContent('Auditorium-type venue')
-  expect(screen.getByLabelText('Equipment requirement *')).toHaveTextContent(
-    'Projector-type requirement',
-  )
+  expect(await screen.findByRole('option', { name: 'Projector' })).toBeInTheDocument()
   expect(screen.getAllByText(/does not reserve a specific resource/i)).toHaveLength(2)
 })

@@ -33,6 +33,11 @@ def list_all(db: Session) -> list[Equipment]:
     return repo.list_all(db)
 
 
+def list_distinct_types(db: Session) -> list[str]:
+    """Equipment types organisers may request from the current catalogue."""
+    return repo.list_distinct_types(db)
+
+
 def create(db: Session, fields: EquipmentFields) -> Equipment:
     """Validate, de-duplicate, and persist one equipment catalogue entry."""
     problems = validate_equipment(fields)

@@ -1,10 +1,10 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, type ReactNode, useState } from 'react'
 
 import {
   createEventRequest,
-  EQUIPMENT_REQUIREMENTS,
   EventRequestValidationError,
+  listEquipmentRequirementTypes,
   type EventRequestCreate,
   FIELD_LABELS,
   VENUE_REQUIREMENTS,
@@ -50,9 +50,8 @@ const textFields: Array<{
   { name: 'registration_requirement', multiline: true },
 ]
 
-// These are requirement categories from the initial ConnectSphere catalogue, not individual
-// rooms or equipment items. Selecting one describes a need for later review; it cannot allocate
-// a resource during submission.
+// Venue requirements remain fixed categories. Equipment requirements are types supplied by the
+// catalogue; selecting one describes a need for later review and cannot allocate a resource.
 /**
  * SCRUM-28: collect a new event request. The venue and equipment fields describe needs; they
  * never choose catalogue items or reserve resources.
@@ -63,6 +62,11 @@ export default function EventRequestForm() {
   const [values, setValues] = useState<FormValues>(initialValues)
   const [errors, setErrors] = useState<FieldErrors>({})
   const [outcome, setOutcome] = useState<string | null>(null)
+  const equipmentTypes = useQuery({
+    queryKey: ['equipment-types', token],
+    queryFn: () => listEquipmentRequirementTypes(token ?? ''),
+    enabled: token !== null,
+  })
 
   const createRequest = useMutation({
     mutationFn: (request: EventRequestCreate) => createEventRequest(token ?? '', request),
@@ -148,12 +152,17 @@ export default function EventRequestForm() {
         />
         <CatalogueRequirementField
           name="equipment_requirement"
-          options={EQUIPMENT_REQUIREMENTS}
+          options={equipmentTypes.data ?? []}
           placeholder="Select equipment"
           value={values.equipment_requirement}
           error={errors.equipment_requirement}
           onChange={(value) => change('equipment_requirement', value)}
         />
+        {equipmentTypes.isError && (
+          <p role="alert" className="text-sm text-red-600">
+            {equipmentTypes.error.message}
+          </p>
+        )}
         <div className="space-y-4">
           <Field name="start_at" error={errors.start_at}>
             <input

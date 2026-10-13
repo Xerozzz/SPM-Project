@@ -18,6 +18,7 @@ from datetime import UTC, datetime, time, timedelta
 from core.database import Session, SessionLocal
 from core.security import hash_password
 from domain.roles import Role
+from models.equipment import Equipment
 from models.event_request import EventRequest
 from models.organisation import Organisation
 from models.user import User
@@ -49,6 +50,23 @@ _SEED_USERS: list[tuple[str, str, list[Role], uuid.UUID]] = [
         _PRIMARY_ORG_ID,
     ),
 ]
+
+_SEED_EQUIPMENT: tuple[dict[str, object], ...] = (
+    {
+        "equipment_type": "Projector-type requirement",
+        "description": "Portable presentation projector",
+        "total_quantity": 4,
+        "location": "Media Store",
+        "operational_status": "Operational",
+    },
+    {
+        "equipment_type": "Microphone-type requirement",
+        "description": "Wireless presentation microphone",
+        "total_quantity": 4,
+        "location": "Audio Store",
+        "operational_status": "Operational",
+    },
+)
 
 
 # Fixed ids, so the samples can be found and replaced no matter what an organiser has
@@ -215,6 +233,21 @@ def _seed_users(db: Session) -> None:
             )
 
 
+def _seed_equipment(db: Session) -> None:
+    """Insert the catalogue entries used by the sample event requests when missing."""
+    for values in _SEED_EQUIPMENT:
+        if (
+            db.query(Equipment)
+            .filter(
+                Equipment.equipment_type == values["equipment_type"],
+                Equipment.location == values["location"],
+            )
+            .first()
+            is None
+        ):
+            db.add(Equipment(**values))
+
+
 def _seed_event_requests(db: Session) -> None:
     """Replace the sample requests so they are back in Draft, whatever happened to them."""
     organiser = users_repo.get_by_email(db, "organiser@example.com")
@@ -262,6 +295,8 @@ def main() -> None:
         _seed_organisations(db)
         db.flush()
         _seed_users(db)
+        db.flush()
+        _seed_equipment(db)
         db.flush()
         _seed_event_requests(db)
         _seed_venues(db)

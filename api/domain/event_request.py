@@ -4,10 +4,11 @@ Pure: the caller passes in the field values and the current time, and gets back 
 problems, each naming the field it is about. An empty list means the request may be
 submitted. Nothing here knows about the database, HTTP, or the ORM (ADR-0003).
 
-The temporary venue and equipment vocabulary is documented in the SCRUM-28 PR; a future
-catalogue story will replace these fixed values with database-backed options.
+Venue requirements remain a fixed vocabulary. Equipment types are supplied by the service
+from the catalogue, so this module stays independent of database access.
 """
 
+from collections.abc import Collection
 from dataclasses import dataclass, fields
 from datetime import datetime
 
@@ -31,15 +32,6 @@ VENUE_REQUIREMENTS: frozenset[str] = frozenset(
         "Lecture theatre-type venue",
         "Seminar room-type venue",
         "Outdoor event space",
-    }
-)
-
-EQUIPMENT_REQUIREMENTS: frozenset[str] = frozenset(
-    {
-        "Projector-type requirement",
-        "Microphone-type requirement",
-        "PA system-type requirement",
-        "Display screen-type requirement",
     }
 )
 
@@ -69,16 +61,22 @@ class EventRequestFields:
     registration_requirement: str | None = None
 
 
-def validate_catalogue_requirements(request: EventRequestFields) -> list[FieldProblem]:
-    """Reject supplied venue and equipment values outside the temporary catalogue."""
+def validate_catalogue_requirements(
+    request: EventRequestFields, equipment_types: Collection[str] | None = None
+) -> list[FieldProblem]:
+    """Reject invalid venue values and equipment outside the supplied catalogue types.
+
+    ``equipment_types`` is injected by the service, keeping this domain function free of
+    database access. The optional value retains the original fixed vocabulary for callers
+    that do not yet have a catalogue snapshot.
+    """
     problems: list[FieldProblem] = []
     if not _is_blank(request.venue_requirement) and (
         request.venue_requirement not in VENUE_REQUIREMENTS
     ):
         problems.append(FieldProblem("venue_requirement", "is not a catalogue option"))
-    if (
-        not _is_blank(request.equipment_requirement)
-        and request.equipment_requirement not in EQUIPMENT_REQUIREMENTS
+    if not _is_blank(request.equipment_requirement) and request.equipment_requirement not in (
+        equipment_types if equipment_types is not None else EQUIPMENT_REQUIREMENT_FACILITIES.keys()
     ):
         problems.append(FieldProblem("equipment_requirement", "is not a catalogue option"))
     return problems
@@ -93,7 +91,11 @@ def _is_aware(value: datetime) -> bool:
     return value.tzinfo is not None and value.tzinfo.utcoffset(value) is not None
 
 
-def validate_event_request(request: EventRequestFields, now: datetime) -> list[FieldProblem]:
+def validate_event_request(
+    request: EventRequestFields,
+    now: datetime,
+    equipment_types: Collection[str] | None = None,
+) -> list[FieldProblem]:
     """Return every business-rule problem; an empty list means it is complete and valid."""
     problems: list[FieldProblem] = []
 
@@ -101,7 +103,7 @@ def validate_event_request(request: EventRequestFields, now: datetime) -> list[F
         if _is_blank(getattr(request, name)):
             problems.append(FieldProblem(name, "is required"))
 
-    problems.extend(validate_catalogue_requirements(request))
+    problems.extend(validate_catalogue_requirements(request, equipment_types))
 
     problems.extend(_period_problems(request.start_at, request.end_at, now))
 
