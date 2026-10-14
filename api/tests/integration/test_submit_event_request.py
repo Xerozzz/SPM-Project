@@ -26,15 +26,16 @@ from services import event_requests as service
 
 MakeUser = Callable[..., User]
 MakeClient = Callable[[User | None], httpx.AsyncClient]
+_VENUE_NAME = "Event Submission Test Hall"
 
 
 def make_draft(db: Session, organiser: User, **overrides: object) -> EventRequest:
     """A complete draft owned by `organiser`; pass field=None to make it incomplete."""
     _add_catalogue_type(db, "Projector")
-    if db.query(Venue).filter(Venue.name == "Hall A").first() is None:
+    if db.query(Venue).filter(Venue.name == _VENUE_NAME).first() is None:
         db.add(
             Venue(
-                name="Hall A",
+                name=_VENUE_NAME,
                 location="Test",
                 maximum_capacity=200,
                 facilities=[],
@@ -53,7 +54,7 @@ def make_draft(db: Session, organiser: User, **overrides: object) -> EventReques
         "start_at": start,
         "end_at": start + timedelta(hours=4),
         "expected_attendance": 200,
-        "venue_requirement": "Hall A",
+        "venue_requirement": _VENUE_NAME,
         "accessibility_requirement": "Step-free access and hearing loop",
         "equipment_requirement": "Projector",
         "layout_requirement": "Theatre style",
@@ -215,7 +216,7 @@ async def test_a_draft_cannot_be_updated_with_unknown_catalogue_requirements(
         {"field": "equipment_requirement", "reason": "is not a catalogue option"},
     ]
     db.refresh(draft)
-    assert draft.venue_requirement == "Hall A"
+    assert draft.venue_requirement == _VENUE_NAME
     assert draft.equipment_requirement == "Projector"
 
 

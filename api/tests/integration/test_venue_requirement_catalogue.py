@@ -13,13 +13,14 @@ from models.venue import Venue
 
 MakeUser = Callable[..., User]
 MakeClient = Callable[[User | None], httpx.AsyncClient]
+_VENUE_NAME = "Venue Catalogue Test Hall"
 
 
 def add_catalogue_entries(db: Session) -> Venue:
-    venue = db.query(Venue).filter(Venue.name == "Hall A").first()
+    venue = db.query(Venue).filter(Venue.name == _VENUE_NAME).first()
     if venue is None:
         venue = Venue(
-            name="Hall A",
+            name=_VENUE_NAME,
             location="Level 2",
             maximum_capacity=200,
             facilities=[],
@@ -58,7 +59,7 @@ def request_body(**overrides: object) -> dict[str, object]:
         "start_at": "2026-12-01T09:00:00+08:00",
         "end_at": "2026-12-01T13:00:00+08:00",
         "expected_attendance": 200,
-        "venue_requirement": "Hall A",
+        "venue_requirement": _VENUE_NAME,
         "accessibility_requirement": "Step-free access",
         "equipment_requirement": "Projector",
         "layout_requirement": "Theatre style",
@@ -94,7 +95,7 @@ async def test_organiser_sees_active_venue_names_in_catalogue_order(
     names = response.json()
     assert names == sorted(names)
     assert "Atrium" in names
-    assert "Hall A" in names
+    assert _VENUE_NAME in names
 
 
 @pytest.mark.story("SCRUM-104")
@@ -126,7 +127,7 @@ async def test_deactivated_venue_is_not_selectable_or_accepted(
         listed = await client.get("/api/event-requests/venue-names")
         created = await client.post("/api/event-requests", json=request_body())
 
-    assert "Hall A" not in listed.json()
+    assert _VENUE_NAME not in listed.json()
     assert created.status_code == 422
     assert created.json()["detail"] == [
         {"field": "venue_requirement", "reason": "is not a catalogue option"}

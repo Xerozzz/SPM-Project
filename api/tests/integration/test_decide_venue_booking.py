@@ -71,7 +71,7 @@ async def test_venue_staff_see_a_pending_request_with_its_context(
     assert datetime.fromisoformat(str(row["start_at"])) == booking.start_at
     assert datetime.fromisoformat(str(row["end_at"])) == booking.end_at
     assert row["expected_attendance"] == 150
-    assert row["venue_requirement"] == "Hall A"
+    assert row["venue_requirement"] == "Event Submission Test Hall"
     assert row["accessibility_requirement"] == "Step-free access and hearing loop"
     assert row["equipment_requirement"] == "Projector"
     assert row["layout_requirement"] == "Theatre style"

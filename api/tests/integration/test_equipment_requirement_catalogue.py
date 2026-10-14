@@ -13,13 +13,14 @@ from models.venue import Venue
 
 MakeUser = Callable[..., User]
 MakeClient = Callable[[User | None], httpx.AsyncClient]
+_VENUE_NAME = "Equipment Catalogue Test Hall"
 
 
 def add_equipment(db: Session, equipment_type: str, location: str) -> None:
-    if db.query(Venue).filter(Venue.name == "Hall A").first() is None:
+    if db.query(Venue).filter(Venue.name == _VENUE_NAME).first() is None:
         db.add(
             Venue(
-                name="Hall A",
+                name=_VENUE_NAME,
                 location="Test",
                 maximum_capacity=200,
                 facilities=[],
@@ -50,7 +51,7 @@ def request_body(**overrides: object) -> dict[str, object]:
         "start_at": "2026-12-01T09:00:00+08:00",
         "end_at": "2026-12-01T13:00:00+08:00",
         "expected_attendance": 200,
-        "venue_requirement": "Hall A",
+        "venue_requirement": _VENUE_NAME,
         "accessibility_requirement": "Step-free access",
         "equipment_requirement": "Projector",
         "layout_requirement": "Theatre style",
