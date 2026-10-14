@@ -26,7 +26,7 @@ const sharedDetail = eventRequest({
   description: 'A colleague-owned draft',
   start_at: shared.start_at,
   end_at: shared.end_at,
-  venue_requirement: 'Auditorium-type venue',
+  venue_requirement: 'Hall A',
 })
 
 function renderCalendar({
@@ -110,7 +110,7 @@ describe('SCRUM-87 organisation calendar (frontend unit)', () => {
     const details = await screen.findByRole('article', { name: 'Event request details' })
     expect(within(details).getByText('Organisation planning')).toBeInTheDocument()
     expect(within(details).getByText('A colleague-owned draft')).toBeInTheDocument()
-    expect(within(details).getByText('Auditorium-type venue')).toBeInTheDocument()
+    expect(within(details).getByText('Hall A')).toBeInTheDocument()
     expect(within(details).getByText('Read-only organisation view')).toBeInTheDocument()
     expect(
       within(details).queryByRole('button', { name: /edit|save|submit/i }),

@@ -37,7 +37,7 @@ async def test_coordinator_sees_submitted_request_information_and_approves_it(
     assert item["status"] == "submitted"
     assert item["name"] == "Orientation Day"
     assert item["purpose"] == "Welcome new students"
-    assert item["venue_requirement"] == "Auditorium-type venue"
+    assert item["venue_requirement"] == "Hall A"
     assert item["equipment_requirement"] == "Projector"
     assert item["decided_by_id"] is None
     assert approval.status_code == 200

@@ -38,7 +38,7 @@ async def create_draft(client: httpx.AsyncClient) -> dict[str, object]:
             "name": "Workshop draft",
             "purpose": "Hands-on learning",
             "start_at": start.isoformat(),
-            "venue_requirement": "Seminar room-type venue",
+            "venue_requirement": "Hall A",
         },
     )
     assert response.status_code == 201
@@ -47,10 +47,10 @@ async def create_draft(client: httpx.AsyncClient) -> dict[str, object]:
 
 async def create_complete_draft(db: Session, client: httpx.AsyncClient) -> dict[str, object]:
     start = datetime.now(UTC) + timedelta(days=30)
-    if db.query(Venue).filter(Venue.name == "Seminar room-type venue").first() is None:
+    if db.query(Venue).filter(Venue.name == "Hall A").first() is None:
         db.add(
             Venue(
-                name="Seminar room-type venue",
+                name="Hall A",
                 location="Test",
                 maximum_capacity=40,
                 facilities=[],
@@ -88,7 +88,7 @@ async def create_complete_draft(db: Session, client: httpx.AsyncClient) -> dict[
             "start_at": start.isoformat(),
             "end_at": (start + timedelta(hours=2)).isoformat(),
             "expected_attendance": 40,
-            "venue_requirement": "Seminar room-type venue",
+            "venue_requirement": "Hall A",
             "accessibility_requirement": "Step-free access",
             "equipment_requirement": "Projector",
             "layout_requirement": "Classroom",
@@ -115,7 +115,7 @@ async def test_creator_can_retrieve_their_saved_draft(
     assert body["status"] == "draft"
     assert body["name"] == "Workshop draft"
     assert body["purpose"] == "Hands-on learning"
-    assert body["venue_requirement"] == "Seminar room-type venue"
+    assert body["venue_requirement"] == "Hall A"
     assert body["description"] is None
     assert body["submitted_at"] is None
 

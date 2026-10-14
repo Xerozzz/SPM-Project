@@ -26,7 +26,7 @@ def complete_request() -> EventRequestFields:
         start_at=NOW + timedelta(days=30),
         end_at=NOW + timedelta(days=30, hours=4),
         expected_attendance=200,
-        venue_requirement="Auditorium-type venue",
+        venue_requirement="Hall A",
         accessibility_requirement="Step-free access and hearing loop",
         equipment_requirement="Projector",
         layout_requirement="Theatre style",
@@ -145,8 +145,8 @@ def test_missing_attendance_is_required_not_invalid() -> None:
 def test_catalogue_requirements_use_the_supplied_venue_names() -> None:
     request = complete_request()
 
-    assert validate_catalogue_requirements(request, venue_names=["Auditorium-type venue"]) == []
-    assert validate_catalogue_requirements(request, venue_names=["Hall A"]) == [
+    assert validate_catalogue_requirements(request, venue_names=["Hall A"]) == []
+    assert validate_catalogue_requirements(request, venue_names=["Atrium"]) == [
         FieldProblem("venue_requirement", "is not a catalogue option")
     ]
 

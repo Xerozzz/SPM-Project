@@ -197,7 +197,7 @@ async def test_an_ordinary_field_cannot_be_blanked(
         {"start_at": "2030-01-01T02:00:00Z"},
         {"end_at": "2030-01-01T06:00:00Z"},
         {"expected_attendance": 50},
-        {"venue_requirement": "Outdoor event space"},
+        {"venue_requirement": "Hall A"},
         {"equipment_requirement": "Projector"},
     ],
 )

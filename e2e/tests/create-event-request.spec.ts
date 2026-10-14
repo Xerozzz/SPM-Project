@@ -27,7 +27,7 @@ test('an organiser creates a complete event request as a draft', async ({ page }
   await page.getByLabel('Start date and time *').fill('2030-12-01T09:00')
   await page.getByLabel('End date and time *').fill('2030-12-01T13:00')
   await page.getByLabel('Expected attendance *').fill('200')
-  await page.getByLabel('Venue requirement *').selectOption('Auditorium-type venue')
+  await page.getByLabel('Venue requirement *').selectOption('Hall A')
   await page.getByLabel('Accessibility requirement *').fill('Step-free access')
   await page.getByLabel('Equipment requirement *').selectOption('Projector')
   await page.getByLabel('Layout requirement *').fill('Theatre style')

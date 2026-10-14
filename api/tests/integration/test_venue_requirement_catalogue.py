@@ -16,26 +16,36 @@ MakeClient = Callable[[User | None], httpx.AsyncClient]
 
 
 def add_catalogue_entries(db: Session) -> Venue:
-    venue = Venue(
-        name="Hall A",
-        location="Level 2",
-        maximum_capacity=200,
-        facilities=[],
-        supported_layouts=[],
-        accessibility_features=[],
-        opens_at=time(8),
-        closes_at=time(22),
-    )
-    db.add(venue)
-    db.add(
-        Equipment(
-            equipment_type="Projector",
-            description=None,
-            total_quantity=1,
-            location="Store",
-            operational_status="Operational",
+    venue = db.query(Venue).filter(Venue.name == "Hall A").first()
+    if venue is None:
+        venue = Venue(
+            name="Hall A",
+            location="Level 2",
+            maximum_capacity=200,
+            facilities=[],
+            supported_layouts=[],
+            accessibility_features=[],
+            opens_at=time(8),
+            closes_at=time(22),
         )
-    )
+        db.add(venue)
+    else:
+        venue.is_active = True
+    if (
+        db.query(Equipment)
+        .filter(Equipment.equipment_type == "Projector", Equipment.location == "Store")
+        .first()
+        is None
+    ):
+        db.add(
+            Equipment(
+                equipment_type="Projector",
+                description=None,
+                total_quantity=1,
+                location="Store",
+                operational_status="Operational",
+            )
+        )
     db.flush()
     return venue
 
