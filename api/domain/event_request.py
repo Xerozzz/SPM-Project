@@ -8,7 +8,7 @@ Venue requirements remain a fixed vocabulary. Equipment types are supplied by th
 from the catalogue, so this module stays independent of database access.
 """
 
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass, fields
 from datetime import datetime
 
@@ -41,6 +41,20 @@ EQUIPMENT_REQUIREMENT_FACILITIES: dict[str, str] = {
     "PA system-type requirement": "PA system",
     "Display screen-type requirement": "Display screen",
 }
+
+
+# SCRUM-36 AC3: the fields an ordinary planning update may change after submission.
+# Date/time, expected attendance, venue and equipment requirements are left out on
+# purpose: changing any of them can affect venue, equipment and registration arrangements
+# already made, so they need change control rather than an ordinary edit.
+ORDINARY_FIELDS: tuple[str, ...] = (
+    "name",
+    "purpose",
+    "description",
+    "accessibility_requirement",
+    "layout_requirement",
+    "registration_requirement",
+)
 
 
 @dataclass(frozen=True)
@@ -140,3 +154,16 @@ def _period_problems(
 def field_names() -> tuple[str, ...]:
     """Every submittable field, in ticket order — used by callers that copy values across."""
     return tuple(f.name for f in fields(EventRequestFields))
+
+
+def validate_ordinary_update(changes: Mapping[str, str | None]) -> list[FieldProblem]:
+    """SCRUM-36 AC2: problems with an ordinary update, one per field. Empty means valid.
+
+    Every ordinary field is required for a request to be submitted (SCRUM-46), so once
+    submitted an update may change one but never blank it. Only sent fields are checked.
+    """
+    return [
+        FieldProblem(name, "is required")
+        for name in ORDINARY_FIELDS
+        if name in changes and _is_blank(changes[name])
+    ]

@@ -22,6 +22,7 @@ from schemas.event_requests import (
     EventRequestAssign,
     EventRequestCreate,
     EventRequestDraftCreate,
+    EventRequestPlanningUpdate,
     EventRequestRead,
     EventRequestReassign,
     EventRequestRejection,
@@ -38,6 +39,9 @@ Organiser = Annotated[dict[str, object], Depends(require_role(Role.ORGANISER))]
 ViewableEventRequest = Annotated[EventRequest, Depends(require_event_access(EventAccess.VIEW))]
 EditableEventRequest = Annotated[EventRequest, Depends(require_event_access(EventAccess.EDIT))]
 DecidableEventRequest = Annotated[EventRequest, Depends(require_event_access(EventAccess.DECIDE))]
+PlanningUpdatableEventRequest = Annotated[
+    EventRequest, Depends(require_event_access(EventAccess.UPDATE_PLANNING_INFO))
+]
 Coordinator = Annotated[dict[str, object], Depends(require_role(Role.COORDINATOR))]
 CoordinatorLead = Annotated[dict[str, object], Depends(require_role(Role.COORDINATOR_LEAD))]
 Db = Annotated[Session, Depends(get_db)]
@@ -243,6 +247,23 @@ def update_draft(
     try:
         changes = body.model_dump(exclude_unset=True)
         row = service.update_draft(db, request.id, _organiser_id(user), changes)
+    except _REFUSALS as exc:
+        raise _http_error(exc) from exc
+    return EventRequestRead.model_validate(row)
+
+
+@router.patch("/{request_id}/planning-info", response_model=EventRequestRead)
+def update_planning_info(
+    event: PlanningUpdatableEventRequest,
+    body: EventRequestPlanningUpdate,
+    user: Coordinator,
+    db: Db,
+) -> EventRequestRead:
+    """SCRUM-36: the assigned coordinator updates ordinary planning information (AC2).
+    Other fields are refused by the schema (AC3) and other users get 403 (AC4)."""
+    try:
+        changes = body.model_dump(exclude_unset=True)
+        row = service.update_planning_info(db, event.id, _coordinator_id(user), changes)
     except _REFUSALS as exc:
         raise _http_error(exc) from exc
     return EventRequestRead.model_validate(row)

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.security import decode_access_token
-from domain.event_status import EventStatus
+from domain.event_status import EventStatus, is_active_status
 from domain.roles import Role
 from models.event_request import EventRequest
 from repositories import event_requests as event_request_repo
@@ -36,6 +36,7 @@ class EventAccess(StrEnum):
     SUBMIT_VENUE_BOOKING = "submit_venue_booking"
     REQUEST_CLARIFICATION = "request_clarification"
     RESPOND_TO_CLARIFICATION = "respond_to_clarification"
+    UPDATE_PLANNING_INFO = "update_planning_info"
 
 
 def get_current_user(
@@ -116,6 +117,14 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
         if permission is EventAccess.DECIDE:
             is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
             if is_assigned and request.status is EventStatus.SUBMITTED:
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        # SCRUM-36: after submission the organiser asks the coordinator for changes, so the
+        # ordinary update belongs to the assigned coordinator while the request is active.
+        if permission is EventAccess.UPDATE_PLANNING_INFO:
+            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+            if is_assigned and is_active_status(request.status):
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 

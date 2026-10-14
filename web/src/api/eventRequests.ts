@@ -415,6 +415,46 @@ export async function updateDraft(
   return (await response.json()) as EventRequest
 }
 
+/**
+ * SCRUM-36: the assigned coordinator updates ordinary planning information. Sends only
+ * the changed fields. A 422 carries the field problems, and anything else gives the API's
+ * message when it has one.
+ */
+export async function updatePlanningInfo(
+  token: string,
+  id: string,
+  changes: Partial<
+    Pick<
+      EventRequest,
+      | 'name'
+      | 'purpose'
+      | 'description'
+      | 'accessibility_requirement'
+      | 'layout_requirement'
+      | 'registration_requirement'
+    >
+  >,
+): Promise<EventRequest> {
+  const response = await fetch(`/api/event-requests/${id}/planning-info`, {
+    method: 'PATCH',
+    headers: jsonHeaders(token),
+    body: JSON.stringify(changes),
+  })
+  const body = (await response.json().catch(() => null)) as unknown
+  if (response.status === 422) {
+    const problems = parseValidationProblems(body)
+    if (problems) throw new EventRequestValidationError(problems)
+  }
+  if (!response.ok) {
+    const detail =
+      body && typeof body === 'object' && 'detail' in body && typeof body.detail === 'string'
+        ? body.detail
+        : `Update failed (${response.status})`
+    throw new Error(detail)
+  }
+  return body as EventRequest
+}
+
 export async function submitEventRequest(token: string, id: string): Promise<EventRequest> {
   const response = await fetch(`/api/event-requests/${id}/submit`, {
     method: 'POST',

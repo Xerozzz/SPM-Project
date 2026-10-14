@@ -13,11 +13,13 @@ from typing import cast
 from core.database import Session
 from domain import event_status
 from domain.event_request import (
+    ORDINARY_FIELDS,
     EventRequestFields,
     FieldProblem,
     field_names,
     validate_catalogue_requirements,
     validate_event_request,
+    validate_ordinary_update,
 )
 from domain.roles import Role
 from models.event_coordinator_assignment import EventCoordinatorAssignment
@@ -130,6 +132,32 @@ def update_draft(
     if problems:
         raise IncompleteEventRequestError(problems)
     for name in field_names():
+        if name in changes:
+            setattr(request, name, changes[name])
+    return repo.save(db, request)
+
+
+def update_planning_info(
+    db: Session, request_id: uuid.UUID, coordinator_id: uuid.UUID, changes: dict[str, str | None]
+) -> EventRequest:
+    """SCRUM-36: the assigned coordinator updates ordinary planning information (AC2).
+
+    require_event_access(UPDATE_PLANNING_INFO) has already checked the caller. The row is
+    then read locked and checked again, so a request reassigned or rejected in between is
+    refused rather than edited. Only ORDINARY_FIELDS are copied (AC3), and the status is
+    never touched, so an update cannot move the request through its lifecycle.
+    """
+    request = repo.get_for_update(db, request_id)
+    if request is None:
+        raise EventRequestNotFoundError
+    if request.coordinator_id != coordinator_id or not event_status.is_active_status(
+        request.status
+    ):
+        raise NotAuthorisedError
+    problems = validate_ordinary_update(changes)
+    if problems:
+        raise IncompleteEventRequestError(problems)
+    for name in ORDINARY_FIELDS:
         if name in changes:
             setattr(request, name, changes[name])
     return repo.save(db, request)

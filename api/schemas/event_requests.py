@@ -70,6 +70,24 @@ class EventRequestUpdate(BaseModel):
         return None if value is None else value.astimezone(UTC)
 
 
+class EventRequestPlanningUpdate(BaseModel):
+    """SCRUM-36: the ordinary planning fields the assigned coordinator may change.
+
+    extra="forbid" is what keeps AC3: a body that includes start_at, end_at,
+    expected_attendance, venue_requirement or equipment_requirement is a 422 and nothing
+    is saved, so those fields cannot change through this flow.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    purpose: str | None = None
+    description: str | None = None
+    accessibility_requirement: str | None = None
+    layout_requirement: str | None = None
+    registration_requirement: str | None = None
+
+
 class EventRequestDraftCreate(EventRequestUpdate):
     """Fields an organiser may provide when first saving a draft.
 
