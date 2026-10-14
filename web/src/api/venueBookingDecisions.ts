@@ -4,7 +4,8 @@
  * Mirrors schemas/venue_booking_decisions.py on the API.
  */
 
-export type BookingStatus = 'pending' | 'tentative' | 'confirmed' | 'rejected' | 'cancelled'
+export type BookingStatus =
+  'pending' | 'tentative' | 'confirmed' | 'rejected' | 'cancelled' | 'expired'
 
 /** How each status is shown to Venue Staff. */
 export const STATUS_LABELS: Record<BookingStatus, string> = {
@@ -13,6 +14,8 @@ export const STATUS_LABELS: Record<BookingStatus, string> = {
   confirmed: 'Confirmed',
   rejected: 'Rejected',
   cancelled: 'Cancelled',
+  // SCRUM-108: a hold that ran out before it was approved.
+  expired: 'Expired hold',
 }
 
 /** SCRUM-75 AC1: what the SCRUM-73 check says would block approval. SCRUM-83: `hold`

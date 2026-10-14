@@ -53,3 +53,17 @@ def confirm(current: BookingStatus, expires_at: datetime | None, now: datetime) 
     if expires_at is None or expires_at <= now:
         raise HoldExpiredError(expires_at)
     return BookingStatus.CONFIRMED
+
+
+def is_due(status: BookingStatus, expires_at: datetime | None, now: datetime) -> bool:
+    """SCRUM-108 AC1: a tentative hold whose expiry has been reached. The repository's
+    query for due holds selects exactly these rows."""
+    return status is BookingStatus.TENTATIVE and expires_at is not None and expires_at <= now
+
+
+def expire(status: BookingStatus, expires_at: datetime | None, now: datetime) -> BookingStatus:
+    """SCRUM-108 AC1: a hold that reached its expiry becomes Expired. Anything else is
+    refused, so a hold that was confirmed or is still running is never expired."""
+    if not is_due(status, expires_at, now):
+        raise InvalidBookingTransitionError(status, BookingStatus.EXPIRED)
+    return BookingStatus.EXPIRED

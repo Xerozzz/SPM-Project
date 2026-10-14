@@ -378,3 +378,74 @@ test('SCRUM-107: a refused approval of a hold shows why on its card', async () =
     'Could not approve: the tentative hold expired at 2030-01-05 09:00:00+00:00',
   )
 })
+
+// ------------------------------------------------------------------ SCRUM-108
+
+const EXPIRED: VenueBookingDecision = {
+  ...HELD,
+  status: 'expired',
+  expires_at: '2030-01-05T09:00:00Z',
+}
+
+test('SCRUM-108 AC2: an expired hold is kept and shown as Expired with its expiry', async () => {
+  renderWith(<VenueBookingDecisions />, async () => json([EXPIRED]))
+
+  expect(await screen.findByRole('heading', { name: 'Decided' })).toBeInTheDocument()
+  expect(screen.getByText(`Expired hold at ${sgt('2030-01-05T09:00:00Z')}`)).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: 'Tentative holds' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
+})
+
+test('SCRUM-108: the Coordinator sees that their hold expired', async () => {
+  localStorage.setItem(
+    'connectsphere.token',
+    JSON.stringify({ token: 'token', userId: 'coordinator-1', roles: ['coordinator'] }),
+  )
+  renderWith(<EventRequestReview />, async (input) => {
+    const url = String(input)
+    if (url === '/api/event-requests/reviewable') return json([])
+    if (url === '/api/event-requests/bookable') {
+      return json([
+        {
+          id: 'event-1',
+          status: 'approved',
+          name: 'Orientation Day',
+          purpose: 'Welcome',
+          description: 'Talks',
+          start_at: PENDING.start_at,
+          end_at: PENDING.end_at,
+          expected_attendance: 150,
+          venue_requirement: 'Auditorium-type venue',
+          accessibility_requirement: 'Step-free access',
+          equipment_requirement: 'Projector-type requirement',
+          layout_requirement: 'Theatre style',
+          registration_requirement: 'Open',
+          status_permits: [],
+          coordinator_id: 'coordinator-1',
+        },
+      ])
+    }
+    if (url === '/api/venues') return json([{ id: 'venue-1', name: 'Hall A', is_active: true }])
+    if (url.endsWith('/clarifications')) return json([])
+    if (url.endsWith('/venue-bookings')) {
+      return json([
+        {
+          id: 'booking-1',
+          venue_id: 'venue-1',
+          start_at: PENDING.start_at,
+          end_at: PENDING.end_at,
+          status: 'expired',
+          expires_at: EXPIRED.expires_at,
+          conflict: null,
+        },
+      ])
+    }
+    throw new Error(`unexpected request ${url}`)
+  })
+
+  expect(
+    await screen.findByText(
+      `tentative hold expired at ${new Date(EXPIRED.expires_at ?? '').toLocaleString()}`,
+    ),
+  ).toBeInTheDocument()
+})

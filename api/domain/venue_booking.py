@@ -20,6 +20,9 @@ class BookingStatus(StrEnum):
     CANCELLED = "cancelled"
     # SCRUM-83: Venue Staff hold a pending request's venue until an expiry (ADR-0029).
     TENTATIVE = "tentative"
+    # SCRUM-108: a hold whose expiry passed before it was approved. Kept for its history,
+    # and like rejected or cancelled it no longer holds the venue (ADR-0030).
+    EXPIRED = "expired"
 
 
 class InvalidBookingTransitionError(Exception):

@@ -15,6 +15,8 @@ class NotificationType(StrEnum):
     # repository, and API can land before the first business trigger. Trigger
     # stories replace direct use of this with their own specific types.
     GENERAL = "general"
+    # SCRUM-108 AC3: the venue hold for one of your events has expired.
+    VENUE_HOLD_EXPIRED = "venue_hold_expired"
 
 
 class NotificationSource(StrEnum):
@@ -27,3 +29,5 @@ class NotificationSource(StrEnum):
     """
 
     GENERAL = "general"
+    # SCRUM-108: one venue booking row, so each expired hold notifies exactly once.
+    VENUE_BOOKING = "venue_booking"

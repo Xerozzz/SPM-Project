@@ -168,7 +168,9 @@ function ExistingVenueBookings({
                 <dd className="inline">
                   {booking.status === 'tentative' && booking.expires_at
                     ? `tentative hold until ${formatBookingTime(booking.expires_at)}`
-                    : booking.status}
+                    : booking.status === 'expired' && booking.expires_at
+                      ? `tentative hold expired at ${formatBookingTime(booking.expires_at)}`
+                      : booking.status}
                 </dd>
               </div>
               <div>

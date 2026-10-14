@@ -9,7 +9,7 @@ from domain.booking_conflict import BookedPeriod, ConflictingBookingError, ensur
 from domain.venue_booking import BookingStatus, InvalidBookingTransitionError, hold
 from domain.venue_buffer import NO_BUFFERS
 from domain.venue_calendar import BOOKING_LABELS, DETAILS_LABELS, entry_blocks
-from domain.venue_hold import HoldExpiredError, confirm, expiry_problems
+from domain.venue_hold import HoldExpiredError, confirm, expire, expiry_problems, is_due
 from domain.venue_search import BLOCKING_STATUSES, booking_blocks_availability
 
 _NOW = datetime(2030, 3, 1, 9, 0, tzinfo=UTC)
@@ -156,3 +156,47 @@ def test_only_a_tentative_hold_goes_through_hold_confirmation(status: BookingSta
         confirm(status, _NOW + timedelta(hours=1), _NOW)
 
     assert not isinstance(raised.value, HoldExpiredError)
+
+
+# ------------------------------------------------------------------ SCRUM-108: expiring
+
+
+@pytest.mark.story("SCRUM-108")
+def test_a_hold_is_due_once_its_expiry_is_reached() -> None:
+    assert is_due(BookingStatus.TENTATIVE, _NOW, _NOW)
+    assert is_due(BookingStatus.TENTATIVE, _NOW - timedelta(minutes=1), _NOW)
+    assert not is_due(BookingStatus.TENTATIVE, _NOW + timedelta(seconds=1), _NOW)
+
+
+@pytest.mark.story("SCRUM-108")
+@pytest.mark.parametrize("status", [s for s in BookingStatus if s is not BookingStatus.TENTATIVE])
+def test_only_a_tentative_hold_is_ever_due(status: BookingStatus) -> None:
+    assert not is_due(status, _NOW - timedelta(days=1), _NOW)
+
+
+@pytest.mark.story("SCRUM-108")
+def test_a_due_hold_expires() -> None:
+    assert expire(BookingStatus.TENTATIVE, _NOW, _NOW) is BookingStatus.EXPIRED
+
+
+@pytest.mark.story("SCRUM-108")
+@pytest.mark.parametrize(
+    ("status", "expires_at"),
+    [
+        (BookingStatus.TENTATIVE, _NOW + timedelta(minutes=1)),
+        (BookingStatus.CONFIRMED, _NOW - timedelta(minutes=1)),
+        (BookingStatus.TENTATIVE, None),
+    ],
+)
+def test_a_hold_that_is_not_due_cannot_expire(
+    status: BookingStatus, expires_at: datetime | None
+) -> None:
+    with pytest.raises(InvalidBookingTransitionError):
+        expire(status, expires_at, _NOW)
+
+
+@pytest.mark.story("SCRUM-108")
+def test_an_expired_hold_no_longer_blocks_and_is_not_on_the_calendar() -> None:
+    assert not booking_blocks_availability(BookingStatus.EXPIRED)
+    assert BookingStatus.EXPIRED not in BOOKING_LABELS
+    assert DETAILS_LABELS[BookingStatus.EXPIRED] == "expired"

@@ -129,9 +129,11 @@ async def test_an_expired_hold_cannot_be_approved_and_is_left_as_it_was(
         response = await _approve(client, held.id)
 
     assert response.status_code == 409
-    assert response.json()["detail"].startswith("the tentative hold expired at")
+    # SCRUM-108: approving first expires holds that ran out, so this one is now Expired
+    # and the refusal is the ordinary "not pending" one. AC2: it stays Expired.
+    assert response.json()["detail"] == "cannot move a venue booking from expired to confirmed"
     db.refresh(held)
-    assert held.status is BookingStatus.TENTATIVE
+    assert held.status is BookingStatus.EXPIRED
     assert held.decided_by_id is None and held.decided_at is None
 
 
