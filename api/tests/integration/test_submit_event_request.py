@@ -442,7 +442,7 @@ async def test_listing_requires_a_signed_in_organiser(
 # --------------------------------------------------------------------------- concurrency
 
 
-def _committed_draft() -> tuple[uuid.UUID, uuid.UUID]:
+def _committed_draft() -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
     """A real, committed organiser and complete draft — visible to every connection."""
     session = SessionLocal()
     try:
@@ -458,13 +458,14 @@ def _committed_draft() -> tuple[uuid.UUID, uuid.UUID]:
         session.add(organiser)
         session.flush()
         draft = make_draft(session, organiser)
+        venue = session.query(Venue).filter(Venue.name == _VENUE_NAME).one()
         session.commit()
-        return draft.id, organiser.id
+        return draft.id, organiser.id, venue.id
     finally:
         session.close()
 
 
-def _delete_committed(draft_id: uuid.UUID, organiser_id: uuid.UUID) -> None:
+def _delete_committed(draft_id: uuid.UUID, organiser_id: uuid.UUID, venue_id: uuid.UUID) -> None:
     session = SessionLocal()
     try:
         draft = session.get(EventRequest, draft_id)
@@ -480,6 +481,9 @@ def _delete_committed(draft_id: uuid.UUID, organiser_id: uuid.UUID) -> None:
             organisation = session.get(Organisation, organisation_id)
             if organisation is not None:
                 session.delete(organisation)
+        venue = session.get(Venue, venue_id)
+        if venue is not None:
+            session.delete(venue)
         session.commit()
     finally:
         session.close()
@@ -493,7 +497,7 @@ def test_simultaneous_submissions_yield_exactly_one_success(attempt: int) -> Non
     then reads SUBMITTED and is refused. This needs two real transactions racing, which
     the rolled-back `db` fixture cannot express — so it commits and cleans up itself."""
     del attempt  # the run number only exists to repeat the race
-    draft_id, organiser_id = _committed_draft()
+    draft_id, organiser_id, venue_id = _committed_draft()
     start_together = threading.Barrier(2)
     outcomes: list[str] = []
 
@@ -517,4 +521,4 @@ def test_simultaneous_submissions_yield_exactly_one_success(attempt: int) -> Non
 
         assert sorted(outcomes) == ["refused", "submitted"]
     finally:
-        _delete_committed(draft_id, organiser_id)
+        _delete_committed(draft_id, organiser_id, venue_id)
