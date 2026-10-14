@@ -46,6 +46,11 @@ export default function VenueBookingDecisions() {
       setOutcome(`The request for ${booking.venue_name} has been approved.`)
       void client.invalidateQueries({ queryKey })
     },
+    // A refusal usually means the list was out of date: a closure or another approval
+    // landed after it loaded. Reload it so the card can name the clash.
+    onError: () => {
+      void client.invalidateQueries({ queryKey })
+    },
   })
   const hold = useMutation({
     mutationFn: ({ booking, until }: { booking: VenueBookingDecision; until: string }) =>
@@ -127,7 +132,9 @@ export default function VenueBookingDecisions() {
               {reject.error.message}
             </p>
           )}
-          {approve.isError && approve.variables?.id === booking.id && (
+          {/* Once the reloaded card shows its clash, that line explains the refusal in
+              Singapore time, so the raw API message (which only has an id) is not repeated. */}
+          {approve.isError && approve.variables?.id === booking.id && booking.conflict === null && (
             <p role="alert" className="mt-2 text-sm text-red-600">
               Could not approve: {approve.error.message}
             </p>

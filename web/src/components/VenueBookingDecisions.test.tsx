@@ -212,6 +212,39 @@ test('SCRUM-75 AC3: a refused approval shows why', async () => {
   )
 })
 
+test('SCRUM-75: a refusal from a stale list reloads it and shows the named clash', async () => {
+  // The list loaded before a closure was recorded, so the card had no clash yet.
+  let refused = false
+  renderPanel(async (_input, init) => {
+    if (init?.method === 'POST') {
+      refused = true
+      return json({ detail: 'venue is unavailable for period closure-1' }, 409)
+    }
+    return json([
+      refused
+        ? {
+            ...PENDING,
+            conflict: {
+              kind: 'unavailability',
+              id: 'closure-1',
+              start_at: '2030-01-01T00:00:00Z',
+              end_at: '2030-01-01T08:00:00Z',
+              message: 'venue is unavailable for period closure-1',
+            },
+          }
+        : PENDING,
+    ])
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
+
+  expect(
+    await screen.findByText(/The venue is closed from .* It cannot be approved\./),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled()
+  expect(screen.queryByText(/closure-1/)).toBeNull()
+})
+
 test('SCRUM-75: an old refusal goes away when the next decision is tried', async () => {
   let attempts = 0
   renderPanel(async (_input, init) => {
