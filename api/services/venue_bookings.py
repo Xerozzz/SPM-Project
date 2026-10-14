@@ -119,7 +119,8 @@ def approve(
     decided_by_id: uuid.UUID,
     decided_at: datetime,
 ) -> VenueBooking:
-    """SCRUM-74 (absorbs SCRUM-40's approve action): confirm a pending booking request.
+    """SCRUM-74 (absorbs SCRUM-40's approve action): confirm a pending booking request,
+    or since SCRUM-107 a tentative hold that has not expired.
     SCRUM-75 AC2: who approved and when are stored with the confirmation in the same
     commit (ADR-0018). Both are required, so no approve path can leave them empty.
 
@@ -136,7 +137,12 @@ def approve(
     booking = booking_repo.get_booking_for_update(db, booking_id)
     if booking is None:
         raise BookingNotFoundError
-    confirmed = venue_booking.approve(booking.status)
+    # SCRUM-107: a tentative hold is confirmed through this same approval, but only
+    # before it expires. Its hold columns are left as they are, so its history is kept.
+    if booking.status is BookingStatus.TENTATIVE:
+        confirmed = venue_hold.confirm(booking.status, booking.expires_at, decided_at)
+    else:
+        confirmed = venue_booking.approve(booking.status)
     _ensure_no_conflict(db, booking)
     venue = venue_repo.get(db, booking.venue_id)
     assert venue is not None

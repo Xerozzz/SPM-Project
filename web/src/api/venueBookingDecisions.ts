@@ -142,3 +142,8 @@ export async function holdVenueBookingRequest(
   }
   return readDecisionResponse(response)
 }
+
+/** SCRUM-107: a hold whose expiry has passed can no longer be approved (the API refuses it). */
+export function holdHasExpired(booking: VenueBookingDecision, now: Date): boolean {
+  return booking.expires_at != null && new Date(booking.expires_at).getTime() <= now.getTime()
+}

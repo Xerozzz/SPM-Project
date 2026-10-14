@@ -5,6 +5,7 @@ import { formatSingaporeTime } from '../api/venueCalendar'
 import {
   approveVenueBookingRequest,
   describeConflict,
+  holdHasExpired,
   holdVenueBookingRequest,
   listVenueBookingRequests,
   MAX_REASON_LENGTH,
@@ -172,6 +173,36 @@ export default function VenueBookingDecisions() {
                 {STATUS_LABELS.tentative}
                 {booking.expires_at && ` until ${formatSingaporeTime(booking.expires_at)}`}
               </p>
+              {/* SCRUM-107: confirm the hold through the normal approval, before it expires. */}
+              {holdHasExpired(booking, new Date()) ? (
+                <p className="mt-2 rounded bg-slate-100 p-2 text-sm text-slate-700">
+                  This hold has expired, so it cannot be approved.
+                </p>
+              ) : (
+                <>
+                  {booking.conflict && (
+                    <p className="mt-2 rounded bg-amber-50 p-2 text-sm text-amber-800">
+                      {describeConflict(booking.conflict)} It cannot be approved.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetAll()
+                      approve.mutate(booking)
+                    }}
+                    disabled={busy || booking.conflict !== null}
+                    className="mt-2 rounded bg-green-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+                  >
+                    Approve
+                  </button>
+                </>
+              )}
+              {approve.isError && approve.variables?.id === booking.id && (
+                <p role="alert" className="mt-2 text-sm text-red-600">
+                  Could not approve: {approve.error.message}
+                </p>
+              )}
             </article>
           ))}
         </>

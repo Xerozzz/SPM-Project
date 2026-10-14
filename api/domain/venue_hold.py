@@ -8,6 +8,17 @@ arrangements, but only until its expiry, so it can never hold a venue indefinite
 from datetime import datetime
 
 from domain.validation import FieldProblem
+from domain.venue_booking import BookingStatus, InvalidBookingTransitionError
+
+
+class HoldExpiredError(InvalidBookingTransitionError):
+    """SCRUM-107 AC2: the hold ran out before it was approved, so it cannot be confirmed.
+    A transition error like any other refused decision, so it is answered with 409."""
+
+    def __init__(self, expires_at: datetime | None) -> None:
+        super().__init__(BookingStatus.TENTATIVE, BookingStatus.CONFIRMED)
+        self.args = (f"the tentative hold expired at {expires_at}",)
+        self.expires_at = expires_at
 
 
 def expiry_problems(
@@ -27,3 +38,18 @@ def expiry_problems(
     if expires_at > event_start:
         return [FieldProblem("expires_at", "must not be after the event starts")]
     return []
+
+
+def confirm(current: BookingStatus, expires_at: datetime | None, now: datetime) -> BookingStatus:
+    """SCRUM-107 AC1: approving a tentative hold before it expires confirms it. The rest of
+    the approval (row lock, conflict check, overlap constraint) is the normal one in
+    services.venue_bookings.approve.
+
+    Only a tentative hold goes through here. A pending request still uses
+    domain.venue_booking.approve, so the SCRUM-74 rule for requests is unchanged.
+    """
+    if current is not BookingStatus.TENTATIVE:
+        raise InvalidBookingTransitionError(current, BookingStatus.CONFIRMED)
+    if expires_at is None or expires_at <= now:
+        raise HoldExpiredError(expires_at)
+    return BookingStatus.CONFIRMED
