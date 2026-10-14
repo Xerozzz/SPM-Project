@@ -53,14 +53,14 @@ _SEED_USERS: list[tuple[str, str, list[Role], uuid.UUID]] = [
 
 _SEED_EQUIPMENT: tuple[dict[str, object], ...] = (
     {
-        "equipment_type": "Projector-type requirement",
+        "equipment_type": "Projector",
         "description": "Portable presentation projector",
         "total_quantity": 4,
         "location": "Media Store",
         "operational_status": "Operational",
     },
     {
-        "equipment_type": "Microphone-type requirement",
+        "equipment_type": "Microphone",
         "description": "Wireless presentation microphone",
         "total_quantity": 4,
         "location": "Audio Store",
@@ -84,9 +84,7 @@ _SAMPLE_IDS = (
 
 
 def _sample_event_requests() -> list[tuple[uuid.UUID, dict[str, object]]]:
-    start = (datetime.now(UTC) + timedelta(days=30)).replace(
-        minute=0, second=0, microsecond=0
-    )
+    start = (datetime.now(UTC) + timedelta(days=30)).replace(minute=0, second=0, microsecond=0)
     orientation_day: dict[str, object] = {
         "name": "Orientation Day",
         "purpose": "Welcome new students to the faculty",
@@ -96,7 +94,7 @@ def _sample_event_requests() -> list[tuple[uuid.UUID, dict[str, object]]]:
         "expected_attendance": 200,
         "venue_requirement": "Mochtar Riady Auditorium",
         "accessibility_requirement": "Step-free access and a hearing loop",
-        "equipment_requirement": "Projector-type requirement",
+        "equipment_requirement": "Projector",
         "layout_requirement": "Theatre style",
         "registration_requirement": "Open registration, capped at 200",
     }
@@ -126,7 +124,7 @@ def _sample_event_requests() -> list[tuple[uuid.UUID, dict[str, object]]]:
         "expected_attendance": 180,
         "venue_requirement": "Mochtar Riady Auditorium",
         "accessibility_requirement": "Step-free access",
-        "equipment_requirement": "Projector-type requirement",
+        "equipment_requirement": "Projector",
         "layout_requirement": "Theatre style",
         "registration_requirement": "Open registration, capped at 180",
     }
@@ -141,7 +139,7 @@ def _sample_event_requests() -> list[tuple[uuid.UUID, dict[str, object]]]:
         "expected_attendance": 150,
         "venue_requirement": "Mochtar Riady Auditorium",
         "accessibility_requirement": "Step-free access",
-        "equipment_requirement": "Microphone-type requirement",
+        "equipment_requirement": "Microphone",
         "layout_requirement": "Banquet style",
         "registration_requirement": "Invitation only",
     }

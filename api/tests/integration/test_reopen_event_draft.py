@@ -63,7 +63,7 @@ async def create_complete_draft(db: Session, client: httpx.AsyncClient) -> dict[
     if (
         db.query(Equipment)
         .filter(
-            Equipment.equipment_type == "Projector-type requirement",
+            Equipment.equipment_type == "Projector",
             Equipment.location == "Test Store",
         )
         .first()
@@ -71,7 +71,7 @@ async def create_complete_draft(db: Session, client: httpx.AsyncClient) -> dict[
     ):
         db.add(
             Equipment(
-                equipment_type="Projector-type requirement",
+                equipment_type="Projector",
                 description=None,
                 total_quantity=1,
                 location="Test Store",
@@ -90,7 +90,7 @@ async def create_complete_draft(db: Session, client: httpx.AsyncClient) -> dict[
             "expected_attendance": 40,
             "venue_requirement": "Seminar room-type venue",
             "accessibility_requirement": "Step-free access",
-            "equipment_requirement": "Projector-type requirement",
+            "equipment_requirement": "Projector",
             "layout_requirement": "Classroom",
             "registration_requirement": "Open registration",
         },

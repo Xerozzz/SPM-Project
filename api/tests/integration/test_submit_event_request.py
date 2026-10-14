@@ -30,7 +30,7 @@ MakeClient = Callable[[User | None], httpx.AsyncClient]
 
 def make_draft(db: Session, organiser: User, **overrides: object) -> EventRequest:
     """A complete draft owned by `organiser`; pass field=None to make it incomplete."""
-    _add_catalogue_type(db, "Projector-type requirement")
+    _add_catalogue_type(db, "Projector")
     if db.query(Venue).filter(Venue.name == "Auditorium-type venue").first() is None:
         db.add(
             Venue(
@@ -55,7 +55,7 @@ def make_draft(db: Session, organiser: User, **overrides: object) -> EventReques
         "expected_attendance": 200,
         "venue_requirement": "Auditorium-type venue",
         "accessibility_requirement": "Step-free access and hearing loop",
-        "equipment_requirement": "Projector-type requirement",
+        "equipment_requirement": "Projector",
         "layout_requirement": "Theatre style",
         "registration_requirement": "Open registration, capped at 200",
     }
@@ -216,7 +216,7 @@ async def test_a_draft_cannot_be_updated_with_unknown_catalogue_requirements(
     ]
     db.refresh(draft)
     assert draft.venue_requirement == "Auditorium-type venue"
-    assert draft.equipment_requirement == "Projector-type requirement"
+    assert draft.equipment_requirement == "Projector"
 
 
 @pytest.mark.story("SCRUM-46")

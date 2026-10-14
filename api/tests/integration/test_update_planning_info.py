@@ -198,7 +198,7 @@ async def test_an_ordinary_field_cannot_be_blanked(
         {"end_at": "2030-01-01T06:00:00Z"},
         {"expected_attendance": 50},
         {"venue_requirement": "Outdoor event space"},
-        {"equipment_requirement": "Projector-type requirement"},
+        {"equipment_requirement": "Projector"},
     ],
 )
 async def test_date_attendance_venue_and_equipment_cannot_change_through_this_flow(

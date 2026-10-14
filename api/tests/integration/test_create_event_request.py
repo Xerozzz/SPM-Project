@@ -27,7 +27,7 @@ def request_body(**overrides: object) -> dict[str, object]:
         "expected_attendance": 200,
         "venue_requirement": "Auditorium-type venue",
         "accessibility_requirement": "Step-free access and a hearing loop",
-        "equipment_requirement": "Projector-type requirement",
+        "equipment_requirement": "Projector",
         "layout_requirement": "Theatre style",
         "registration_requirement": "Open registration, capped at 200",
     }
@@ -52,7 +52,7 @@ def add_projector(db: Session) -> None:
     if (
         db.query(Equipment)
         .filter(
-            Equipment.equipment_type == "Projector-type requirement",
+            Equipment.equipment_type == "Projector",
             Equipment.location == "Test Store",
         )
         .first()
@@ -60,7 +60,7 @@ def add_projector(db: Session) -> None:
     ):
         db.add(
             Equipment(
-                equipment_type="Projector-type requirement",
+                equipment_type="Projector",
                 description=None,
                 total_quantity=1,
                 location="Test Store",
@@ -85,7 +85,7 @@ async def test_an_organiser_creates_a_complete_unsubmitted_event_request(
     assert body["status"] == "draft"
     assert body["submitted_at"] is None
     assert body["venue_requirement"] == "Auditorium-type venue"
-    assert body["equipment_requirement"] == "Projector-type requirement"
+    assert body["equipment_requirement"] == "Projector"
     # The timezone-aware input is normalised to UTC before it reaches storage.
     assert body["start_at"] == "2026-12-01T01:00:00Z"
 

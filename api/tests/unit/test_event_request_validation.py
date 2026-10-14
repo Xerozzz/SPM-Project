@@ -28,7 +28,7 @@ def complete_request() -> EventRequestFields:
         expected_attendance=200,
         venue_requirement="Auditorium-type venue",
         accessibility_requirement="Step-free access and hearing loop",
-        equipment_requirement="Projector-type requirement",
+        equipment_requirement="Projector",
         layout_requirement="Theatre style",
         registration_requirement="Open registration, capped at 200",
     )

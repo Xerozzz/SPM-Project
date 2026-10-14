@@ -29,7 +29,7 @@ test('an organiser creates a complete event request as a draft', async ({ page }
   await page.getByLabel('Expected attendance *').fill('200')
   await page.getByLabel('Venue requirement *').selectOption('Auditorium-type venue')
   await page.getByLabel('Accessibility requirement *').fill('Step-free access')
-  await page.getByLabel('Equipment requirement *').selectOption('Projector-type requirement')
+  await page.getByLabel('Equipment requirement *').selectOption('Projector')
   await page.getByLabel('Layout requirement *').fill('Theatre style')
   await page.getByLabel('Registration requirement *').fill('Open registration')
   await page.getByRole('button', { name: 'Create event request' }).click()

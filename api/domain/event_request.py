@@ -27,10 +27,10 @@ REQUIRED_TEXT_FIELDS: tuple[str, ...] = (
 )
 
 EQUIPMENT_REQUIREMENT_FACILITIES: dict[str, str] = {
-    "Projector-type requirement": "Projector",
-    "Microphone-type requirement": "Microphone",
-    "PA system-type requirement": "PA system",
-    "Display screen-type requirement": "Display screen",
+    "Projector": "Projector",
+    "Microphone": "Microphone",
+    "PA system": "PA system",
+    "Display screen": "Display screen",
 }
 
 

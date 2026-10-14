@@ -24,7 +24,7 @@ def _event(**overrides: object) -> EventRequest:
         "expected_attendance": 50,
         "venue_requirement": "Auditorium-type venue",
         "accessibility_requirement": "Step-free access",
-        "equipment_requirement": "Display screen-type requirement",
+        "equipment_requirement": "Display screen",
         "layout_requirement": "Theatre style",
         "registration_requirement": "Open registration",
     }

@@ -34,7 +34,7 @@ const PENDING: VenueBookingDecision = {
   expected_attendance: 150,
   venue_requirement: 'Auditorium-type venue',
   accessibility_requirement: 'Step-free access',
-  equipment_requirement: 'Projector-type requirement',
+  equipment_requirement: 'Projector',
   layout_requirement: 'Theatre style',
   requested_by_id: 'coordinator-1',
   decided_by_id: null,

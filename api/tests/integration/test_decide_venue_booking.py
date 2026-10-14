@@ -73,7 +73,7 @@ async def test_venue_staff_see_a_pending_request_with_its_context(
     assert row["expected_attendance"] == 150
     assert row["venue_requirement"] == "Auditorium-type venue"
     assert row["accessibility_requirement"] == "Step-free access and hearing loop"
-    assert row["equipment_requirement"] == "Projector-type requirement"
+    assert row["equipment_requirement"] == "Projector"
     assert row["layout_requirement"] == "Theatre style"
     assert row["decided_by_id"] is None and row["decided_at"] is None
 
