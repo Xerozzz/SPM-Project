@@ -57,8 +57,9 @@ def get(db: Session, booking_id: uuid.UUID) -> BookingContext:
 
 
 def _conflict(db: Session, booking: VenueBooking) -> BookingConflictError | None:
-    """What would block approving `booking`, if anything. Decided requests have none."""
-    if booking.status is not BookingStatus.PENDING:
+    """What would block approving `booking`, if anything. Decided requests have none.
+    SCRUM-107: a tentative hold can be approved too, so it is checked as well."""
+    if booking.status not in (BookingStatus.PENDING, BookingStatus.TENTATIVE):
         return None
     try:
         venue_bookings.check_approvable(db, booking.id)
