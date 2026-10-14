@@ -69,7 +69,7 @@ def request_body(**overrides: object) -> dict[str, object]:
     return values
 
 
-@pytest.mark.story("SCRUM-104")
+@pytest.mark.story("SCRUM-28")
 async def test_organiser_sees_active_venue_names_in_catalogue_order(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -98,7 +98,7 @@ async def test_organiser_sees_active_venue_names_in_catalogue_order(
     assert _VENUE_NAME in names
 
 
-@pytest.mark.story("SCRUM-104")
+@pytest.mark.story("SCRUM-28")
 async def test_event_request_rejects_venue_not_in_active_catalogue(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -115,7 +115,7 @@ async def test_event_request_rejects_venue_not_in_active_catalogue(
     ]
 
 
-@pytest.mark.story("SCRUM-104")
+@pytest.mark.story("SCRUM-28")
 async def test_deactivated_venue_is_not_selectable_or_accepted(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:

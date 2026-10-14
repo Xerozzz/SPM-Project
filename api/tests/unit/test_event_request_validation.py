@@ -141,7 +141,7 @@ def test_missing_attendance_is_required_not_invalid() -> None:
     ]
 
 
-@pytest.mark.story("SCRUM-104")
+@pytest.mark.story("SCRUM-28")
 def test_catalogue_requirements_use_the_supplied_venue_names() -> None:
     request = complete_request()
 

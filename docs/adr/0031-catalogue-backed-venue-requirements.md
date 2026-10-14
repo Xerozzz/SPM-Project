@@ -3,7 +3,7 @@
 - **Status:** Proposed
 - **Date:** 2026-10-14
 - **Deciders:** ConnectSphere team
-- **Related stories:** SCRUM-104
+- **Related stories:** SCRUM-28
 
 ## Context
 
