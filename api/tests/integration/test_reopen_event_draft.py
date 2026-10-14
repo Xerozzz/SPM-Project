@@ -2,7 +2,7 @@
 
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from typing import cast
 
 import httpx
@@ -13,9 +13,11 @@ from sqlalchemy.orm import Session
 from core.dependencies import EventAccess, require_event_access
 from models.equipment import Equipment
 from models.user import User
+from models.venue import Venue
 
 MakeUser = Callable[..., User]
 MakeClient = Callable[[User | None], httpx.AsyncClient]
+_VENUE_NAME = "Draft Test Hall"
 
 
 def json_dict(response: httpx.Response) -> dict[str, object]:
@@ -37,7 +39,7 @@ async def create_draft(client: httpx.AsyncClient) -> dict[str, object]:
             "name": "Workshop draft",
             "purpose": "Hands-on learning",
             "start_at": start.isoformat(),
-            "venue_requirement": "Seminar room-type venue",
+            "venue_requirement": _VENUE_NAME,
         },
     )
     assert response.status_code == 201
@@ -46,10 +48,23 @@ async def create_draft(client: httpx.AsyncClient) -> dict[str, object]:
 
 async def create_complete_draft(db: Session, client: httpx.AsyncClient) -> dict[str, object]:
     start = datetime.now(UTC) + timedelta(days=30)
+    if db.query(Venue).filter(Venue.name == _VENUE_NAME).first() is None:
+        db.add(
+            Venue(
+                name=_VENUE_NAME,
+                location="Test",
+                maximum_capacity=40,
+                facilities=[],
+                supported_layouts=[],
+                accessibility_features=[],
+                opens_at=time(8),
+                closes_at=time(22),
+            )
+        )
     if (
         db.query(Equipment)
         .filter(
-            Equipment.equipment_type == "Projector-type requirement",
+            Equipment.equipment_type == "Projector",
             Equipment.location == "Test Store",
         )
         .first()
@@ -57,7 +72,7 @@ async def create_complete_draft(db: Session, client: httpx.AsyncClient) -> dict[
     ):
         db.add(
             Equipment(
-                equipment_type="Projector-type requirement",
+                equipment_type="Projector",
                 description=None,
                 total_quantity=1,
                 location="Test Store",
@@ -74,9 +89,9 @@ async def create_complete_draft(db: Session, client: httpx.AsyncClient) -> dict[
             "start_at": start.isoformat(),
             "end_at": (start + timedelta(hours=2)).isoformat(),
             "expected_attendance": 40,
-            "venue_requirement": "Seminar room-type venue",
+            "venue_requirement": _VENUE_NAME,
             "accessibility_requirement": "Step-free access",
-            "equipment_requirement": "Projector-type requirement",
+            "equipment_requirement": "Projector",
             "layout_requirement": "Classroom",
             "registration_requirement": "Open registration",
         },
@@ -101,7 +116,7 @@ async def test_creator_can_retrieve_their_saved_draft(
     assert body["status"] == "draft"
     assert body["name"] == "Workshop draft"
     assert body["purpose"] == "Hands-on learning"
-    assert body["venue_requirement"] == "Seminar room-type venue"
+    assert body["venue_requirement"] == _VENUE_NAME
     assert body["description"] is None
     assert body["submitted_at"] is None
 

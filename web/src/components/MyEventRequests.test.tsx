@@ -79,6 +79,7 @@ function renderSignedIn(handlers: Record<string, Handler>) {
 function defaultHandler(key: string): Handler | null {
   if (key === 'GET /api/event-requests/drafts') return () => json([])
   if (key === 'GET /api/event-requests/equipment-types') return () => json(['Projector'])
+  if (key === 'GET /api/event-requests/venue-names') return () => json(['Hall A'])
   // Submitted requests render their clarification thread, which loads on mount.
   if (/^GET \/api\/event-requests\/[^/]+\/clarifications$/.test(key)) return () => json([])
   return null
@@ -170,6 +171,7 @@ test('draft editor selects equipment types from the catalogue', async () => {
     'GET /api/event-requests': () => json([draft]),
     'GET /api/event-requests/req-1': () => json(draft),
     'GET /api/event-requests/equipment-types': () => json(['Microphone', 'Projector']),
+    'GET /api/event-requests/venue-names': () => json(['Hall A']),
   })
 
   fireEvent.click(await screen.findByLabelText('Edit draft Orientation Day'))
@@ -178,6 +180,7 @@ test('draft editor selects equipment types from the catalogue', async () => {
   expect(within(form).getByLabelText('Equipment requirement')).toHaveTextContent(
     'Select equipmentMicrophoneProjector',
   )
+  expect(within(form).getByLabelText('Venue requirement')).toHaveTextContent('Select a venueHall A')
 })
 
 test('submitting an incomplete draft names the fields to correct', async () => {

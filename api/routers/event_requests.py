@@ -32,6 +32,7 @@ from schemas.event_requests import (
 )
 from services import equipment as equipment_service
 from services import event_requests as service
+from services import venues as venues_service
 
 router = APIRouter(prefix="/event-requests", tags=["event-requests"])
 
@@ -231,6 +232,12 @@ def organisation_calendar(user: Organiser, db: Db) -> list[EventCalendarEntryRea
 def list_equipment_types(_user: Organiser, db: Db) -> list[str]:
     """Catalogue equipment types an organiser may select for a new request."""
     return equipment_service.list_distinct_types(db)
+
+
+@router.get("/venue-names", response_model=list[str])
+def list_venue_names(_user: Organiser, db: Db) -> list[str]:
+    """Active catalogue venues an organiser may select for a new request."""
+    return venues_service.list_selectable_names(db)
 
 
 @router.get("/{request_id}", response_model=EventRequestRead)

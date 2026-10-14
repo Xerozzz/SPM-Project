@@ -24,13 +24,6 @@ export async function listOrganisationCalendar(token: string): Promise<EventCale
   return (await response.json()) as EventCalendarEntry[]
 }
 
-export const VENUE_REQUIREMENTS = [
-  'Auditorium-type venue',
-  'Lecture theatre-type venue',
-  'Seminar room-type venue',
-  'Outdoor event space',
-] as const
-
 export interface EventRequest {
   id: string
   status: EventStatus
@@ -206,6 +199,14 @@ export async function listEquipmentRequirementTypes(token: string): Promise<stri
     headers: authHeaders(token),
   })
   if (!response.ok) throw new Error(`Could not load equipment types (${response.status})`)
+  return (await response.json()) as string[]
+}
+
+export async function listVenueRequirementNames(token: string): Promise<string[]> {
+  const response = await fetch('/api/event-requests/venue-names', {
+    headers: authHeaders(token),
+  })
+  if (!response.ok) throw new Error(`Could not load venue names (${response.status})`)
   return (await response.json()) as string[]
 }
 

@@ -26,20 +26,11 @@ REQUIRED_TEXT_FIELDS: tuple[str, ...] = (
     "registration_requirement",
 )
 
-VENUE_REQUIREMENTS: frozenset[str] = frozenset(
-    {
-        "Auditorium-type venue",
-        "Lecture theatre-type venue",
-        "Seminar room-type venue",
-        "Outdoor event space",
-    }
-)
-
 EQUIPMENT_REQUIREMENT_FACILITIES: dict[str, str] = {
-    "Projector-type requirement": "Projector",
-    "Microphone-type requirement": "Microphone",
-    "PA system-type requirement": "PA system",
-    "Display screen-type requirement": "Display screen",
+    "Projector": "Projector",
+    "Microphone": "Microphone",
+    "PA system": "PA system",
+    "Display screen": "Display screen",
 }
 
 
@@ -76,17 +67,16 @@ class EventRequestFields:
 
 
 def validate_catalogue_requirements(
-    request: EventRequestFields, equipment_types: Collection[str] | None = None
+    request: EventRequestFields,
+    equipment_types: Collection[str] | None = None,
+    venue_names: Collection[str] | None = None,
 ) -> list[FieldProblem]:
-    """Reject invalid venue values and equipment outside the supplied catalogue types.
-
-    ``equipment_types`` is injected by the service, keeping this domain function free of
-    database access. The optional value retains the original fixed vocabulary for callers
-    that do not yet have a catalogue snapshot.
-    """
+    """Reject requirements outside the catalogue values supplied by the service."""
     problems: list[FieldProblem] = []
-    if not _is_blank(request.venue_requirement) and (
-        request.venue_requirement not in VENUE_REQUIREMENTS
+    if (
+        venue_names is not None
+        and not _is_blank(request.venue_requirement)
+        and request.venue_requirement not in venue_names
     ):
         problems.append(FieldProblem("venue_requirement", "is not a catalogue option"))
     if not _is_blank(request.equipment_requirement) and request.equipment_requirement not in (
@@ -109,6 +99,7 @@ def validate_event_request(
     request: EventRequestFields,
     now: datetime,
     equipment_types: Collection[str] | None = None,
+    venue_names: Collection[str] | None = None,
 ) -> list[FieldProblem]:
     """Return every business-rule problem; an empty list means it is complete and valid."""
     problems: list[FieldProblem] = []
@@ -117,7 +108,7 @@ def validate_event_request(
         if _is_blank(getattr(request, name)):
             problems.append(FieldProblem(name, "is required"))
 
-    problems.extend(validate_catalogue_requirements(request, equipment_types))
+    problems.extend(validate_catalogue_requirements(request, equipment_types, venue_names))
 
     problems.extend(_period_problems(request.start_at, request.end_at, now))
 

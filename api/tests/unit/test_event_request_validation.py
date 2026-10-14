@@ -8,7 +8,6 @@ import pytest
 
 from domain.event_request import (
     REQUIRED_TEXT_FIELDS,
-    VENUE_REQUIREMENTS,
     EventRequestFields,
     FieldProblem,
     field_names,
@@ -27,9 +26,9 @@ def complete_request() -> EventRequestFields:
         start_at=NOW + timedelta(days=30),
         end_at=NOW + timedelta(days=30, hours=4),
         expected_attendance=200,
-        venue_requirement="Auditorium-type venue",
+        venue_requirement="Hall A",
         accessibility_requirement="Step-free access and hearing loop",
-        equipment_requirement="Projector-type requirement",
+        equipment_requirement="Projector",
         layout_requirement="Theatre style",
         registration_requirement="Open registration, capped at 200",
     )
@@ -143,11 +142,13 @@ def test_missing_attendance_is_required_not_invalid() -> None:
 
 
 @pytest.mark.story("SCRUM-28")
-def test_catalogue_requirements_accept_the_temporary_options() -> None:
+def test_catalogue_requirements_use_the_supplied_venue_names() -> None:
     request = complete_request()
 
-    assert request.venue_requirement in VENUE_REQUIREMENTS
-    assert validate_catalogue_requirements(request) == []
+    assert validate_catalogue_requirements(request, venue_names=["Hall A"]) == []
+    assert validate_catalogue_requirements(request, venue_names=["Atrium"]) == [
+        FieldProblem("venue_requirement", "is not a catalogue option")
+    ]
 
 
 @pytest.mark.story("SCRUM-28")
@@ -158,7 +159,7 @@ def test_catalogue_requirements_reject_unknown_values_but_allow_empty_draft_fiel
         equipment_requirement="Any available projector",
     )
 
-    assert validate_catalogue_requirements(invalid) == [
+    assert validate_catalogue_requirements(invalid, venue_names=["Hall A"]) == [
         FieldProblem("venue_requirement", "is not a catalogue option"),
         FieldProblem("equipment_requirement", "is not a catalogue option"),
     ]

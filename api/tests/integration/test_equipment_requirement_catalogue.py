@@ -1,7 +1,7 @@
 """SCRUM-90: organisers select equipment requirements from the catalogue."""
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
 
 import httpx
 import pytest
@@ -9,12 +9,27 @@ from sqlalchemy.orm import Session
 
 from models.equipment import Equipment
 from models.user import User
+from models.venue import Venue
 
 MakeUser = Callable[..., User]
 MakeClient = Callable[[User | None], httpx.AsyncClient]
+_VENUE_NAME = "Equipment Catalogue Test Hall"
 
 
 def add_equipment(db: Session, equipment_type: str, location: str) -> None:
+    if db.query(Venue).filter(Venue.name == _VENUE_NAME).first() is None:
+        db.add(
+            Venue(
+                name=_VENUE_NAME,
+                location="Test",
+                maximum_capacity=200,
+                facilities=[],
+                supported_layouts=[],
+                accessibility_features=[],
+                opens_at=time(8),
+                closes_at=time(22),
+            )
+        )
     db.add(
         Equipment(
             equipment_type=equipment_type,
@@ -36,7 +51,7 @@ def request_body(**overrides: object) -> dict[str, object]:
         "start_at": "2026-12-01T09:00:00+08:00",
         "end_at": "2026-12-01T13:00:00+08:00",
         "expected_attendance": 200,
-        "venue_requirement": "Auditorium-type venue",
+        "venue_requirement": _VENUE_NAME,
         "accessibility_requirement": "Step-free access",
         "equipment_requirement": "Projector",
         "layout_requirement": "Theatre style",
@@ -120,6 +135,9 @@ async def test_active_equipment_type_remains_selectable_until_its_last_entry_is_
 
     async with make_client(make_user("tech_support")) as staff:
         second = await staff.post(f"/api/equipment/{entries[1].id}/deactivate")
+        for entry in entries[2:]:
+            response = await staff.post(f"/api/equipment/{entry.id}/deactivate")
+            assert response.status_code == 200
 
     async with make_client(make_user("organiser")) as organiser:
         after_all = await organiser.get("/api/event-requests/equipment-types")
@@ -140,7 +158,11 @@ async def test_deactivation_does_not_change_equipment_on_a_submitted_event_reque
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     add_equipment(db, "Projector", "Media Store")
-    equipment = db.query(Equipment).filter(Equipment.equipment_type == "Projector").one()
+    equipment = (
+        db.query(Equipment)
+        .filter(Equipment.equipment_type == "Projector", Equipment.location == "Media Store")
+        .one()
+    )
     organiser = make_user("organiser")
 
     async with make_client(organiser) as client:

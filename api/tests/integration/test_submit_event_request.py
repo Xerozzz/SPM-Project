@@ -7,7 +7,7 @@ unknown id, already submitted) that the Definition of Ready asks for.
 import threading
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 
 import httpx
 import pytest
@@ -21,15 +21,31 @@ from models.equipment import Equipment
 from models.event_request import EventRequest
 from models.organisation import Organisation
 from models.user import User
+from models.venue import Venue
 from services import event_requests as service
 
 MakeUser = Callable[..., User]
 MakeClient = Callable[[User | None], httpx.AsyncClient]
+_VENUE_NAME = "Event Submission Test Hall"
 
 
 def make_draft(db: Session, organiser: User, **overrides: object) -> EventRequest:
     """A complete draft owned by `organiser`; pass field=None to make it incomplete."""
-    _add_catalogue_type(db, "Projector-type requirement")
+    _add_catalogue_type(db, "Projector")
+    if db.query(Venue).filter(Venue.name == _VENUE_NAME).first() is None:
+        db.add(
+            Venue(
+                name=_VENUE_NAME,
+                location="Test",
+                maximum_capacity=200,
+                facilities=[],
+                supported_layouts=[],
+                accessibility_features=[],
+                opens_at=time(8),
+                closes_at=time(22),
+            )
+        )
+        db.flush()
     start = datetime.now(UTC) + timedelta(days=30)
     values: dict[str, object] = {
         "name": "Orientation Day",
@@ -38,9 +54,9 @@ def make_draft(db: Session, organiser: User, **overrides: object) -> EventReques
         "start_at": start,
         "end_at": start + timedelta(hours=4),
         "expected_attendance": 200,
-        "venue_requirement": "Auditorium-type venue",
+        "venue_requirement": _VENUE_NAME,
         "accessibility_requirement": "Step-free access and hearing loop",
-        "equipment_requirement": "Projector-type requirement",
+        "equipment_requirement": "Projector",
         "layout_requirement": "Theatre style",
         "registration_requirement": "Open registration, capped at 200",
     }
@@ -200,8 +216,8 @@ async def test_a_draft_cannot_be_updated_with_unknown_catalogue_requirements(
         {"field": "equipment_requirement", "reason": "is not a catalogue option"},
     ]
     db.refresh(draft)
-    assert draft.venue_requirement == "Auditorium-type venue"
-    assert draft.equipment_requirement == "Projector-type requirement"
+    assert draft.venue_requirement == _VENUE_NAME
+    assert draft.equipment_requirement == "Projector"
 
 
 @pytest.mark.story("SCRUM-46")
@@ -426,7 +442,7 @@ async def test_listing_requires_a_signed_in_organiser(
 # --------------------------------------------------------------------------- concurrency
 
 
-def _committed_draft() -> tuple[uuid.UUID, uuid.UUID]:
+def _committed_draft() -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
     """A real, committed organiser and complete draft — visible to every connection."""
     session = SessionLocal()
     try:
@@ -442,13 +458,14 @@ def _committed_draft() -> tuple[uuid.UUID, uuid.UUID]:
         session.add(organiser)
         session.flush()
         draft = make_draft(session, organiser)
+        venue = session.query(Venue).filter(Venue.name == _VENUE_NAME).one()
         session.commit()
-        return draft.id, organiser.id
+        return draft.id, organiser.id, venue.id
     finally:
         session.close()
 
 
-def _delete_committed(draft_id: uuid.UUID, organiser_id: uuid.UUID) -> None:
+def _delete_committed(draft_id: uuid.UUID, organiser_id: uuid.UUID, venue_id: uuid.UUID) -> None:
     session = SessionLocal()
     try:
         draft = session.get(EventRequest, draft_id)
@@ -464,6 +481,9 @@ def _delete_committed(draft_id: uuid.UUID, organiser_id: uuid.UUID) -> None:
             organisation = session.get(Organisation, organisation_id)
             if organisation is not None:
                 session.delete(organisation)
+        venue = session.get(Venue, venue_id)
+        if venue is not None:
+            session.delete(venue)
         session.commit()
     finally:
         session.close()
@@ -477,7 +497,7 @@ def test_simultaneous_submissions_yield_exactly_one_success(attempt: int) -> Non
     then reads SUBMITTED and is refused. This needs two real transactions racing, which
     the rolled-back `db` fixture cannot express — so it commits and cleans up itself."""
     del attempt  # the run number only exists to repeat the race
-    draft_id, organiser_id = _committed_draft()
+    draft_id, organiser_id, venue_id = _committed_draft()
     start_together = threading.Barrier(2)
     outcomes: list[str] = []
 
@@ -501,4 +521,4 @@ def test_simultaneous_submissions_yield_exactly_one_success(attempt: int) -> Non
 
         assert sorted(outcomes) == ["refused", "submitted"]
     finally:
-        _delete_committed(draft_id, organiser_id)
+        _delete_committed(draft_id, organiser_id, venue_id)

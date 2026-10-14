@@ -22,9 +22,9 @@ def _event(**overrides: object) -> EventRequest:
         "start_at": start,
         "end_at": start + timedelta(hours=2),
         "expected_attendance": 50,
-        "venue_requirement": "Auditorium-type venue",
+        "venue_requirement": "Hall A",
         "accessibility_requirement": "Step-free access",
-        "equipment_requirement": "Display screen-type requirement",
+        "equipment_requirement": "Display screen",
         "layout_requirement": "Theatre style",
         "registration_requirement": "Open registration",
     }

@@ -1,6 +1,7 @@
 """SCRUM-28: organisers create a complete event request without submitting it."""
 
 from collections.abc import Callable
+from datetime import time
 
 import httpx
 import pytest
@@ -10,9 +11,11 @@ from domain.event_status import EventStatus
 from models.equipment import Equipment
 from models.event_request import EventRequest
 from models.user import User
+from models.venue import Venue
 
 MakeUser = Callable[..., User]
 MakeClient = Callable[[User | None], httpx.AsyncClient]
+_VENUE_NAME = "Event Request Test Hall"
 
 
 def request_body(**overrides: object) -> dict[str, object]:
@@ -23,9 +26,9 @@ def request_body(**overrides: object) -> dict[str, object]:
         "start_at": "2026-12-01T09:00:00+08:00",
         "end_at": "2026-12-01T13:00:00+08:00",
         "expected_attendance": 200,
-        "venue_requirement": "Auditorium-type venue",
+        "venue_requirement": _VENUE_NAME,
         "accessibility_requirement": "Step-free access and a hearing loop",
-        "equipment_requirement": "Projector-type requirement",
+        "equipment_requirement": "Projector",
         "layout_requirement": "Theatre style",
         "registration_requirement": "Open registration, capped at 200",
     }
@@ -34,10 +37,23 @@ def request_body(**overrides: object) -> dict[str, object]:
 
 
 def add_projector(db: Session) -> None:
+    if db.query(Venue).filter(Venue.name == _VENUE_NAME).first() is None:
+        db.add(
+            Venue(
+                name=_VENUE_NAME,
+                location="Test",
+                maximum_capacity=200,
+                facilities=[],
+                supported_layouts=[],
+                accessibility_features=[],
+                opens_at=time(8),
+                closes_at=time(22),
+            )
+        )
     if (
         db.query(Equipment)
         .filter(
-            Equipment.equipment_type == "Projector-type requirement",
+            Equipment.equipment_type == "Projector",
             Equipment.location == "Test Store",
         )
         .first()
@@ -45,7 +61,7 @@ def add_projector(db: Session) -> None:
     ):
         db.add(
             Equipment(
-                equipment_type="Projector-type requirement",
+                equipment_type="Projector",
                 description=None,
                 total_quantity=1,
                 location="Test Store",
@@ -69,8 +85,8 @@ async def test_an_organiser_creates_a_complete_unsubmitted_event_request(
     body = response.json()
     assert body["status"] == "draft"
     assert body["submitted_at"] is None
-    assert body["venue_requirement"] == "Auditorium-type venue"
-    assert body["equipment_requirement"] == "Projector-type requirement"
+    assert body["venue_requirement"] == _VENUE_NAME
+    assert body["equipment_requirement"] == "Projector"
     # The timezone-aware input is normalised to UTC before it reaches storage.
     assert body["start_at"] == "2026-12-01T01:00:00Z"
 
