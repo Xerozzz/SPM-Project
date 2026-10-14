@@ -23,6 +23,7 @@ from models.venue_booking import VenueBooking
 from repositories import event_requests as event_repo
 from repositories import venue_availability as booking_repo
 from repositories import venues as venue_repo
+from services import venue_hold_expiry
 
 
 class InvalidBookingRequestError(Exception):
@@ -134,6 +135,8 @@ def approve(
     4. Commit. If an overlapping request was approved concurrently and the check raced,
        the exclusion constraint refuses the commit (ConcurrentBookingConflictError).
     """
+    # SCRUM-108: holds that ran out, this one included, are Expired before deciding.
+    venue_hold_expiry.expire_due_holds(db, decided_at)
     booking = booking_repo.get_booking_for_update(db, booking_id)
     if booking is None:
         raise BookingNotFoundError
@@ -171,6 +174,8 @@ def hold(
     named refusal, refresh the effective interval from the venue's current buffers, and
     commit under the exclusion constraint, which covers tentative holds since 0021.
     """
+    # SCRUM-108: holds that ran out stop blocking before anything is checked.
+    venue_hold_expiry.expire_due_holds(db, now)
     booking = booking_repo.get_booking_for_update(db, booking_id)
     if booking is None:
         raise BookingNotFoundError

@@ -220,6 +220,9 @@ export default function VenueBookingDecisions() {
               <BookingDetails booking={booking} />
               <p className="mt-1 text-sm">
                 {STATUS_LABELS[booking.status]}
+                {booking.status === 'expired' &&
+                  booking.expires_at &&
+                  ` at ${formatSingaporeTime(booking.expires_at)}`}
                 {booking.decided_at && ` on ${new Date(booking.decided_at).toLocaleString()}`}
                 {booking.decision_reason && `: ${booking.decision_reason}`}
               </p>

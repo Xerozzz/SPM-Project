@@ -5,6 +5,9 @@ scattered decorators, and so a test can build a second app with overridden depen
 without disturbing the one the server is running.
 """
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -12,6 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from core.config import get_settings
 from core.database import engine
+from core.hold_expiry import HoldExpiryTimer
 from routers import (
     auth,
     equipment,
@@ -26,10 +30,20 @@ from routers import (
 )
 
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """SCRUM-108: the minute timer that expires tentative venue holds runs while the app
+    is up (ADR-0030). Test clients that do not start the app never start it."""
+    timer = HoldExpiryTimer()
+    timer.start()
+    yield
+    timer.stop()
+
+
 def create_app() -> FastAPI:
     """Build the application: middleware, routers, and the health endpoint."""
     settings = get_settings()
-    app = FastAPI(title="ConnectSphere API", version="0.1.0")
+    app = FastAPI(title="ConnectSphere API", version="0.1.0", lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,

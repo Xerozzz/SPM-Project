@@ -105,7 +105,8 @@ export interface VenueSuitability {
   venue_layouts: string[]
 }
 
-export type BookingStatus = 'pending' | 'tentative' | 'confirmed' | 'rejected' | 'cancelled'
+export type BookingStatus =
+  'pending' | 'tentative' | 'confirmed' | 'rejected' | 'cancelled' | 'expired'
 
 export interface VenueBookingSubmission {
   id: string

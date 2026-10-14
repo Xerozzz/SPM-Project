@@ -33,13 +33,16 @@ BOOKING_LABELS: dict[BookingStatus, EntryStatus] = {
 }
 
 # SCRUM-77: one entry opened in full can be any booking, rejected and cancelled included.
-DetailsStatus = Literal["confirmed", "tentative", "pending", "rejected", "cancelled", "unavailable"]
+DetailsStatus = Literal[
+    "confirmed", "tentative", "pending", "rejected", "cancelled", "expired", "unavailable"
+]
 DETAILS_LABELS: dict[BookingStatus, DetailsStatus] = {
     BookingStatus.CONFIRMED: "confirmed",
     BookingStatus.TENTATIVE: "tentative",
     BookingStatus.PENDING: "pending",
     BookingStatus.REJECTED: "rejected",
     BookingStatus.CANCELLED: "cancelled",
+    BookingStatus.EXPIRED: "expired",
 }
 
 

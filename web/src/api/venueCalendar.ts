@@ -41,12 +41,13 @@ export const CALENDAR_LABELS: Record<CalendarStatus, string> = {
 }
 
 /** SCRUM-77: an entry opened in full can be any booking, rejected and cancelled included. */
-export type DetailsStatus = CalendarStatus | 'rejected' | 'cancelled'
+export type DetailsStatus = CalendarStatus | 'rejected' | 'cancelled' | 'expired'
 
 export const DETAILS_LABELS: Record<DetailsStatus, string> = {
   ...CALENDAR_LABELS,
   rejected: 'Rejected request',
   cancelled: 'Cancelled request',
+  expired: 'Expired hold',
 }
 
 /** Days are Singapore days, the same assumption venue search makes. */

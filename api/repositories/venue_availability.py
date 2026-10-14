@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from domain.booking_conflict import ConcurrentBookingConflictError
 from domain.venue_booking import BookingStatus
 from domain.venue_search import BLOCKING_STATUSES
+from models.event_request import EventRequest
 from models.venue import Venue
 from models.venue_booking import VenueBooking
 from models.venue_unavailability import VenueUnavailability
@@ -220,3 +221,20 @@ def save_confirmed_booking(db: Session, booking: VenueBooking) -> VenueBooking:
         if isinstance(exc.orig, DeadlockDetected):
             raise ConcurrentBookingConflictError from exc
         raise
+
+
+def due_holds_for_update(db: Session, now: datetime) -> list[tuple[VenueBooking, EventRequest]]:
+    """SCRUM-108: tentative holds whose expiry has been reached, with their event, locked.
+
+    The same condition as domain.venue_hold.is_due. SKIP LOCKED means two runs at the same
+    moment (the minute timer and an approval, say) never wait on each other or expire the
+    same hold twice: a row one of them holds is simply left to that one.
+    """
+    statement = (
+        select(VenueBooking, EventRequest)
+        .join(EventRequest, EventRequest.id == VenueBooking.event_request_id)
+        .where(VenueBooking.status == BookingStatus.TENTATIVE, VenueBooking.expires_at <= now)
+        .order_by(VenueBooking.expires_at, VenueBooking.id)
+        .with_for_update(skip_locked=True, of=VenueBooking)
+    )
+    return list(db.execute(statement).tuples())
