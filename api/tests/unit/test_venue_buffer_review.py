@@ -19,6 +19,7 @@ from domain.booking_conflict import (
 from domain.venue_booking import BookingStatus
 from domain.venue_buffer import NO_BUFFERS, VenueBuffers
 from domain.venue_buffer_review import ProblematicBooking, problematic_bookings
+from domain.venue_search import BLOCKING_STATUSES
 
 _DAY = datetime(2030, 3, 4, tzinfo=UTC)
 _EXAMPLE = VenueBuffers(setup_minutes=30, turnaround_minutes=45)
@@ -120,7 +121,8 @@ def test_a_closure_that_the_buffers_do_not_reach_is_not_problematic() -> None:
 
 
 @pytest.mark.story("SCRUM-89")
-@pytest.mark.parametrize("status", [s for s in BookingStatus if s is not BookingStatus.CONFIRMED])
+# SCRUM-83: a tentative hold blocks like a confirmed booking, so it is left out here.
+@pytest.mark.parametrize("status", [s for s in BookingStatus if s not in BLOCKING_STATUSES])
 def test_only_confirmed_bookings_get_in_the_way(status: BookingStatus) -> None:
     # AC2 says another *confirmed* booking. A pending, rejected or cancelled request holds
     # nothing, which is the rule venue search and approval already use.

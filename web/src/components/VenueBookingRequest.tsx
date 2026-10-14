@@ -165,7 +165,11 @@ function ExistingVenueBookings({
             <dl>
               <div>
                 <dt className="inline font-medium">Status: </dt>
-                <dd className="inline">{booking.status}</dd>
+                <dd className="inline">
+                  {booking.status === 'tentative' && booking.expires_at
+                    ? `tentative hold until ${formatBookingTime(booking.expires_at)}`
+                    : booking.status}
+                </dd>
               </div>
               <div>
                 <dt className="inline font-medium">Selected venue: </dt>
@@ -180,8 +184,8 @@ function ExistingVenueBookings({
             </dl>
             {booking.conflict && (
               <p className="mt-2 rounded bg-amber-50 p-2 text-amber-800" role="status">
-                Needs attention. {describeConflict(booking.conflict)} Venue Staff have been
-                told; contact them to agree what moves.
+                Needs attention. {describeConflict(booking.conflict)} Venue Staff have been told;
+                contact them to agree what moves.
               </p>
             )}
           </li>

@@ -1,12 +1,13 @@
 """A venue hold or request for one time slot (SCRUM-55/SCRUM-38).
 
-Search (AC4/AC6) treats only `confirmed` rows as blocking: a pending request never
-excludes a venue. The half-open overlap rule itself lives in domain/venue_search.py;
-the repository issues the overlap query with bound parameters, never string SQL.
-SCRUM-38 writes pending requests; SCRUM-74 confirms them. Migration 0012 adds the
-ADR-0002 exclusion constraint `venue_bookings_no_confirmed_overlap`: no two confirmed
-rows for one venue may overlap. It is declared only in the migration, because Alembic
-autogenerate does not reflect EXCLUDE constraints.
+Search (AC4/AC6) treats only `confirmed` rows, and since SCRUM-83 `tentative` holds, as
+blocking: a pending request never excludes a venue. The half-open overlap rule itself
+lives in domain/venue_search.py; the repository issues the overlap query with bound
+parameters, never string SQL. SCRUM-38 writes pending requests; SCRUM-74 confirms them.
+Migration 0012 adds the ADR-0002 exclusion constraint
+`venue_bookings_no_confirmed_overlap`: no two confirmed rows for one venue may overlap.
+Migration 0021 widens it to tentative holds (SCRUM-83). It is declared only in the
+migration, because Alembic autogenerate does not reflect EXCLUDE constraints.
 """
 
 import uuid
@@ -67,3 +68,9 @@ class VenueBooking(Base):
     )
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     decision_reason: Mapped[str | None] = mapped_column(Text)
+    # SCRUM-83: a tentative hold placed by Venue Staff, and when it stops holding the
+    # venue. Empty for a request that was never held. Kept after the hold ends, for its
+    # history. Migration 0021, ADR-0029.
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    held_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    held_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

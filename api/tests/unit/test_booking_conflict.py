@@ -17,7 +17,7 @@ from domain.venue_buffer import NO_BUFFERS
 
 # The shared half-open rule booking_conflict builds on; tested here against the cases
 # SCRUM-73 depends on, since approval now relies on it as much as search does.
-from domain.venue_search import intervals_overlap
+from domain.venue_search import BLOCKING_STATUSES, intervals_overlap
 
 _START = datetime(2026, 11, 3, 2, 0, tzinfo=UTC)
 _END = _START + timedelta(hours=3)
@@ -25,7 +25,8 @@ _HOUR = timedelta(hours=1)
 
 # Every status that must NOT block approval (AC4). Derived from the enum rather than
 # listed, so a status added later is covered here automatically.
-_NOT_CONFIRMED = [status for status in BookingStatus if status is not BookingStatus.CONFIRMED]
+# SCRUM-83: a tentative hold blocks like a confirmed booking, so it is left out here.
+_NOT_CONFIRMED = [status for status in BookingStatus if status not in BLOCKING_STATUSES]
 
 
 def _booked(

@@ -50,10 +50,13 @@ class BookingConflictError(Exception):
 
 
 class ConflictingBookingError(BookingConflictError):
-    """AC1: a confirmed booking already holds an overlapping period."""
+    """AC1: a confirmed booking, or since SCRUM-83 a tentative hold, already holds an
+    overlapping period. The message says which of the two it is."""
 
     def __init__(self, booking: BookedPeriod) -> None:
-        super().__init__(f"conflicts with confirmed booking {booking.id}")
+        held = booking.status is BookingStatus.TENTATIVE
+        what = "tentative hold" if held else "confirmed booking"
+        super().__init__(f"conflicts with {what} {booking.id}")
         self.booking = booking
 
 
@@ -87,8 +90,9 @@ def ensure_no_conflict(
     rule. It is a required argument rather than one defaulting to no buffers, because a
     caller that forgot it would silently go back to the pre-SCRUM-82 behaviour.
 
-    Only a CONFIRMED booking blocks (AC4: pending, rejected and cancelled never do),
-    using the same status rule as venue search. Adjacent effective intervals do not
+    Only a CONFIRMED booking or a TENTATIVE hold blocks (AC4: pending, rejected and
+    cancelled never do, SCRUM-83 AC3 for the hold), using the same status rule as venue
+    search. Adjacent effective intervals do not
     overlap (AC2, AC5, and SCRUM-82 AC6). When several things clash, the earliest-starting
     one is named, ties broken by lowest id, so the result does not depend on input order.
     Bookings are checked before closures: a clash with another event is the more

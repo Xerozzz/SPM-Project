@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 
 from core.database import Session
-from domain import venue_booking, venue_suitability
+from domain import venue_booking, venue_hold, venue_suitability
 from domain.booking_conflict import BookedPeriod, UnavailablePeriod, ensure_no_conflict
 from domain.event_request import (
     EQUIPMENT_REQUIREMENT_FACILITIES,
@@ -32,6 +32,14 @@ class InvalidBookingRequestError(Exception):
 
 class BookingNotFoundError(Exception):
     """No venue booking has that id."""
+
+
+class InvalidHoldError(Exception):
+    """SCRUM-83: the hold's expiry is not acceptable, field by field."""
+
+    def __init__(self, problems: list[FieldProblem]) -> None:
+        super().__init__("invalid tentative hold")
+        self.problems = problems
 
 
 def evaluate(
@@ -138,6 +146,42 @@ def approve(
     booking.status = confirmed
     booking.decided_by_id = decided_by_id
     booking.decided_at = decided_at
+    return booking_repo.save_confirmed_booking(db, booking)
+
+
+def hold(
+    db: Session,
+    booking_id: uuid.UUID,
+    held_by_id: uuid.UUID,
+    expires_at: datetime,
+    now: datetime,
+) -> VenueBooking:
+    """SCRUM-83 AC1: Venue Staff put a pending request on a tentative hold until
+    `expires_at`. The request already names the venue, the event and its period, and was
+    made by the event's assigned Coordinator, so the hold is for all of them (ADR-0029).
+
+    The steps are approve's, because a hold occupies the venue the same way (AC3):
+    lock the row and check the transition, check the expiry, run the SCRUM-73 check for a
+    named refusal, refresh the effective interval from the venue's current buffers, and
+    commit under the exclusion constraint, which covers tentative holds since 0021.
+    """
+    booking = booking_repo.get_booking_for_update(db, booking_id)
+    if booking is None:
+        raise BookingNotFoundError
+    held = venue_booking.hold(booking.status)
+    problems = venue_hold.expiry_problems(expires_at, now, booking.start_at)
+    if problems:
+        raise InvalidHoldError(problems)
+    _ensure_no_conflict(db, booking)
+    venue = venue_repo.get(db, booking.venue_id)
+    assert venue is not None
+    booking.effective_start_at, booking.effective_end_at = effective_interval(
+        booking.start_at, booking.end_at, _buffers(venue)
+    )
+    booking.status = held
+    booking.expires_at = expires_at
+    booking.held_by_id = held_by_id
+    booking.held_at = now
     return booking_repo.save_confirmed_booking(db, booking)
 
 

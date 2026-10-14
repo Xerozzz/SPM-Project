@@ -1,23 +1,28 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
+import { formatSingaporeTime } from '../api/venueCalendar'
 import {
   approveVenueBookingRequest,
   describeConflict,
+  holdVenueBookingRequest,
   listVenueBookingRequests,
   MAX_REASON_LENGTH,
   rejectVenueBookingRequest,
+  singaporeLocalToUtc,
   STATUS_LABELS,
   type VenueBookingDecision,
 } from '../api/venueBookingDecisions'
 import { useAuth } from '../auth/useAuth'
 
 /** SCRUM-40: Venue Staff review pending booking requests and reject them.
- * SCRUM-75: they also see any clash and approve requests that have none. */
+ * SCRUM-75: they also see any clash and approve requests that have none.
+ * SCRUM-83: they can put a pending request on a tentative hold until an expiry. */
 export default function VenueBookingDecisions() {
   const { token } = useAuth()
   const client = useQueryClient()
   const [reasons, setReasons] = useState<Record<string, string>>({})
+  const [holdUntil, setHoldUntil] = useState<Record<string, string>>({})
   const [outcome, setOutcome] = useState<string | null>(null)
   const queryKey = ['venue-bookings', token]
   const requests = useQuery({
@@ -42,9 +47,26 @@ export default function VenueBookingDecisions() {
       void client.invalidateQueries({ queryKey })
     },
   })
-  const busy = reject.isPending || approve.isPending
+  const hold = useMutation({
+    mutationFn: ({ booking, until }: { booking: VenueBookingDecision; until: string }) =>
+      holdVenueBookingRequest(token ?? '', booking.id, singaporeLocalToUtc(until)),
+    onSuccess: (held) => {
+      setOutcome(`The request for ${held.venue_name} is on a tentative hold.`)
+      void client.invalidateQueries({ queryKey })
+    },
+  })
+  const busy = reject.isPending || approve.isPending || hold.isPending
+  const resetAll = () => {
+    reject.reset()
+    approve.reset()
+    hold.reset()
+  }
   const pending = requests.data?.filter((booking) => booking.status === 'pending') ?? []
-  const decided = requests.data?.filter((booking) => booking.status !== 'pending') ?? []
+  const held = requests.data?.filter((booking) => booking.status === 'tentative') ?? []
+  const decided =
+    requests.data?.filter(
+      (booking) => booking.status !== 'pending' && booking.status !== 'tentative',
+    ) ?? []
 
   return (
     <section className="mt-6 rounded-lg border border-slate-200 p-4">
@@ -80,7 +102,7 @@ export default function VenueBookingDecisions() {
             <button
               type="button"
               onClick={() => {
-                reject.reset()
+                resetAll()
                 approve.mutate(booking)
               }}
               disabled={busy || booking.conflict !== null}
@@ -91,7 +113,7 @@ export default function VenueBookingDecisions() {
             <button
               type="button"
               onClick={() => {
-                approve.reset()
+                resetAll()
                 reject.mutate({ id: booking.id, reason: reasons[booking.id] ?? '' })
               }}
               disabled={busy}
@@ -110,8 +132,50 @@ export default function VenueBookingDecisions() {
               Could not approve: {approve.error.message}
             </p>
           )}
+          <label className="mt-3 block text-sm font-medium" htmlFor={`hold-${booking.id}`}>
+            Hold until (Singapore time)
+          </label>
+          <div className="mt-1 flex gap-2">
+            <input
+              id={`hold-${booking.id}`}
+              type="datetime-local"
+              value={holdUntil[booking.id] ?? ''}
+              onChange={(event) => setHoldUntil({ ...holdUntil, [booking.id]: event.target.value })}
+              className="rounded border border-slate-300 p-1.5 text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                resetAll()
+                hold.mutate({ booking, until: holdUntil[booking.id] ?? '' })
+              }}
+              disabled={busy || booking.conflict !== null || !holdUntil[booking.id]}
+              className="rounded border border-violet-700 px-3 py-1.5 text-sm text-violet-800 disabled:opacity-50"
+            >
+              Place tentative hold
+            </button>
+          </div>
+          {hold.isError && hold.variables?.booking.id === booking.id && (
+            <p role="alert" className="mt-2 text-sm text-red-600">
+              Could not hold: {hold.error.message}
+            </p>
+          )}
         </article>
       ))}
+      {held.length > 0 && (
+        <>
+          <h3 className="mt-6 text-sm font-medium">Tentative holds</h3>
+          {held.map((booking) => (
+            <article key={booking.id} className="mt-2 rounded border border-violet-200 p-3">
+              <BookingDetails booking={booking} />
+              <p className="mt-1 text-sm text-violet-900">
+                {STATUS_LABELS.tentative}
+                {booking.expires_at && ` until ${formatSingaporeTime(booking.expires_at)}`}
+              </p>
+            </article>
+          ))}
+        </>
+      )}
       {outcome && (
         <p role="status" className="mt-4 rounded bg-green-50 p-3 text-sm text-green-800">
           {outcome}

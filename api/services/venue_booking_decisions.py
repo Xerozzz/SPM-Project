@@ -48,6 +48,14 @@ def reject(
     return context
 
 
+def get(db: Session, booking_id: uuid.UUID) -> BookingContext:
+    """One request with its event and venue, for answering after a hold (SCRUM-83)."""
+    context = repo.get_with_context(db, booking_id)
+    if context is None:
+        raise BookingRequestNotFoundError
+    return context
+
+
 def _conflict(db: Session, booking: VenueBooking) -> BookingConflictError | None:
     """What would block approving `booking`, if anything. Decided requests have none."""
     if booking.status is not BookingStatus.PENDING:

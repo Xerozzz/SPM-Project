@@ -39,6 +39,7 @@ someone else made two weeks ago.
 | [0026](0026-multiple-venue-booking-requests.md) | Allow independent venue booking requests for one event | Proposed |
 | [0027](0027-venue-buffer-change-audit.md) | Record a venue buffer change as an immutable snapshot, not a live relationship | Proposed |
 | [0028](0028-ordinary-event-updates-by-assigned-coordinator.md) | Ordinary event updates after submission belong to the assigned coordinator | Proposed |
+| [0029](0029-tentative-venue-holds.md) | Place a tentative venue hold on a pending booking request | Proposed |
 
 ## When to write one
 

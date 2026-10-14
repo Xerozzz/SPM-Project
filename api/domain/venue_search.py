@@ -105,10 +105,19 @@ def intervals_overlap(
     return max(first_start, second_start) < min(first_end, second_end)
 
 
+# The booking statuses that occupy a venue. A pending request does not (AC4/AC6). A
+# tentative hold does, until it ends (SCRUM-83 AC3, ADR-0029). The repository query for
+# search and the overlap constraint in migration 0021 use the same two statuses.
+BLOCKING_STATUSES: frozenset[BookingStatus] = frozenset(
+    {BookingStatus.CONFIRMED, BookingStatus.TENTATIVE}
+)
+
+
 def booking_blocks_availability(status: BookingStatus) -> bool:
-    """AC4/AC6: only a confirmed hold blocks search; a pending request does not.
+    """AC4/AC6: a confirmed booking or a tentative hold blocks search. A pending request
+    does not.
 
     Takes the closed `BookingStatus` vocabulary (never a bare string), so a typo is a
     type error rather than a venue silently staying visible.
     """
-    return status is BookingStatus.CONFIRMED
+    return status in BLOCKING_STATUSES

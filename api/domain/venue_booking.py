@@ -18,6 +18,8 @@ class BookingStatus(StrEnum):
     # SCRUM-73 AC4: named so the conflict rule can prove a cancelled hold never blocks.
     # Nothing sets it yet; no migration needed (status is a non-native VARCHAR enum).
     CANCELLED = "cancelled"
+    # SCRUM-83: Venue Staff hold a pending request's venue until an expiry (ADR-0029).
+    TENTATIVE = "tentative"
 
 
 class InvalidBookingTransitionError(Exception):
@@ -36,3 +38,11 @@ def approve(current: BookingStatus) -> BookingStatus:
     if current is not BookingStatus.PENDING:
         raise InvalidBookingTransitionError(current, BookingStatus.CONFIRMED)
     return BookingStatus.CONFIRMED
+
+
+def hold(current: BookingStatus) -> BookingStatus:
+    """SCRUM-83 AC1: only a pending request can be put on a tentative hold. A request that
+    is already held, decided or cancelled is refused, so a hold is never placed twice."""
+    if current is not BookingStatus.PENDING:
+        raise InvalidBookingTransitionError(current, BookingStatus.TENTATIVE)
+    return BookingStatus.TENTATIVE

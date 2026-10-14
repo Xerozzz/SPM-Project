@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from domain.booking_conflict import ConcurrentBookingConflictError
 from domain.venue_booking import BookingStatus
+from domain.venue_search import BLOCKING_STATUSES
 from models.venue import Venue
 from models.venue_booking import VenueBooking
 from models.venue_unavailability import VenueUnavailability
@@ -39,20 +40,20 @@ def _combined_buffer_gap() -> ColumnElement[timedelta]:
 def venue_ids_with_confirmed_overlap(
     db: Session, start_at: datetime, end_at: datetime
 ) -> set[uuid.UUID]:
-    """Venue ids holding a confirmed booking overlapping [start_at, end_at).
+    """Venue ids holding a confirmed booking or tentative hold overlapping the period.
 
     Half-open, like domain.venue_search.intervals_overlap: a booking ending exactly at
     the requested start (or starting exactly at the requested end) does not overlap.
-    Pending rows are ignored here, so they never block search (AC6). The status
-    comparison uses the same `BookingStatus` enum the domain rule takes, so the two
-    cannot disagree on what "confirmed" means.
+    Pending rows are ignored here, so they never block search (AC6). The statuses are
+    the domain's BLOCKING_STATUSES, so this query and booking_blocks_availability
+    cannot disagree on what blocks (SCRUM-83 AC3).
     """
     gap = _combined_buffer_gap()
     statement = (
         select(VenueBooking.venue_id)
         .join(Venue, Venue.id == VenueBooking.venue_id)
         .where(
-            VenueBooking.status == BookingStatus.CONFIRMED,
+            VenueBooking.status.in_(BLOCKING_STATUSES),
             VenueBooking.start_at < end_at + gap,
             start_at < VenueBooking.end_at + gap,
         )
@@ -194,7 +195,8 @@ def save_booking(db: Session, booking: VenueBooking) -> VenueBooking:
 
 
 def save_confirmed_booking(db: Session, booking: VenueBooking) -> VenueBooking:
-    """Commit a newly confirmed booking, translating the ADR-0002 exclusion constraint.
+    """Commit a newly confirmed booking or tentative hold (SCRUM-83), translating the
+    ADR-0002 exclusion constraint, which covers both since migration 0021.
 
     If another overlapping booking on this venue was confirmed and committed after our
     friendly check ran, `venue_bookings_no_confirmed_overlap` refuses this commit. Only

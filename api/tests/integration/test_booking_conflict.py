@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from domain.booking_conflict import ConflictingBookingError, VenueUnavailableError
 from domain.venue_booking import BookingStatus
+from domain.venue_search import BLOCKING_STATUSES
 from models.user import User
 from models.venue import Venue
 from models.venue_booking import VenueBooking
@@ -29,7 +30,8 @@ _END = _START + timedelta(hours=3)
 _HOUR = timedelta(hours=1)
 
 # Every status that must NOT block approval (AC4), derived from the enum.
-_NOT_CONFIRMED = [status for status in BookingStatus if status is not BookingStatus.CONFIRMED]
+# SCRUM-83: a tentative hold blocks like a confirmed booking, so it is left out here.
+_NOT_CONFIRMED = [status for status in BookingStatus if status not in BLOCKING_STATUSES]
 
 
 def _booking(
