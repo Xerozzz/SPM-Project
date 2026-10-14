@@ -40,6 +40,10 @@ async def test_coordinator_can_create_clarification_with_audit_fields(
     organiser = make_user("organiser")
     coordinator = make_user("coordinator")
     request = await submitted_request(db, organiser, make_client)
+    # SCRUM-101: submission leaves the request unassigned; arrange ownership directly
+    # until the Lead assignment story (SCRUM-98) lands.
+    request.coordinator_id = coordinator.id
+    db.flush()
     assert request.coordinator_id == coordinator.id
 
     async with make_client(coordinator) as client:
@@ -83,6 +87,8 @@ async def test_unassigned_coordinator_can_view_but_cannot_request_clarification(
     assigned = make_user("coordinator", created_at=now - timedelta(minutes=1))
     unassigned = make_user("coordinator", created_at=now)
     request = await submitted_request(db, organiser, make_client)
+    request.coordinator_id = assigned.id
+    db.flush()
     assert request.coordinator_id == assigned.id
 
     async with make_client(unassigned) as client:
@@ -102,6 +108,8 @@ async def test_blank_coordinator_clarification_is_rejected(
     organiser = make_user("organiser")
     coordinator = make_user("coordinator")
     request = await submitted_request(db, organiser, make_client)
+    request.coordinator_id = coordinator.id
+    db.flush()
 
     async with make_client(coordinator) as client:
         response = await request_clarification(client, request, message)
@@ -116,6 +124,8 @@ async def test_organiser_can_view_clarification_and_respond(
     organiser = make_user("organiser")
     coordinator = make_user("coordinator")
     request = await submitted_request(db, organiser, make_client)
+    request.coordinator_id = coordinator.id
+    db.flush()
 
     async with make_client(coordinator) as client:
         clarification = await request_clarification(client, request)
@@ -140,11 +150,13 @@ async def test_organiser_can_view_clarification_and_respond(
 async def test_kind_comes_from_the_endpoint_not_the_author(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
-    # One person holding both roles (clarification sheet row 7) creates a request and
-    # is round-robin assigned to it. Their question and their answer have the same
-    # author_id, so only `kind` tells the two apart.
+    # One person holding both roles (clarification sheet row 7) creates a request; the
+    # test assigns them directly (SCRUM-101 leaves submissions unassigned). Their
+    # question and their answer have the same author_id, so only `kind` tells them apart.
     both = make_user("organiser", "coordinator")
     request = await submitted_request(db, both, make_client)
+    request.coordinator_id = both.id
+    db.flush()
     assert request.coordinator_id == both.id
 
     async with make_client(both) as client:
@@ -262,6 +274,8 @@ async def test_clarification_and_response_leave_status_unchanged(
     organiser = make_user("organiser")
     coordinator = make_user("coordinator")
     request = await submitted_request(db, organiser, make_client)
+    request.coordinator_id = coordinator.id
+    db.flush()
 
     async with make_client(coordinator) as client:
         clarification = await request_clarification(client, request)
@@ -286,6 +300,8 @@ async def test_history_persists_in_deterministic_order(
     organiser = make_user("organiser")
     coordinator = make_user("coordinator")
     request = await submitted_request(db, organiser, make_client)
+    request.coordinator_id = coordinator.id
+    db.flush()
 
     async with make_client(coordinator) as client:
         first = await request_clarification(client, request, "First question")

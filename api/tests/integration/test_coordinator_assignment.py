@@ -13,7 +13,6 @@ from zoneinfo import ZoneInfo
 import pytest
 from sqlalchemy.orm import Session
 
-from domain.coordinator_assignment import NoAvailableCoordinatorError
 from domain.event_status import EventStatus, InvalidTransitionError
 from models.event_request import EventRequest
 from models.user import User
@@ -69,13 +68,18 @@ _NOT_CONFIRMED = [status for status in EventStatus if status is not EventStatus.
 
 
 @pytest.mark.story("SCRUM-34")
+@pytest.mark.story("SCRUM-101")
 def test_first_submission_assigns_the_next_coordinator_in_rotation(
     db: Session, make_user: MakeUser
 ) -> None:
+    """SCRUM-101: submission leaves the request unassigned for Lead triage.
+
+    Supersedes the SCRUM-34 round-robin expectation: no coordinator is assigned at
+    submit time, even when active coordinators exist. See ADR-0020."""
     organiser = make_user("organiser")
     base = datetime(2026, 1, 1, tzinfo=UTC)
-    coord_a = make_user("coordinator", created_at=base)
-    coord_b = make_user("coordinator", created_at=base + timedelta(minutes=1))
+    make_user("coordinator", created_at=base)
+    make_user("coordinator", created_at=base + timedelta(minutes=1))
     now = datetime(2026, 1, 2, tzinfo=UTC)
     first_draft = make_draft(db, organiser, start_at=datetime(2026, 3, 1, 9, 0, tzinfo=UTC))
     second_draft = make_draft(db, organiser, start_at=datetime(2026, 3, 2, 9, 0, tzinfo=UTC))
@@ -83,24 +87,27 @@ def test_first_submission_assigns_the_next_coordinator_in_rotation(
     first = service.submit(db, first_draft.id, organiser.id, now)
     second = service.submit(db, second_draft.id, organiser.id, now)
 
-    assert first.coordinator_id == coord_a.id
-    assert second.coordinator_id == coord_b.id
+    assert first.coordinator_id is None
+    assert second.coordinator_id is None
     assert first.status is EventStatus.SUBMITTED
-    assert first.assigned_at is not None
+    assert first.assigned_at is None
 
 
 @pytest.mark.story("SCRUM-34")
+@pytest.mark.story("SCRUM-101")
 def test_inactive_coordinator_is_never_assigned(db: Session, make_user: MakeUser) -> None:
+    """SCRUM-101: submission assigns nobody, so coordinator activity is irrelevant."""
     organiser = make_user("organiser")
     base = datetime(2026, 1, 1, tzinfo=UTC)
     make_user("coordinator", is_active=False, created_at=base)
-    active = make_user("coordinator", created_at=base + timedelta(minutes=1))
+    make_user("coordinator", created_at=base + timedelta(minutes=1))
     now = datetime(2026, 1, 2, tzinfo=UTC)
     draft = make_draft(db, organiser, start_at=datetime(2026, 4, 1, 9, 0, tzinfo=UTC))
 
     result = service.submit(db, draft.id, organiser.id, now)
 
-    assert result.coordinator_id == active.id
+    assert result.coordinator_id is None
+    assert result.assigned_at is None
 
 
 @pytest.mark.story("SCRUM-34")
@@ -123,10 +130,13 @@ def test_resubmission_does_not_change_the_existing_assignment(
 
 
 @pytest.mark.story("SCRUM-34")
+@pytest.mark.story("SCRUM-101")
 def test_submit_never_reassigns_a_request_that_already_has_a_coordinator(
     db: Session, make_user: MakeUser
 ) -> None:
-    """The status machine (SCRUM-46) already blocks a second submit() outright, so this
+    """SCRUM-101: submission leaves any pre-existing assignment untouched.
+
+    The status machine (SCRUM-46) already blocks a second submit() outright, so this
     guard is currently unreachable through it — but it also protects a future
     resubmission path (e.g. after SCRUM-30's clarification round) that might call
     submit() again on a DRAFT that already carries an assignment."""
@@ -146,11 +156,13 @@ def test_submit_never_reassigns_a_request_that_already_has_a_coordinator(
 
 
 @pytest.mark.story("SCRUM-34")
+@pytest.mark.story("SCRUM-101")
 async def test_assignment_is_visible_to_the_organiser_and_to_any_coordinator(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
+    """SCRUM-101: a fresh submission reads back unassigned to every viewer."""
     organiser = make_user("organiser")
-    coord_a = make_user("coordinator")
+    make_user("coordinator")
     other_coordinator = make_user("coordinator")
     now = datetime(2026, 1, 2, tzinfo=UTC)
     draft = make_draft(db, organiser, start_at=datetime(2026, 8, 1, 9, 0, tzinfo=UTC))
@@ -162,29 +174,35 @@ async def test_assignment_is_visible_to_the_organiser_and_to_any_coordinator(
         seen_by_other = await coordinator_client.get(f"/api/event-requests/{submitted.id}")
 
     assert seen_by_owner.status_code == 200
-    assert seen_by_owner.json()["coordinator_id"] == str(coord_a.id)
+    assert seen_by_owner.json()["coordinator_id"] is None
     assert seen_by_other.status_code == 200
-    assert seen_by_other.json()["coordinator_id"] == str(coord_a.id)
+    assert seen_by_other.json()["coordinator_id"] is None
 
 
 @pytest.mark.story("SCRUM-34")
+@pytest.mark.story("SCRUM-101")
 def test_confirmed_event_in_the_last_minute_of_the_day_still_blocks_that_day(
     db: Session, make_user: MakeUser
 ) -> None:
-    # Both times are on 10 June in Singapore: the confirmed event at 23:59 SGT (15:59 UTC),
-    # the new request at 00:00:01 SGT (9 June 16:00:01 UTC). One coordinator, so the only
-    # way this passes is the conflict rule, not rotation order.
+    """SCRUM-101: a same-day CONFIRMED event no longer blocks submission.
+
+    The request waits unassigned in the Lead queue instead of failing with 409.
+    The pure conflict rule itself is still covered by the unit tests for
+    `select_next_coordinator` and by `coordinator_ids_confirmed_on` below."""
     organiser = make_user("organiser")
     busy = make_user("coordinator")
     _confirmed(db, organiser, busy, datetime(2026, 6, 10, 15, 59, tzinfo=UTC))
     now = datetime(2026, 1, 2, tzinfo=UTC)
     draft = make_draft(db, organiser, start_at=datetime(2026, 6, 9, 16, 0, 1, tzinfo=UTC))
 
-    with pytest.raises(NoAvailableCoordinatorError):
-        service.submit(db, draft.id, organiser.id, now)
+    result = service.submit(db, draft.id, organiser.id, now)
+
+    assert result.status is EventStatus.SUBMITTED
+    assert result.coordinator_id is None
 
 
 @pytest.mark.story("SCRUM-34")
+@pytest.mark.story("SCRUM-101")
 def test_confirmed_event_the_day_before_does_not_block_assignment(
     db: Session, make_user: MakeUser
 ) -> None:
@@ -196,34 +214,41 @@ def test_confirmed_event_the_day_before_does_not_block_assignment(
 
     result = service.submit(db, draft.id, organiser.id, now)
 
-    assert result.coordinator_id == coord.id
+    assert result.status is EventStatus.SUBMITTED
+    assert result.coordinator_id is None
 
 
 # ---------------------------------------------------------------------- conflict
 
 
 @pytest.mark.story("SCRUM-34")
+@pytest.mark.story("SCRUM-101")
 def test_conflict_when_every_active_coordinator_already_has_a_confirmed_event_that_day(
     db: Session, make_user: MakeUser
 ) -> None:
+    """SCRUM-101: a fully-booked day no longer refuses submission (see ADR-0020)."""
     organiser = make_user("organiser")
     coord = make_user("coordinator")
     _confirmed(db, organiser, coord, datetime(2026, 7, 1, 10, 0, tzinfo=UTC))
     now = datetime(2026, 1, 2, tzinfo=UTC)
     draft = make_draft(db, organiser, start_at=datetime(2026, 7, 1, 15, 0, tzinfo=UTC))
 
-    with pytest.raises(NoAvailableCoordinatorError):
-        service.submit(db, draft.id, organiser.id, now)
+    result = service.submit(db, draft.id, organiser.id, now)
+
+    assert result.status is EventStatus.SUBMITTED
+    assert result.coordinator_id is None
 
 
 @pytest.mark.story("SCRUM-34")
 @pytest.mark.parametrize("status", _NOT_CONFIRMED, ids=[s.value for s in _NOT_CONFIRMED])
+@pytest.mark.story("SCRUM-101")
 def test_only_a_confirmed_event_blocks_assignment(
     db: Session, make_user: MakeUser, status: EventStatus
 ) -> None:
-    """The conflict rule is CONFIRMED only. A same-day event in any other status leaves
-    its coordinator available, so widening the repository filter (`!= DRAFT`,
-    `.in_([...])`) fails here."""
+    """SCRUM-101: submission never assigns, whatever else exists that day.
+
+    The CONFIRMED-only shape of the conflict rule itself is still covered by the
+    pure `select_next_coordinator` unit tests and `coordinator_ids_confirmed_on`."""
     organiser = make_user("organiser")
     coord = make_user("coordinator")
     _in_status(db, organiser, coord, datetime(2026, 6, 10, 6, 0, tzinfo=UTC), status)
@@ -232,13 +257,16 @@ def test_only_a_confirmed_event_blocks_assignment(
 
     result = service.submit(db, draft.id, organiser.id, now)
 
-    assert result.coordinator_id == coord.id
+    assert result.status is EventStatus.SUBMITTED
+    assert result.coordinator_id is None
 
 
 @pytest.mark.story("SCRUM-34")
+@pytest.mark.story("SCRUM-101")
 async def test_submit_endpoint_returns_409_when_no_coordinator_is_available(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
+    """SCRUM-101: even a fully-booked day submits cleanly into the Lead queue."""
     organiser = make_user("organiser")
     coord = make_user("coordinator")
     # Real wall-clock time: this goes through the HTTP endpoint, which stamps `now`
@@ -261,8 +289,9 @@ async def test_submit_endpoint_returns_409_when_no_coordinator_is_available(
     async with make_client(organiser) as client:
         response = await client.post(f"/api/event-requests/{draft.id}/submit")
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == "No active coordinator is available for that date"
+    assert response.status_code == 200
+    assert response.json()["status"] == "submitted"
+    assert response.json()["coordinator_id"] is None
 
 
 # ---------------------------------------------------------------- authorisation
@@ -336,7 +365,7 @@ async def test_read_endpoint_returns_the_request_to_its_organiser(
         response = await client.get(f"/api/event-requests/{submitted.id}")
 
     assert response.status_code == 200
-    assert response.json()["coordinator_id"] == str(submitted.coordinator_id)
+    assert response.json()["coordinator_id"] is None
 
 
 @pytest.mark.story("SCRUM-34")

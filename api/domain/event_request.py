@@ -4,10 +4,11 @@ Pure: the caller passes in the field values and the current time, and gets back 
 problems, each naming the field it is about. An empty list means the request may be
 submitted. Nothing here knows about the database, HTTP, or the ORM (ADR-0003).
 
-The temporary venue and equipment vocabulary is documented in the SCRUM-28 PR; a future
-catalogue story will replace these fixed values with database-backed options.
+Venue requirements remain a fixed vocabulary. Equipment types are supplied by the service
+from the catalogue, so this module stays independent of database access.
 """
 
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass, fields
 from datetime import datetime
 
@@ -34,21 +35,26 @@ VENUE_REQUIREMENTS: frozenset[str] = frozenset(
     }
 )
 
-EQUIPMENT_REQUIREMENTS: frozenset[str] = frozenset(
-    {
-        "Projector-type requirement",
-        "Microphone-type requirement",
-        "PA system-type requirement",
-        "Display screen-type requirement",
-    }
-)
-
 EQUIPMENT_REQUIREMENT_FACILITIES: dict[str, str] = {
     "Projector-type requirement": "Projector",
     "Microphone-type requirement": "Microphone",
     "PA system-type requirement": "PA system",
     "Display screen-type requirement": "Display screen",
 }
+
+
+# SCRUM-36 AC3: the fields an ordinary planning update may change after submission.
+# Date/time, expected attendance, venue and equipment requirements are left out on
+# purpose: changing any of them can affect venue, equipment and registration arrangements
+# already made, so they need change control rather than an ordinary edit.
+ORDINARY_FIELDS: tuple[str, ...] = (
+    "name",
+    "purpose",
+    "description",
+    "accessibility_requirement",
+    "layout_requirement",
+    "registration_requirement",
+)
 
 
 @dataclass(frozen=True)
@@ -69,16 +75,22 @@ class EventRequestFields:
     registration_requirement: str | None = None
 
 
-def validate_catalogue_requirements(request: EventRequestFields) -> list[FieldProblem]:
-    """Reject supplied venue and equipment values outside the temporary catalogue."""
+def validate_catalogue_requirements(
+    request: EventRequestFields, equipment_types: Collection[str] | None = None
+) -> list[FieldProblem]:
+    """Reject invalid venue values and equipment outside the supplied catalogue types.
+
+    ``equipment_types`` is injected by the service, keeping this domain function free of
+    database access. The optional value retains the original fixed vocabulary for callers
+    that do not yet have a catalogue snapshot.
+    """
     problems: list[FieldProblem] = []
     if not _is_blank(request.venue_requirement) and (
         request.venue_requirement not in VENUE_REQUIREMENTS
     ):
         problems.append(FieldProblem("venue_requirement", "is not a catalogue option"))
-    if (
-        not _is_blank(request.equipment_requirement)
-        and request.equipment_requirement not in EQUIPMENT_REQUIREMENTS
+    if not _is_blank(request.equipment_requirement) and request.equipment_requirement not in (
+        equipment_types if equipment_types is not None else EQUIPMENT_REQUIREMENT_FACILITIES.keys()
     ):
         problems.append(FieldProblem("equipment_requirement", "is not a catalogue option"))
     return problems
@@ -93,7 +105,11 @@ def _is_aware(value: datetime) -> bool:
     return value.tzinfo is not None and value.tzinfo.utcoffset(value) is not None
 
 
-def validate_event_request(request: EventRequestFields, now: datetime) -> list[FieldProblem]:
+def validate_event_request(
+    request: EventRequestFields,
+    now: datetime,
+    equipment_types: Collection[str] | None = None,
+) -> list[FieldProblem]:
     """Return every business-rule problem; an empty list means it is complete and valid."""
     problems: list[FieldProblem] = []
 
@@ -101,7 +117,7 @@ def validate_event_request(request: EventRequestFields, now: datetime) -> list[F
         if _is_blank(getattr(request, name)):
             problems.append(FieldProblem(name, "is required"))
 
-    problems.extend(validate_catalogue_requirements(request))
+    problems.extend(validate_catalogue_requirements(request, equipment_types))
 
     problems.extend(_period_problems(request.start_at, request.end_at, now))
 
@@ -138,3 +154,16 @@ def _period_problems(
 def field_names() -> tuple[str, ...]:
     """Every submittable field, in ticket order — used by callers that copy values across."""
     return tuple(f.name for f in fields(EventRequestFields))
+
+
+def validate_ordinary_update(changes: Mapping[str, str | None]) -> list[FieldProblem]:
+    """SCRUM-36 AC2: problems with an ordinary update, one per field. Empty means valid.
+
+    Every ordinary field is required for a request to be submitted (SCRUM-46), so once
+    submitted an update may change one but never blank it. Only sent fields are checked.
+    """
+    return [
+        FieldProblem(name, "is required")
+        for name in ORDINARY_FIELDS
+        if name in changes and _is_blank(changes[name])
+    ]

@@ -32,6 +32,17 @@ def list_active(db: Session) -> list[Venue]:
     return list(db.scalars(statement))
 
 
+def list_all(db: Session) -> list[Venue]:
+    """Every venue, active or not, by name (SCRUM-89).
+
+    Unlike `list_active`, this includes deactivated venues. A venue taken out of the
+    catalogue under ADR-0012 keeps the bookings already made for it, and those are the
+    ones least likely to be looked at, so a review that skipped them would hide exactly
+    the problems most likely to be missed.
+    """
+    return list(db.scalars(select(Venue).order_by(Venue.name)))
+
+
 def save(db: Session, venue: Venue) -> Venue:
     """Commit the venue's pending changes and reload it with database-set values."""
     db.add(venue)

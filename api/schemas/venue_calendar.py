@@ -6,12 +6,12 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from domain.venue_calendar import DetailsStatus
+from domain.venue_calendar import DetailsStatus, EntryStatus
 
 
 class CalendarEntryRead(BaseModel):
-    """One calendar entry. `status` tells a confirmed booking, a pending request and an
-    unavailability block apart (AC1)."""
+    """One calendar entry. `status` tells a confirmed booking, a tentative hold
+    (SCRUM-83 AC2), a pending request and an unavailability block apart (AC1)."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -21,15 +21,21 @@ class CalendarEntryRead(BaseModel):
     venue_name: str
     start_at: datetime
     end_at: datetime
-    status: Literal["confirmed", "pending", "unavailable"]
+    status: EntryStatus
+    # SCRUM-82: the period the venue is actually held. Equal to the event period when the
+    # venue has no buffers, and always for a closure.
+    effective_start_at: datetime
+    effective_end_at: datetime
+    # SCRUM-83 AC2: when a tentative hold ends.
+    expires_at: datetime | None = None
 
 
 class AvailabilityRead(BaseModel):
     """SCRUM-76: the verdict for one venue and period, with the entries behind it.
 
-    `available` is true when no confirmed booking or closure overlaps the period and the
-    venue is active. It says nothing is holding the venue, not that the venue is open:
-    operating hours are not considered here.
+    `available` is true when no confirmed booking, tentative hold or closure overlaps the
+    period and the venue is active. It says nothing is holding the venue, not that the
+    venue is open: operating hours are not considered here.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -57,3 +63,4 @@ class CalendarEntryDetailsRead(BaseModel):
     status: DetailsStatus
     reason: str | None
     event_request_id: uuid.UUID | None
+    expires_at: datetime | None = None

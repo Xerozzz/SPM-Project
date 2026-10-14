@@ -1,5 +1,5 @@
 """Event request orchestration for SCRUM-46 (list, edit a draft, submit for review) and
-SCRUM-34 (auto-assign an Event Coordinator on first submission).
+SCRUM-101 (unassigned queue for manual Coordinator Lead assignment).
 
 Each function loads the request, checks the caller owns it, asks the domain layer whether
 the action is allowed, and persists the outcome. Every failure is a typed exception so the
@@ -12,16 +12,21 @@ from typing import cast
 
 from core.database import Session
 from domain import event_status
-from domain.coordinator_assignment import select_next_coordinator
 from domain.event_request import (
+    ORDINARY_FIELDS,
     EventRequestFields,
     FieldProblem,
     field_names,
     validate_catalogue_requirements,
     validate_event_request,
+    validate_ordinary_update,
 )
+from domain.roles import Role
+from models.event_coordinator_assignment import EventCoordinatorAssignment
 from models.event_request import EventRequest
 from models.user import User
+from repositories import coordinator_assignments as history_repo
+from repositories import equipment as equipment_repo
 from repositories import event_requests as repo
 from repositories import users as users_repo
 
@@ -50,6 +55,19 @@ class IncompleteEventRequestError(EventRequestError):
         self.problems = problems
 
 
+class AlreadyAssignedError(EventRequestError):
+    """SCRUM-98: the request already has an owner, so initial assignment is refused."""
+
+
+class InvalidAssigneeError(EventRequestError):
+    """SCRUM-98: the chosen owner is not an active Event Coordinator."""
+
+
+class StaleAssignmentError(EventRequestError):
+    """SCRUM-97: the request no longer has the expected owner — a concurrent
+    reassignment won first, so this attempt is a conflict, not an overwrite."""
+
+
 def list_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventRequest]:
     """The organiser's own requests, newest first."""
     return repo.list_for_organiser(db, organiser_id)
@@ -69,7 +87,7 @@ def create(
     db: Session, organiser_id: uuid.UUID, fields: EventRequestFields, now: datetime
 ) -> EventRequest:
     """Create a new request without submitting or allocating anything."""
-    problems = validate_event_request(fields, now)
+    problems = validate_event_request(fields, now, equipment_repo.list_distinct_active_types(db))
     if problems:
         raise IncompleteEventRequestError(problems)
     request = EventRequest(organiser_id=organiser_id, **fields.__dict__)
@@ -80,6 +98,12 @@ def list_visible_drafts_for_organiser(db: Session, organiser_id: uuid.UUID) -> l
     """Drafts visible to this organiser through their organisation membership."""
     organiser = _user_or_forbidden(db, organiser_id)
     return repo.list_drafts_for_organisation(db, organiser.organisation_id)
+
+
+def list_organisation_calendar(db: Session, organiser_id: uuid.UUID) -> list[EventRequest]:
+    """SCRUM-87: dated requests visible through the organiser's stored membership."""
+    organiser = _user_or_forbidden(db, organiser_id)
+    return repo.list_calendar_for_organisation(db, organiser.organisation_id)
 
 
 def create_draft(db: Session, organiser_id: uuid.UUID, fields: dict[str, object]) -> EventRequest:
@@ -102,10 +126,38 @@ def update_draft(
         venue_requirement=cast(str | None, changes.get("venue_requirement")),
         equipment_requirement=cast(str | None, changes.get("equipment_requirement")),
     )
-    problems = validate_catalogue_requirements(catalogue_changes)
+    problems = validate_catalogue_requirements(
+        catalogue_changes, equipment_repo.list_distinct_active_types(db)
+    )
     if problems:
         raise IncompleteEventRequestError(problems)
     for name in field_names():
+        if name in changes:
+            setattr(request, name, changes[name])
+    return repo.save(db, request)
+
+
+def update_planning_info(
+    db: Session, request_id: uuid.UUID, coordinator_id: uuid.UUID, changes: dict[str, str | None]
+) -> EventRequest:
+    """SCRUM-36: the assigned coordinator updates ordinary planning information (AC2).
+
+    require_event_access(UPDATE_PLANNING_INFO) has already checked the caller. The row is
+    then read locked and checked again, so a request reassigned or rejected in between is
+    refused rather than edited. Only ORDINARY_FIELDS are copied (AC3), and the status is
+    never touched, so an update cannot move the request through its lifecycle.
+    """
+    request = repo.get_for_update(db, request_id)
+    if request is None:
+        raise EventRequestNotFoundError
+    if request.coordinator_id != coordinator_id or not event_status.is_active_status(
+        request.status
+    ):
+        raise NotAuthorisedError
+    problems = validate_ordinary_update(changes)
+    if problems:
+        raise IncompleteEventRequestError(problems)
+    for name in ORDINARY_FIELDS:
         if name in changes:
             setattr(request, name, changes[name])
     return repo.save(db, request)
@@ -118,25 +170,125 @@ def submit(
     fields. AC4 holds by construction — nothing here touches venues, equipment or
     registration, and no other code runs on submission.
 
-    SCRUM-34: this is also the only way a request becomes SUBMITTED, so it is the one
-    place that can be "first submission" — a coordinator is assigned here, once. A
-    request that already has one (because the transition table let it be submitted more
-    than once, e.g. after a future clarification round) is left alone.
+    SCRUM-101 (Week 7 manual-assignment policy): submission leaves the request
+    unassigned. A Coordinator Lead assigns it later (SCRUM-98). See ADR-0020.
     """
     # Locked read: two organisers' browsers double-clicking "Submit" at the same instant
     # serialise here, and the second sees SUBMITTED and gets a 409 rather than a second
     # success. See repositories.event_requests.get_for_update.
     request = _owned_by(db, request_id, organiser_id, lock=True)
-    problems = validate_event_request(_fields_of(request), now)
+    problems = validate_event_request(
+        _fields_of(request), now, equipment_repo.list_distinct_active_types(db)
+    )
     if problems:
         raise IncompleteEventRequestError(problems)
     # The only place status changes, and the value comes from the state machine
     # (AGENTS.md §3). InvalidTransitionError propagates if the request is not a draft.
     request.status = event_status.submit(request.status)
     request.submitted_at = now
-    if request.coordinator_id is None:
-        _assign_coordinator(db, request, now)
     return repo.save(db, request)
+
+
+def list_unassigned_for_lead(db: Session) -> list[repo.UnassignedRow]:
+    """SCRUM-101: unassigned Submitted requests for the Coordinator Lead queue."""
+    return repo.list_unassigned_submitted(db)
+
+
+def list_active_for_lead(db: Session) -> list[repo.ActiveRow]:
+    """SCRUM-100: every active request with its current coordinator for the Lead overview."""
+    return repo.list_active_for_lead(db)
+
+
+def list_assignable_coordinators(db: Session) -> list[User]:
+    """SCRUM-98: active Event Coordinators the Lead may pick as the owner."""
+    return users_repo.list_active_coordinators(db)
+
+
+def assign_coordinator(
+    db: Session,
+    request_id: uuid.UUID,
+    coordinator_id: uuid.UUID,
+    now: datetime,
+    acted_by_id: uuid.UUID | None = None,
+) -> EventRequest:
+    """SCRUM-98: a Lead assigns an unassigned Submitted request to an active coordinator.
+
+    The row is locked before checking `coordinator_id is None`, so two Leads assigning
+    the same request serialise here: the winner commits first and the loser then sees
+    an owner and receives AlreadyAssignedError rather than silently overwriting.
+    SCRUM-97: the first assignment also appends a history entry with no previous
+    owner, so A→B→C chains are complete from here forward.
+    """
+    request = repo.get_for_update(db, request_id)
+    if request is None:
+        raise EventRequestNotFoundError
+    if request.status is not event_status.EventStatus.SUBMITTED:
+        raise AlreadyAssignedError
+    if request.coordinator_id is not None:
+        raise AlreadyAssignedError
+    candidate = users_repo.get(db, coordinator_id)
+    if (
+        candidate is None
+        or not candidate.is_active
+        or Role.COORDINATOR.value not in list(candidate.roles)
+    ):
+        raise InvalidAssigneeError
+    request.coordinator_id = candidate.id
+    request.assigned_at = now
+    if acted_by_id is not None:
+        history_repo.append(db, request.id, None, candidate.id, acted_by_id, now)
+    return repo.save(db, request)
+
+
+def reassign_coordinator(
+    db: Session,
+    request_id: uuid.UUID,
+    coordinator_id: uuid.UUID,
+    expected_coordinator_id: uuid.UUID,
+    acted_by_id: uuid.UUID,
+    now: datetime,
+) -> EventRequest:
+    """SCRUM-97: a Lead moves an active assigned request to another active coordinator.
+
+    The row is locked first; the locked owner must still equal `expected_coordinator_id`
+    (the owner the Lead saw), otherwise a concurrent reassignment won first and this
+    attempt is a StaleAssignmentError. Only active statuses may be reassigned, the
+    replacement must be an active Event Coordinator different from the current owner,
+    and the owner change plus the history entry commit together — arrangements
+    (details, clarifications, venue bookings) are never touched here.
+    """
+    request = repo.get_for_update(db, request_id)
+    if request is None:
+        raise EventRequestNotFoundError
+    if request.status not in event_status.ACTIVE_STATUSES:
+        raise AlreadyAssignedError
+    if request.coordinator_id is None:
+        raise AlreadyAssignedError
+    if request.coordinator_id != expected_coordinator_id:
+        raise StaleAssignmentError
+    candidate = users_repo.get(db, coordinator_id)
+    if (
+        candidate is None
+        or not candidate.is_active
+        or Role.COORDINATOR.value not in list(candidate.roles)
+    ):
+        raise InvalidAssigneeError
+    if candidate.id == request.coordinator_id:
+        raise InvalidAssigneeError
+    previous = request.coordinator_id
+    request.coordinator_id = candidate.id
+    request.assigned_at = now
+    history_repo.append(db, request.id, previous, candidate.id, acted_by_id, now)
+    return repo.save(db, request)
+
+
+def list_assignment_history(db: Session, request_id: uuid.UUID) -> list[EventCoordinatorAssignment]:
+    """SCRUM-97: a request's assignment history, oldest first. Empty when the request
+    was assigned before this story's migration landed (ADR-0021)."""
+    request = repo.get(db, request_id)
+    if request is None:
+        raise EventRequestNotFoundError
+    return history_repo.list_for_event(db, request_id)
 
 
 def approve(
@@ -161,17 +313,6 @@ def reject(
     request.decided_at = now
     request.rejection_reason = reason.strip()
     return repo.save(db, request)
-
-
-def _assign_coordinator(db: Session, request: EventRequest, now: datetime) -> None:
-    """SCRUM-34: round-robin over active coordinators, skipping anyone already
-    confirmed for that date. Raises NoAvailableCoordinatorError if none are free."""
-    assert request.start_at is not None
-    pool = [coordinator.id for coordinator in users_repo.list_active_coordinators(db)]
-    last_assigned = repo.last_assigned_coordinator_id(db)
-    unavailable = repo.coordinator_ids_confirmed_on(db, request.start_at)
-    request.coordinator_id = select_next_coordinator(pool, last_assigned, unavailable)
-    request.assigned_at = now
 
 
 def _owned_by(

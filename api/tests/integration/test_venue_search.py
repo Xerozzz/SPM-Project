@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 from domain.event_status import EventStatus
 from domain.roles import Role
 from domain.venue_booking import BookingStatus
+from domain.venue_buffer import VenueBuffers, effective_interval
 from models.event_request import EventRequest
 from models.organisation import Organisation
 from models.user import User
@@ -45,6 +46,24 @@ _SGT = ZoneInfo("Asia/Singapore")
 # 1 Dec 2026 10:00 SGT through 3 Dec 2026 12:00 SGT, as UTC instants.
 SEARCH_START = "2026-12-01T02:00:00+00:00"
 SEARCH_END = "2026-12-03T04:00:00+00:00"
+
+
+def effective_for(venue: Venue, start_at: datetime, end_at: datetime) -> tuple[datetime, datetime]:
+    """SCRUM-82: the stored effective interval, as services.venue_bookings computes it.
+
+    Shared with the other booking test modules, which import it from here as they already
+    import `make_venue`.
+
+    Set explicitly rather than defaulted on the model, so a production path that forgets
+    it fails loudly instead of silently storing the event period as the occupied one.
+    """
+    return effective_interval(
+        start_at,
+        end_at,
+        VenueBuffers(
+            setup_minutes=venue.setup_minutes, turnaround_minutes=venue.turnaround_minutes
+        ),
+    )
 
 
 def make_venue(db: Session, **overrides: Any) -> Venue:
@@ -132,6 +151,8 @@ def _make_booking(
             requested_by_id=coordinator.id,
             start_at=_sgt(day, start),
             end_at=_sgt(day, end),
+            effective_start_at=effective_for(venue, _sgt(day, start), _sgt(day, end))[0],
+            effective_end_at=effective_for(venue, _sgt(day, start), _sgt(day, end))[1],
             status=status,
         )
     )

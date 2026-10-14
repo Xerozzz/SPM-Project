@@ -7,7 +7,6 @@ from typing import Any
 import pytest
 
 from domain.event_request import (
-    EQUIPMENT_REQUIREMENTS,
     REQUIRED_TEXT_FIELDS,
     VENUE_REQUIREMENTS,
     EventRequestFields,
@@ -148,7 +147,6 @@ def test_catalogue_requirements_accept_the_temporary_options() -> None:
     request = complete_request()
 
     assert request.venue_requirement in VENUE_REQUIREMENTS
-    assert request.equipment_requirement in EQUIPMENT_REQUIREMENTS
     assert validate_catalogue_requirements(request) == []
 
 
@@ -165,6 +163,16 @@ def test_catalogue_requirements_reject_unknown_values_but_allow_empty_draft_fiel
         FieldProblem("equipment_requirement", "is not a catalogue option"),
     ]
     assert validate_catalogue_requirements(EventRequestFields()) == []
+
+
+@pytest.mark.story("SCRUM-90")
+def test_catalogue_requirements_use_the_supplied_equipment_types() -> None:
+    request = replace(complete_request(), equipment_requirement="Projector")
+
+    assert validate_catalogue_requirements(request, ["Projector", "Microphone"]) == []
+    assert validate_catalogue_requirements(request, ["Microphone"]) == [
+        FieldProblem("equipment_requirement", "is not a catalogue option")
+    ]
 
 
 @pytest.mark.story("SCRUM-46")

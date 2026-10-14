@@ -31,6 +31,10 @@ function venue(overrides: Record<string, unknown> = {}) {
     accessibility_features: ['Step-free access'],
     opens_at: '08:00:00',
     closes_at: '22:00:00',
+    // SCRUM-82: no buffers by default, which is what every venue has until Venue Staff
+    // set one, and the state AC7 says must behave exactly as it did before the story.
+    setup_minutes: 0,
+    turnaround_minutes: 0,
     is_active: true,
     ...overrides,
   }
@@ -415,4 +419,134 @@ test('an empty or untidy list of facilities is sent as a clean array', async () 
   })
   expect(body.facilities).toEqual(['Projector', 'Hearing loop'])
   expect(body.accessibility_features).toEqual([])
+})
+
+
+// --------------------------------------------------------------- SCRUM-82 buffers
+
+test('SCRUM-82 AC1: venue staff can set both buffers when adding a venue', async () => {
+  let body: Record<string, unknown> = {}
+  renderCatalogue('venue_staff', async (_input, init) => {
+    if ((init?.method ?? 'GET') === 'GET') return json([])
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return json(venue({ name: 'Hall B', setup_minutes: 30, turnaround_minutes: 45 }), 201)
+  })
+
+  await screen.findByText('No venues in the catalogue yet.')
+  fireEvent.change(screen.getByLabelText(/^Setup time/), { target: { value: '30' } })
+  fireEvent.change(screen.getByLabelText(/^Turnaround time/), { target: { value: '45' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Add venue' }))
+
+  await waitFor(() => {
+    expect(body.setup_minutes).toBe(30)
+  })
+  expect(body.turnaround_minutes).toBe(45)
+})
+
+test('SCRUM-82 AC1: an untouched buffer is sent as null, not zero or an empty string', async () => {
+  // Absent means no buffer, which the API stores as zero. Sending "" would be a parser
+  // error instead of the named-field problem AC1 asks for, and sending 0 would claim the
+  // Venue Staff member had decided on no buffer when they had simply not filled it in.
+  let body: Record<string, unknown> = {}
+  renderCatalogue('venue_staff', async (_input, init) => {
+    if ((init?.method ?? 'GET') === 'GET') return json([])
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return json(venue(), 201)
+  })
+
+  await screen.findByText('No venues in the catalogue yet.')
+  fireEvent.click(screen.getByRole('button', { name: 'Add venue' }))
+
+  await waitFor(() => {
+    expect(body).toHaveProperty('setup_minutes')
+  })
+  expect(body.setup_minutes).toBeNull()
+  expect(body.turnaround_minutes).toBeNull()
+})
+
+test('SCRUM-82 AC1: a buffer cleared after being typed goes back to null', async () => {
+  // The untouched case above cannot catch this, because its onChange never fires. Found
+  // by mutation: sending Number('') would post 0, which claims a decision the Venue
+  // Staff member did not make, and the same slip the time fields already guard against.
+  let body: Record<string, unknown> = {}
+  renderCatalogue('venue_staff', async (_input, init) => {
+    if ((init?.method ?? 'GET') === 'GET') return json([])
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return json(venue(), 201)
+  })
+
+  await screen.findByText('No venues in the catalogue yet.')
+  fireEvent.change(screen.getByLabelText(/^Setup time/), { target: { value: '30' } })
+  fireEvent.change(screen.getByLabelText(/^Setup time/), { target: { value: '' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Add venue' }))
+
+  await waitFor(() => {
+    expect(body).toHaveProperty('setup_minutes')
+  })
+  expect(body.setup_minutes).toBeNull()
+})
+
+test('SCRUM-82 AC1: a negative buffer is reported against its own field', async () => {
+  let body: Record<string, unknown> = {}
+  renderCatalogue('venue_staff', async (_input, init) => {
+    if ((init?.method ?? 'GET') === 'GET') return json([])
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return json(
+      { detail: [{ field: 'setup_minutes', reason: 'must be zero or more minutes' }] },
+      422,
+    )
+  })
+
+  await screen.findByText('No venues in the catalogue yet.')
+  fireEvent.change(screen.getByLabelText(/^Setup time/), { target: { value: '-5' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Add venue' }))
+
+  // The value has to reach the API for the API to be the one refusing it. Asserted
+  // because the form could clamp it to zero and this test would still pass.
+  await waitFor(() => {
+    expect(body.setup_minutes).toBe(-5)
+  })
+  expect(
+    await screen.findByText(/Setup time \(minutes\) must be zero or more minutes/),
+  ).toBeInTheDocument()
+})
+
+test('SCRUM-82 AC2: the catalogue line shows the buffers a venue has', async () => {
+  renderCatalogue('coordinator', async () =>
+    json([venue({ setup_minutes: 30, turnaround_minutes: 45 })]),
+  )
+
+  expect(await screen.findByText(/30 min setup, 45 min turnaround/)).toBeInTheDocument()
+})
+
+test('SCRUM-82 AC7: a venue with no buffers says nothing about them', async () => {
+  // Zero is the normal case, so "0 min setup" on every line would be noise.
+  renderCatalogue('coordinator', async () => json([venue()]))
+
+  await screen.findByText('Hall A')
+  expect(screen.queryByText(/min setup/)).toBeNull()
+  expect(screen.queryByText(/min turnaround/)).toBeNull()
+})
+
+test('SCRUM-82: editing a venue prefills its buffers', async () => {
+  let body: Record<string, unknown> = {}
+  renderCatalogue('venue_staff', async (_input, init) => {
+    if ((init?.method ?? 'GET') === 'GET')
+      return json([venue({ setup_minutes: 30, turnaround_minutes: 45 })])
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return json(venue({ setup_minutes: 15, turnaround_minutes: 45 }))
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit Hall A' }))
+  expect(screen.getByLabelText(/^Setup time/)).toHaveValue(30)
+  expect(screen.getByLabelText(/^Turnaround time/)).toHaveValue(45)
+
+  fireEvent.change(screen.getByLabelText(/^Setup time/), { target: { value: '15' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+  await waitFor(() => {
+    expect(body.setup_minutes).toBe(15)
+  })
+  // The untouched one has to go back as it was, not be wiped by the save.
+  expect(body.turnaround_minutes).toBe(45)
 })

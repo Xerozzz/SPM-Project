@@ -10,19 +10,27 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.dependencies import EventAccess, require_event_access, require_role
-from domain.coordinator_assignment import NoAvailableCoordinatorError
 from domain.event_request import EventRequestFields
 from domain.event_status import EventRequestLockedError, InvalidTransitionError
 from domain.roles import Role
 from models.event_request import EventRequest
 from schemas.event_requests import (
+    ActiveAssignmentRead,
+    AssignableCoordinatorRead,
+    AssignmentHistoryRead,
+    EventCalendarEntryRead,
+    EventRequestAssign,
     EventRequestCreate,
     EventRequestDraftCreate,
+    EventRequestPlanningUpdate,
     EventRequestRead,
+    EventRequestReassign,
     EventRequestRejection,
     EventRequestUpdate,
     FieldProblemRead,
+    UnassignedEventRequestRead,
 )
+from services import equipment as equipment_service
 from services import event_requests as service
 
 router = APIRouter(prefix="/event-requests", tags=["event-requests"])
@@ -31,7 +39,11 @@ Organiser = Annotated[dict[str, object], Depends(require_role(Role.ORGANISER))]
 ViewableEventRequest = Annotated[EventRequest, Depends(require_event_access(EventAccess.VIEW))]
 EditableEventRequest = Annotated[EventRequest, Depends(require_event_access(EventAccess.EDIT))]
 DecidableEventRequest = Annotated[EventRequest, Depends(require_event_access(EventAccess.DECIDE))]
+PlanningUpdatableEventRequest = Annotated[
+    EventRequest, Depends(require_event_access(EventAccess.UPDATE_PLANNING_INFO))
+]
 Coordinator = Annotated[dict[str, object], Depends(require_role(Role.COORDINATOR))]
+CoordinatorLead = Annotated[dict[str, object], Depends(require_role(Role.COORDINATOR_LEAD))]
 Db = Annotated[Session, Depends(get_db)]
 
 # Everything the service or the status machine can refuse with, in one tuple so each route
@@ -40,7 +52,6 @@ _REFUSALS = (
     service.EventRequestError,
     EventRequestLockedError,
     InvalidTransitionError,
-    NoAvailableCoordinatorError,
 )
 
 
@@ -60,15 +71,20 @@ def _http_error(exc: Exception) -> HTTPException:
         return HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found")
     if isinstance(exc, service.NotTheOrganiserError | service.NotAuthorisedError):
         return HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
+    if isinstance(exc, service.InvalidAssigneeError):
+        return HTTPException(422, [{"field": "coordinator_id", "reason": "is not valid"}])
+    if isinstance(exc, service.StaleAssignmentError):
+        return HTTPException(
+            status.HTTP_409_CONFLICT,
+            "This request was reassigned by someone else — refresh and try again",
+        )
+    if isinstance(exc, service.AlreadyAssignedError):
+        return HTTPException(status.HTTP_409_CONFLICT, "This request already has an owner")
     if isinstance(exc, service.IncompleteEventRequestError):
         problems = [FieldProblemRead(field=p.field, reason=p.reason) for p in exc.problems]
         # A literal 422: Starlette renamed its constant between the versions we allow, so
         # neither HTTP_422_UNPROCESSABLE_ENTITY nor _CONTENT exists on all of them.
         return HTTPException(422, [p.model_dump() for p in problems])
-    if isinstance(exc, NoAvailableCoordinatorError):
-        return HTTPException(
-            status.HTTP_409_CONFLICT, "No active coordinator is available for that date"
-        )
     # Locked drafts and illegal transitions are conflicts with the request's current state.
     # The message is stable and for the organiser; the exception text is for logs.
     if isinstance(exc, EventRequestLockedError):
@@ -76,6 +92,87 @@ def _http_error(exc: Exception) -> HTTPException:
     else:
         detail = "This request has already been submitted"
     return HTTPException(status.HTTP_409_CONFLICT, detail)
+
+
+@router.get("/unassigned", response_model=list[UnassignedEventRequestRead])
+def list_unassigned_queue(_user: CoordinatorLead, db: Db) -> list[UnassignedEventRequestRead]:
+    """SCRUM-101: unassigned Submitted requests, oldest submission first.
+
+    Static route declared above `/{request_id}` so FastAPI matches it literally.
+    """
+    rows = service.list_unassigned_for_lead(db)
+    return [UnassignedEventRequestRead.from_row(request, email) for request, email in rows]
+
+
+@router.get("/assignable-coordinators", response_model=list[AssignableCoordinatorRead])
+def list_assignable_coordinators(_user: CoordinatorLead, db: Db) -> list[AssignableCoordinatorRead]:
+    """SCRUM-98: active Event Coordinators the Lead may pick as the owner.
+
+    Static route declared above `/{request_id}` so FastAPI matches it literally.
+    """
+    rows = service.list_assignable_coordinators(db)
+    return [AssignableCoordinatorRead.model_validate(row) for row in rows]
+
+
+@router.get("/active-assignments", response_model=list[ActiveAssignmentRead])
+def list_active_assignments(_user: CoordinatorLead, db: Db) -> list[ActiveAssignmentRead]:
+    """SCRUM-100: every active request with its current coordinator or Unassigned.
+
+    Static route declared above `/{request_id}` so FastAPI matches it literally.
+    """
+    rows = service.list_active_for_lead(db)
+    return [
+        ActiveAssignmentRead.from_row(request, organiser_email, coordinator_email)
+        for request, organiser_email, coordinator_email in rows
+    ]
+
+
+@router.post("/{request_id}/assign", response_model=EventRequestRead)
+def assign_coordinator(
+    request_id: uuid.UUID, body: EventRequestAssign, user: CoordinatorLead, db: Db
+) -> EventRequestRead:
+    """SCRUM-98: a Lead assigns an unassigned Submitted request to an active coordinator."""
+    try:
+        row = service.assign_coordinator(
+            db, request_id, body.coordinator_id, datetime.now(UTC), _coordinator_id(user)
+        )
+    except _REFUSALS as exc:
+        raise _http_error(exc) from exc
+    return EventRequestRead.model_validate(row)
+
+
+@router.post("/{request_id}/reassign", response_model=EventRequestRead)
+def reassign_coordinator(
+    request_id: uuid.UUID, body: EventRequestReassign, user: CoordinatorLead, db: Db
+) -> EventRequestRead:
+    """SCRUM-97: a Lead moves an active assigned request to another active coordinator."""
+    try:
+        row = service.reassign_coordinator(
+            db,
+            request_id,
+            body.coordinator_id,
+            body.expected_current_coordinator_id,
+            _coordinator_id(user),
+            datetime.now(UTC),
+        )
+    except _REFUSALS as exc:
+        raise _http_error(exc) from exc
+    return EventRequestRead.model_validate(row)
+
+
+@router.get("/{request_id}/assignment-history", response_model=list[AssignmentHistoryRead])
+def list_assignment_history(
+    request_id: uuid.UUID, _user: CoordinatorLead, db: Db
+) -> list[AssignmentHistoryRead]:
+    """SCRUM-97: the request's assignment history, oldest first.
+
+    Static suffix route declared above `/{request_id}` so FastAPI matches it literally.
+    """
+    try:
+        rows = service.list_assignment_history(db, request_id)
+    except _REFUSALS as exc:
+        raise _http_error(exc) from exc
+    return [AssignmentHistoryRead.model_validate(row) for row in rows]
 
 
 @router.get("", response_model=list[EventRequestRead])
@@ -120,6 +217,22 @@ def list_bookable_events(user: Coordinator, db: Db) -> list[EventRequestRead]:
     return [EventRequestRead.model_validate(row) for row in rows]
 
 
+@router.get("/organisation-calendar", response_model=list[EventCalendarEntryRead])
+def organisation_calendar(user: Organiser, db: Db) -> list[EventCalendarEntryRead]:
+    """SCRUM-87: dated events in the signed-in organiser's organisation."""
+    try:
+        rows = service.list_organisation_calendar(db, _organiser_id(user))
+    except _REFUSALS as exc:
+        raise _http_error(exc) from exc
+    return [EventCalendarEntryRead.model_validate(row) for row in rows]
+
+
+@router.get("/equipment-types", response_model=list[str])
+def list_equipment_types(_user: Organiser, db: Db) -> list[str]:
+    """Catalogue equipment types an organiser may select for a new request."""
+    return equipment_service.list_distinct_types(db)
+
+
 @router.get("/{request_id}", response_model=EventRequestRead)
 def get_event_request(request: ViewableEventRequest) -> EventRequestRead:
     """Return an event request visible to the signed-in user."""
@@ -134,6 +247,23 @@ def update_draft(
     try:
         changes = body.model_dump(exclude_unset=True)
         row = service.update_draft(db, request.id, _organiser_id(user), changes)
+    except _REFUSALS as exc:
+        raise _http_error(exc) from exc
+    return EventRequestRead.model_validate(row)
+
+
+@router.patch("/{request_id}/planning-info", response_model=EventRequestRead)
+def update_planning_info(
+    event: PlanningUpdatableEventRequest,
+    body: EventRequestPlanningUpdate,
+    user: Coordinator,
+    db: Db,
+) -> EventRequestRead:
+    """SCRUM-36: the assigned coordinator updates ordinary planning information (AC2).
+    Other fields are refused by the schema (AC3) and other users get 403 (AC4)."""
+    try:
+        changes = body.model_dump(exclude_unset=True)
+        row = service.update_planning_info(db, event.id, _coordinator_id(user), changes)
     except _REFUSALS as exc:
         raise _http_error(exc) from exc
     return EventRequestRead.model_validate(row)

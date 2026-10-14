@@ -18,6 +18,7 @@ from datetime import UTC, datetime, time, timedelta
 from core.database import Session, SessionLocal
 from core.security import hash_password
 from domain.roles import Role
+from models.equipment import Equipment
 from models.event_request import EventRequest
 from models.organisation import Organisation
 from models.user import User
@@ -35,9 +36,10 @@ _SEED_ORGANISATIONS: tuple[tuple[uuid.UUID, str], ...] = (
 _SEED_USERS: list[tuple[str, str, list[Role], uuid.UUID]] = [
     ("organiser@example.com", "password123", [Role.ORGANISER], _PRIMARY_ORG_ID),
     ("coordinator@example.com", "password123", [Role.COORDINATOR], _PRIMARY_ORG_ID),
-    # A second active coordinator, so a fresh `docker compose up` can demonstrate
-    # round-robin assignment (SCRUM-34) rather than always assigning the same one.
+    # A second active coordinator, so assignment demos have more than one candidate.
     ("coordinator2@example.com", "password123", [Role.COORDINATOR], _PRIMARY_ORG_ID),
+    # SCRUM-101: the Coordinator Lead triages the unassigned queue and assigns owners.
+    ("coordinator-lead@example.com", "password123", [Role.COORDINATOR_LEAD], _PRIMARY_ORG_ID),
     ("venue-staff@example.com", "password123", [Role.VENUE_STAFF], _PRIMARY_ORG_ID),
     ("tech-support@example.com", "password123", [Role.TECH_SUPPORT], _PRIMARY_ORG_ID),
     ("attendee@example.com", "password123", [Role.ATTENDEE], _PRIMARY_ORG_ID),
@@ -48,6 +50,23 @@ _SEED_USERS: list[tuple[str, str, list[Role], uuid.UUID]] = [
         _PRIMARY_ORG_ID,
     ),
 ]
+
+_SEED_EQUIPMENT: tuple[dict[str, object], ...] = (
+    {
+        "equipment_type": "Projector-type requirement",
+        "description": "Portable presentation projector",
+        "total_quantity": 4,
+        "location": "Media Store",
+        "operational_status": "Operational",
+    },
+    {
+        "equipment_type": "Microphone-type requirement",
+        "description": "Wireless presentation microphone",
+        "total_quantity": 4,
+        "location": "Audio Store",
+        "operational_status": "Operational",
+    },
+)
 
 
 # Fixed ids, so the samples can be found and replaced no matter what an organiser has
@@ -111,10 +130,8 @@ def _sample_event_requests() -> list[tuple[uuid.UUID, dict[str, object]]]:
         "layout_requirement": "Theatre style",
         "registration_requirement": "Open registration, capped at 180",
     }
-    # Submitted but not decided. Round-robin assignment (SCRUM-34) hands this one to the
-    # *second* coordinator, because the careers fair above already took the first, so a
-    # clean clone shows both halves of the review screen: one request you may decide and
-    # one that is somebody else's to decide.
+    # Submitted but not decided. SCRUM-101 leaves submissions unassigned, so a clean
+    # clone shows one in the Coordinator Lead unassigned queue.
     alumni_dinner: dict[str, object] = {
         "name": "Alumni Dinner",
         "purpose": "Reconnect alumni with the faculty",
@@ -216,6 +233,21 @@ def _seed_users(db: Session) -> None:
             )
 
 
+def _seed_equipment(db: Session) -> None:
+    """Insert the catalogue entries used by the sample event requests when missing."""
+    for values in _SEED_EQUIPMENT:
+        if (
+            db.query(Equipment)
+            .filter(
+                Equipment.equipment_type == values["equipment_type"],
+                Equipment.location == values["location"],
+            )
+            .first()
+            is None
+        ):
+            db.add(Equipment(**values))
+
+
 def _seed_event_requests(db: Session) -> None:
     """Replace the sample requests so they are back in Draft, whatever happened to them."""
     organiser = users_repo.get_by_email(db, "organiser@example.com")
@@ -242,14 +274,18 @@ def _seed_event_requests(db: Session) -> None:
 def _approve_sample(db: Session, organiser_id: uuid.UUID, request_id: uuid.UUID) -> None:
     """Drive one sample to Approved through the same services the UI calls.
 
-    Submitting assigns a coordinator (SCRUM-34 round-robin), and only that coordinator may
-    approve, so this also leaves a correctly assigned request behind rather than a row that
-    happens to say "approved". Nothing here writes `status`.
+    SCRUM-101 leaves submissions unassigned, so the seed assigns the first active
+    coordinator directly (test/demo setup, not a user path) before approving — only
+    the assigned coordinator may approve. Nothing here writes `status`.
     """
     now = datetime.now(UTC)
     submitted = event_requests_service.submit(db, request_id, organiser_id, now)
-    if submitted.coordinator_id is None:
+    coordinators = users_repo.list_active_coordinators(db)
+    if not coordinators:
         return
+    submitted.coordinator_id = coordinators[0].id
+    submitted.assigned_at = now
+    db.flush()
     event_requests_service.approve(db, request_id, submitted.coordinator_id, now)
 
 
@@ -259,6 +295,8 @@ def main() -> None:
         _seed_organisations(db)
         db.flush()
         _seed_users(db)
+        db.flush()
+        _seed_equipment(db)
         db.flush()
         _seed_event_requests(db)
         _seed_venues(db)

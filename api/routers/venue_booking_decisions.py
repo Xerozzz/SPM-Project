@@ -1,5 +1,5 @@
 """Venue Staff endpoints to review and reject venue booking requests (SCRUM-40), with
-what would block approving each one (SCRUM-75).
+what would block approving each one (SCRUM-75), and to place tentative holds (SCRUM-83).
 
 Approve is on the same /venue-bookings prefix but lives in routers/venue_bookings.py
 (the `decisions` router from SCRUM-74, ADR-0017). Both are registered in main.py.
@@ -14,10 +14,16 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.dependencies import require_role
+from domain.booking_conflict import BookingConflictError
 from domain.roles import Role
 from domain.venue_booking import InvalidBookingTransitionError
-from schemas.venue_booking_decisions import VenueBookingDecisionRead, VenueBookingReject
+from schemas.venue_booking_decisions import (
+    VenueBookingDecisionRead,
+    VenueBookingHold,
+    VenueBookingReject,
+)
 from services import venue_booking_decisions as service
+from services import venue_bookings
 
 router = APIRouter(prefix="/venue-bookings", tags=["venue-booking-decisions"])
 
@@ -34,6 +40,24 @@ def list_booking_requests(user: VenueStaff, db: Db) -> list[VenueBookingDecision
     del user
     items = service.list_requests(db)
     return [VenueBookingDecisionRead.from_context(*row, conflict) for row, conflict in items]
+
+
+@router.post("/{booking_id}/hold", response_model=VenueBookingDecisionRead)
+def hold_booking_request(
+    booking_id: uuid.UUID, body: VenueBookingHold, user: VenueStaff, db: Db
+) -> VenueBookingDecisionRead:
+    """SCRUM-83: put a pending request on a tentative hold until `expires_at` (AC1).
+    A clash or a request that is not pending is 409, a bad expiry 422 (AC3)."""
+    try:
+        venue_bookings.hold(db, booking_id, _user_id(user), body.expires_at, datetime.now(UTC))
+    except venue_bookings.BookingNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Venue booking request not found") from exc
+    except venue_bookings.InvalidHoldError as exc:
+        problems = [{"field": p.field, "reason": p.reason} for p in exc.problems]
+        raise HTTPException(422, problems) from exc
+    except (BookingConflictError, InvalidBookingTransitionError) as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    return VenueBookingDecisionRead.from_context(*service.get(db, booking_id))
 
 
 @router.post("/{booking_id}/reject", response_model=VenueBookingDecisionRead)

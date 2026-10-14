@@ -1,10 +1,10 @@
 """Venue Staff booking decision contracts (SCRUM-40, SCRUM-75)."""
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 from domain.booking_conflict import (
     BookingConflictError,
@@ -24,10 +24,25 @@ class VenueBookingReject(BaseModel):
     reason: str | None = Field(default=None, max_length=MAX_REASON_LENGTH)
 
 
-class ConflictRead(BaseModel):
-    """SCRUM-75 AC1: what the SCRUM-73 check says would block approving a request."""
+class VenueBookingHold(BaseModel):
+    """SCRUM-83 AC1: when a tentative hold stops holding the venue."""
 
-    kind: Literal["booking", "unavailability"]
+    model_config = ConfigDict(extra="forbid")
+
+    # AwareDatetime: an expiry without a time zone is refused at the door (AGENTS.md 3).
+    expires_at: AwareDatetime
+
+    @field_validator("expires_at")
+    @classmethod
+    def _to_utc(cls, value: datetime) -> datetime:
+        return value.astimezone(UTC)
+
+
+class ConflictRead(BaseModel):
+    """SCRUM-75 AC1: what the SCRUM-73 check says would block approving a request.
+    SCRUM-83: `hold` when the clash is a tentative hold rather than a confirmed booking."""
+
+    kind: Literal["booking", "hold", "unavailability"]
     id: uuid.UUID
     start_at: datetime
     end_at: datetime
@@ -38,7 +53,7 @@ class ConflictRead(BaseModel):
         if isinstance(exc, ConflictingBookingError):
             booking = exc.booking
             return cls(
-                kind="booking",
+                kind="hold" if booking.status is BookingStatus.TENTATIVE else "booking",
                 id=booking.id,
                 start_at=booking.start_at,
                 end_at=booking.end_at,
@@ -75,6 +90,12 @@ class VenueBookingDecisionRead(BaseModel):
     decided_by_id: uuid.UUID | None
     decided_at: datetime | None
     decision_reason: str | None
+    # SCRUM-83: the hold, when Venue Staff placed one, and the event's assigned
+    # Coordinator it is held for (AC1).
+    expires_at: datetime | None = None
+    held_by_id: uuid.UUID | None = None
+    held_at: datetime | None = None
+    coordinator_id: uuid.UUID | None = None
     conflict: ConflictRead | None = None
 
     @classmethod
@@ -104,6 +125,10 @@ class VenueBookingDecisionRead(BaseModel):
             decided_by_id=booking.decided_by_id,
             decided_at=booking.decided_at,
             decision_reason=booking.decision_reason,
+            expires_at=booking.expires_at,
+            held_by_id=booking.held_by_id,
+            held_at=booking.held_at,
+            coordinator_id=event.coordinator_id,
             conflict=_conflict_read(conflict),
         )
 

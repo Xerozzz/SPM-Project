@@ -4,6 +4,7 @@ import pytest
 
 from domain.event_status import (
     _ALLOWED_TRANSITIONS,
+    ACTIVE_STATUSES,
     EventAction,
     EventRequestLockedError,
     EventStatus,
@@ -11,6 +12,7 @@ from domain.event_status import (
     allowed_actions,
     approve,
     ensure_editable,
+    is_active_status,
     is_editable,
     reject,
     submit,
@@ -99,3 +101,29 @@ def test_actions_are_lowercase_strings_for_the_api() -> None:
     assert EventAction.EDIT.value == "edit"
     assert EventAction.APPROVE.value == "approve"
     assert EventAction.REJECT.value == "reject"
+
+
+@pytest.mark.story("SCRUM-100")
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (EventStatus.SUBMITTED, True),
+        (EventStatus.APPROVED, True),
+        (EventStatus.CONFIRMED, True),
+        (EventStatus.DRAFT, False),
+        (EventStatus.REJECTED, False),
+    ],
+)
+def test_active_status_classification(status: EventStatus, expected: bool) -> None:
+    """TC-100-01: every status is classified active/inactive exactly once, in the
+    domain layer — the single definition the repository, service and UI share."""
+    assert is_active_status(status) is expected
+
+
+@pytest.mark.story("SCRUM-100")
+def test_active_statuses_cover_every_known_status() -> None:
+    """TC-100-01 boundary: no status is left unclassified when a new one is added —
+    adding a value without deciding its bucket fails here."""
+    assert set(ACTIVE_STATUSES) | {EventStatus.DRAFT, EventStatus.REJECTED} == set(EventStatus)
+    for status in EventStatus:
+        assert is_active_status(status) is (status in ACTIVE_STATUSES)

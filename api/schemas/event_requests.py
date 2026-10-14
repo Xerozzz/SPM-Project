@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime
+from typing import Self
 
 from pydantic import (
     AwareDatetime,
@@ -12,6 +13,7 @@ from pydantic import (
 )
 
 from domain.event_status import EventAction, EventStatus, allowed_actions
+from models.event_request import EventRequest
 
 
 class EventRequestCreate(BaseModel):
@@ -68,12 +70,42 @@ class EventRequestUpdate(BaseModel):
         return None if value is None else value.astimezone(UTC)
 
 
+class EventRequestPlanningUpdate(BaseModel):
+    """SCRUM-36: the ordinary planning fields the assigned coordinator may change.
+
+    extra="forbid" is what keeps AC3: a body that includes start_at, end_at,
+    expected_attendance, venue_requirement or equipment_requirement is a 422 and nothing
+    is saved, so those fields cannot change through this flow.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    purpose: str | None = None
+    description: str | None = None
+    accessibility_requirement: str | None = None
+    layout_requirement: str | None = None
+    registration_requirement: str | None = None
+
+
 class EventRequestDraftCreate(EventRequestUpdate):
     """Fields an organiser may provide when first saving a draft.
 
     Same optional contract as an update: SCRUM-29 allows a draft to be incomplete until
     the organiser chooses to submit it.
     """
+
+
+class EventCalendarEntryRead(BaseModel):
+    """SCRUM-87: read-only calendar details, with no implied edit permissions."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str | None
+    start_at: AwareDatetime
+    end_at: AwareDatetime
+    status: EventStatus
 
 
 class EventRequestRead(BaseModel):
@@ -128,3 +160,111 @@ class FieldProblemRead(BaseModel):
 
     field: str
     reason: str
+
+
+class UnassignedEventRequestRead(BaseModel):
+    """SCRUM-101: one row of the Coordinator Lead unassigned queue.
+
+    Only the fields the acceptance criteria require: event ID, name, organiser email,
+    start/end, expected attendance, and submission time. No unrelated private fields.
+    """
+
+    id: uuid.UUID
+    name: str | None
+    organiser_email: str
+    start_at: datetime | None
+    end_at: datetime | None
+    expected_attendance: int | None
+    submitted_at: datetime | None
+
+    @classmethod
+    def from_row(cls, request: EventRequest, organiser_email: str) -> Self:
+        """Build a queue row from the request and its organiser's email."""
+        return cls(
+            id=request.id,
+            name=request.name,
+            organiser_email=organiser_email,
+            start_at=request.start_at,
+            end_at=request.end_at,
+            expected_attendance=request.expected_attendance,
+            submitted_at=request.submitted_at,
+        )
+
+
+class EventRequestAssign(BaseModel):
+    """SCRUM-98: the Lead's chosen owner for an unassigned Submitted request."""
+
+    coordinator_id: uuid.UUID
+
+
+class EventRequestReassign(BaseModel):
+    """SCRUM-97: the Lead's replacement owner plus the owner the Lead saw.
+
+    `expected_current_coordinator_id` is optimistic concurrency: the service refuses
+    with 409 when the locked row no longer has this owner, so a stale screen cannot
+    silently overwrite a concurrent reassignment.
+    """
+
+    coordinator_id: uuid.UUID
+    expected_current_coordinator_id: uuid.UUID
+
+
+class AssignmentHistoryRead(BaseModel):
+    """SCRUM-97: one immutable assignment entry, oldest first.
+
+    `previous_coordinator_id` is None only for the first assignment after this story's
+    migration landed; requests assigned earlier have no history rows at all (ADR-0021).
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    previous_coordinator_id: uuid.UUID | None
+    new_coordinator_id: uuid.UUID
+    acted_by_id: uuid.UUID
+    assigned_at: datetime
+
+
+class AssignableCoordinatorRead(BaseModel):
+    """SCRUM-98: one eligible owner the Lead may pick — active Event Coordinators only."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    email: str
+
+
+class ActiveAssignmentRead(BaseModel):
+    """SCRUM-100: one row of the Lead active-assignment overview.
+
+    Current ownership only: `coordinator_email` is the present owner's email or None
+    (rendered as Unassigned). Historical owners never appear here. SCRUM-97 adds
+    `coordinator_id` — the current owner's id (None when unassigned) — so the Lead UI
+    can send it back as `expected_current_coordinator_id` for optimistic concurrency
+    (ADR-0021). It is the same owner the email names, not a second source of truth.
+    """
+
+    id: uuid.UUID
+    name: str | None
+    status: EventStatus
+    organiser_email: str
+    start_at: datetime | None
+    end_at: datetime | None
+    coordinator_id: uuid.UUID | None
+    coordinator_email: str | None
+
+    @classmethod
+    def from_row(
+        cls, request: EventRequest, organiser_email: str, coordinator_email: str | None
+    ) -> Self:
+        """Build an overview row from the request and its owners' emails."""
+        return cls(
+            id=request.id,
+            name=request.name,
+            status=request.status,
+            organiser_email=organiser_email,
+            start_at=request.start_at,
+            end_at=request.end_at,
+            coordinator_id=request.coordinator_id,
+            coordinator_email=coordinator_email,
+        )

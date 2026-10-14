@@ -57,8 +57,13 @@ def test_times_without_a_timezone_are_refused() -> None:
 
 
 @pytest.mark.story("SCRUM-54")
-def test_only_confirmed_and_pending_bookings_are_shown() -> None:
-    assert {BookingStatus.CONFIRMED, BookingStatus.PENDING} == SHOWN_BOOKING_STATUSES
+def test_only_confirmed_tentative_and_pending_bookings_are_shown() -> None:
+    # SCRUM-83 AC2 adds tentative holds. Rejected and cancelled still hold nothing.
+    assert {
+        BookingStatus.CONFIRMED,
+        BookingStatus.TENTATIVE,
+        BookingStatus.PENDING,
+    } == SHOWN_BOOKING_STATUSES
 
 
 @pytest.mark.story("SCRUM-76")

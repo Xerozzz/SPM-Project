@@ -6,13 +6,15 @@ status code without knowing any of the rules.
 """
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from core.database import Session
 from domain.validation import FieldProblem
-from domain.venue import VenueFields, field_names, validate_venue
+from domain.venue import BUFFER_FIELDS, VenueFields, field_names, validate_venue
 from models.venue import Venue
 from repositories import venues as repo
+from services import venue_buffer_review as buffer_review
 
 
 class VenueError(Exception):
@@ -56,9 +58,22 @@ def create(db: Session, fields: VenueFields) -> Venue:
     return repo.save(db, venue)
 
 
-def update(db: Session, venue_id: uuid.UUID, changes: dict[str, object]) -> Venue:
-    """AC1: change a venue's details. AC5: an invalid change saves nothing at all."""
+def update(
+    db: Session,
+    venue_id: uuid.UUID,
+    changes: dict[str, object],
+    changed_by_id: uuid.UUID,
+    now: datetime,
+) -> tuple[Venue, buffer_review.BufferChangeResult]:
+    """AC1: change a venue's details. AC5: an invalid change saves nothing at all.
+
+    SCRUM-89: a change to the setup or turnaround time is also re-assessed and recorded,
+    in the same commit as the change itself, so a rolled back change leaves no audit row
+    claiming it happened. The result says whether the buffers moved and what that caught
+    out, which is what the route tells Venue Staff (SCRUM-89 AC6).
+    """
     venue = get(db, venue_id)
+    previous_buffers = buffer_review.buffers_of(venue)
     # Validate the record as it would be after the change, not the change on its own, so
     # clearing a required field is caught even though the field is absent from the payload.
     merged_values: dict[str, Any] = {
@@ -70,7 +85,9 @@ def update(db: Session, venue_id: uuid.UUID, changes: dict[str, object]) -> Venu
 
     for name, value in _stored_values(merged).items():
         setattr(venue, name, value)
-    return repo.save(db, venue)
+    # Before the save, so both land together. Nothing here writes to a booking (AC5).
+    result = buffer_review.record_change(db, venue, previous_buffers, changed_by_id, now)
+    return repo.save(db, venue), result
 
 
 def deactivate(db: Session, venue_id: uuid.UUID) -> Venue:
@@ -106,4 +123,8 @@ def _stored_values(fields: VenueFields) -> dict[str, object]:
         values[name] = value.strip() if isinstance(value, str) else value
     for name in ("facilities", "supported_layouts", "accessibility_features"):
         values[name] = values[name] or []
+    # SCRUM-82: an absent buffer is no buffer. Stored as zero so the column stays NOT NULL
+    # and the venue behaves exactly as it did before buffers existed (AC7).
+    for name in BUFFER_FIELDS:
+        values[name] = values[name] or 0
     return values

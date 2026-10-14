@@ -3,8 +3,14 @@ import { useQuery } from '@tanstack/react-query'
 import { getHealth } from '../api/client'
 import { useAuth } from '../auth/useAuth'
 import MyEventRequests from '../components/MyEventRequests'
+import ActiveAssignments from '../components/ActiveAssignments'
+import NotificationInbox from '../components/NotificationInbox'
+import OrganisationEventCalendar from '../components/OrganisationEventCalendar'
 import EventRequestForm from '../components/EventRequestForm'
+import BookingProblems from '../components/BookingProblems'
 import EventRequestReview from '../components/EventRequestReview'
+import UnassignedQueue from '../components/UnassignedQueue'
+import EquipmentCatalogue from '../components/EquipmentCatalogue'
 import VenueBookingDecisions from '../components/VenueBookingDecisions'
 import VenueCalendar from '../components/VenueCalendar'
 import VenueCatalogue from '../components/VenueCatalogue'
@@ -35,6 +41,7 @@ export default function HomePage() {
 
       {hasRole('organiser') && (
         <>
+          <OrganisationEventCalendar />
           <EventRequestForm />
           <MyEventRequests />
         </>
@@ -42,11 +49,25 @@ export default function HomePage() {
 
       {hasRole('coordinator') && <EventRequestReview />}
 
+      {/* SCRUM-101: Coordinator Leads triage newly submitted requests. */}
+      {hasRole('coordinator_lead') && <UnassignedQueue />}
+
+      {/* SCRUM-100: Coordinator Leads see every active request and its current owner. */}
+      {hasRole('coordinator_lead') && <ActiveAssignments />}
+
+      {/* SCRUM-99: every signed-in user gets a private notification inbox. */}
+      <NotificationInbox />
+
+      {hasRole('tech_support') && <EquipmentCatalogue />}
+
       {/* SCRUM-55: coordinators search active venues by event requirements. */}
       {hasRole('coordinator') && <VenueSearch />}
 
       {/* SCRUM-59: Venue Staff maintain the catalogue; coordinators read it for planning. */}
       {(hasRole('venue_staff') || hasRole('coordinator')) && <VenueCatalogue />}
+
+      {/* SCRUM-89: Venue Staff see confirmed bookings that no longer fit their venue. */}
+      {hasRole('venue_staff') && <BookingProblems />}
 
       {/* SCRUM-40: Venue Staff review and decide booking requests. */}
       {hasRole('venue_staff') && <VenueBookingDecisions />}

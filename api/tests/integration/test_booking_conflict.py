@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from domain.booking_conflict import ConflictingBookingError, VenueUnavailableError
 from domain.venue_booking import BookingStatus
+from domain.venue_search import BLOCKING_STATUSES
 from models.user import User
 from models.venue import Venue
 from models.venue_booking import VenueBooking
@@ -22,14 +23,15 @@ from models.venue_unavailability import VenueUnavailability
 from services import venue_bookings as service
 from tests.integration.test_submit_event_request import MakeUser
 from tests.integration.test_submit_venue_booking import approved_event
-from tests.integration.test_venue_search import make_venue
+from tests.integration.test_venue_search import effective_for, make_venue
 
 _START = datetime(2026, 11, 3, 2, 0, tzinfo=UTC)
 _END = _START + timedelta(hours=3)
 _HOUR = timedelta(hours=1)
 
 # Every status that must NOT block approval (AC4), derived from the enum.
-_NOT_CONFIRMED = [status for status in BookingStatus if status is not BookingStatus.CONFIRMED]
+# SCRUM-83: a tentative hold blocks like a confirmed booking, so it is left out here.
+_NOT_CONFIRMED = [status for status in BookingStatus if status not in BLOCKING_STATUSES]
 
 
 def _booking(
@@ -45,12 +47,15 @@ def _booking(
     coordinator doubles as the event's organiser: the conflict check never looks at who
     owns the event, so a separate organiser would only add noise."""
     event = approved_event(db, coordinator, coordinator, start_at=start_at, end_at=end_at)
+    effective_start, effective_end = effective_for(venue, start_at, end_at)
     booking = VenueBooking(
         venue_id=venue.id,
         event_request_id=event.id,
         requested_by_id=coordinator.id,
         start_at=start_at,
         end_at=end_at,
+        effective_start_at=effective_start,
+        effective_end_at=effective_end,
         status=status,
     )
     db.add(booking)

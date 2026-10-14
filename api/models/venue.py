@@ -41,6 +41,12 @@ class Venue(Base):
     # are `Time` and outside AGENTS.md's timezone-aware-UTC rule.
     opens_at: Mapped[time] = mapped_column(Time, nullable=False)
     closes_at: Mapped[time] = mapped_column(Time, nullable=False)
+    # SCRUM-82: preparation and reset minutes the venue needs either side of a booking.
+    # Zero is the default so every venue that existed before this column behaves exactly
+    # as it did (AC7). They live here, not on venue_bookings, so a booking cannot override
+    # them (AC1).
+    setup_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    turnaround_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # SCRUM-59: a deactivated venue stays readable but cannot be chosen for new work (AC3).
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(

@@ -78,6 +78,7 @@ function renderSignedIn(handlers: Record<string, Handler>) {
 
 function defaultHandler(key: string): Handler | null {
   if (key === 'GET /api/event-requests/drafts') return () => json([])
+  if (key === 'GET /api/event-requests/equipment-types') return () => json(['Projector'])
   // Submitted requests render their clarification thread, which loads on mount.
   if (/^GET \/api\/event-requests\/[^/]+\/clarifications$/.test(key)) return () => json([])
   return null
@@ -162,6 +163,21 @@ test('reopened draft shows persisted values and can be edited', async () => {
     '“Orientation Day” was saved as a Draft.',
   )
   expect(update).toHaveBeenCalledOnce()
+})
+
+test('draft editor selects equipment types from the catalogue', async () => {
+  renderSignedIn({
+    'GET /api/event-requests': () => json([draft]),
+    'GET /api/event-requests/req-1': () => json(draft),
+    'GET /api/event-requests/equipment-types': () => json(['Microphone', 'Projector']),
+  })
+
+  fireEvent.click(await screen.findByLabelText('Edit draft Orientation Day'))
+  const form = await screen.findByRole('form', { name: 'Event request draft form' })
+
+  expect(within(form).getByLabelText('Equipment requirement')).toHaveTextContent(
+    'Select equipmentMicrophoneProjector',
+  )
 })
 
 test('submitting an incomplete draft names the fields to correct', async () => {

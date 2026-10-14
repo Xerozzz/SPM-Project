@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from core.dependencies import EventAccess, require_event_access
+from models.equipment import Equipment
 from models.user import User
 
 MakeUser = Callable[..., User]
@@ -43,8 +44,27 @@ async def create_draft(client: httpx.AsyncClient) -> dict[str, object]:
     return json_dict(response)
 
 
-async def create_complete_draft(client: httpx.AsyncClient) -> dict[str, object]:
+async def create_complete_draft(db: Session, client: httpx.AsyncClient) -> dict[str, object]:
     start = datetime.now(UTC) + timedelta(days=30)
+    if (
+        db.query(Equipment)
+        .filter(
+            Equipment.equipment_type == "Projector-type requirement",
+            Equipment.location == "Test Store",
+        )
+        .first()
+        is None
+    ):
+        db.add(
+            Equipment(
+                equipment_type="Projector-type requirement",
+                description=None,
+                total_quantity=1,
+                location="Test Store",
+                operational_status="Operational",
+            )
+        )
+        db.flush()
     response = await client.post(
         "/api/event-requests/drafts",
         json={
@@ -149,14 +169,14 @@ async def test_same_organisation_organiser_can_view_the_creators_draft(
 
 @pytest.mark.story("SCRUM-29")
 async def test_same_organisation_organiser_can_view_after_submission(
-    make_user: MakeUser, make_client: MakeClient
+    db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     creator = make_user("organiser")
     colleague = make_user("organiser", organisation_id=creator.organisation_id)
     make_user("coordinator")
 
     async with make_client(creator) as creator_client:
-        draft = await create_complete_draft(creator_client)
+        draft = await create_complete_draft(db, creator_client)
         submitted = await creator_client.post(f"/api/event-requests/{draft['id']}/submit")
 
     async with make_client(colleague) as colleague_client:
@@ -273,13 +293,13 @@ async def test_coordinator_cannot_view_a_draft(
 
 @pytest.mark.story("SCRUM-29")
 async def test_coordinator_can_view_a_submitted_request(
-    make_user: MakeUser, make_client: MakeClient
+    db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     creator = make_user("organiser")
     coordinator = make_user("coordinator")
 
     async with make_client(creator) as creator_client:
-        draft = await create_complete_draft(creator_client)
+        draft = await create_complete_draft(db, creator_client)
         submitted = await creator_client.post(f"/api/event-requests/{draft['id']}/submit")
 
     async with make_client(coordinator) as coordinator_client:
@@ -293,13 +313,13 @@ async def test_coordinator_can_view_a_submitted_request(
 
 @pytest.mark.story("SCRUM-29")
 async def test_submitted_requests_remain_visible_to_their_creator(
-    make_user: MakeUser, make_client: MakeClient
+    db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     creator = make_user("organiser")
     make_user("coordinator")
 
     async with make_client(creator) as client:
-        draft = await create_complete_draft(client)
+        draft = await create_complete_draft(db, client)
         submitted = await client.post(f"/api/event-requests/{draft['id']}/submit")
         reopened = await client.get(f"/api/event-requests/{draft['id']}")
         mine = await client.get("/api/event-requests")

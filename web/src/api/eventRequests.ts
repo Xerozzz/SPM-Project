@@ -1,3 +1,5 @@
+import type { BookingConflict } from './venueBookingDecisions'
+
 /**
  * Event request API calls for organisers. Mirrors api/schemas/event_requests.py.
  */
@@ -6,18 +8,27 @@ export type EventStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'con
 
 export type EventAction = 'edit' | 'submit' | 'approve' | 'reject'
 
+export interface EventCalendarEntry {
+  id: string
+  name: string | null
+  start_at: string
+  end_at: string
+  status: EventStatus
+}
+
+export async function listOrganisationCalendar(token: string): Promise<EventCalendarEntry[]> {
+  const response = await fetch('/api/event-requests/organisation-calendar', {
+    headers: authHeaders(token),
+  })
+  if (!response.ok) throw new Error(`Could not load organisation calendar (${response.status})`)
+  return (await response.json()) as EventCalendarEntry[]
+}
+
 export const VENUE_REQUIREMENTS = [
   'Auditorium-type venue',
   'Lecture theatre-type venue',
   'Seminar room-type venue',
   'Outdoor event space',
-] as const
-
-export const EQUIPMENT_REQUIREMENTS = [
-  'Projector-type requirement',
-  'Microphone-type requirement',
-  'PA system-type requirement',
-  'Display screen-type requirement',
 ] as const
 
 export interface EventRequest {
@@ -94,7 +105,7 @@ export interface VenueSuitability {
   venue_layouts: string[]
 }
 
-export type BookingStatus = 'pending' | 'confirmed' | 'rejected' | 'cancelled'
+export type BookingStatus = 'pending' | 'tentative' | 'confirmed' | 'rejected' | 'cancelled'
 
 export interface VenueBookingSubmission {
   id: string
@@ -111,6 +122,14 @@ export interface VenueBooking {
   start_at: string
   end_at: string
   status: BookingStatus
+  /** SCRUM-83 AC2: when a tentative hold on this request ends. */
+  expires_at?: string | null
+  /**
+   * SCRUM-89 AC4: what this booking now clashes with at its venue, or null when nothing.
+   * Derived by the API on every read, so it appears and clears on its own as the venue's
+   * setup and turnaround times change.
+   */
+  conflict: BookingConflict | null
 }
 
 /** Thrown when the API answers 422 with field-level validation problems. */
@@ -181,6 +200,14 @@ export async function listMyEventRequests(token: string): Promise<EventRequest[]
   return (await response.json()) as EventRequest[]
 }
 
+export async function listEquipmentRequirementTypes(token: string): Promise<string[]> {
+  const response = await fetch('/api/event-requests/equipment-types', {
+    headers: authHeaders(token),
+  })
+  if (!response.ok) throw new Error(`Could not load equipment types (${response.status})`)
+  return (await response.json()) as string[]
+}
+
 export async function listRequestsForReview(token: string): Promise<EventRequest[]> {
   const response = await fetch('/api/event-requests/reviewable', { headers: authHeaders(token) })
   if (!response.ok) throw new Error(`Could not load submitted requests (${response.status})`)
@@ -191,6 +218,137 @@ export async function listBookableEventRequests(token: string): Promise<EventReq
   const response = await fetch('/api/event-requests/bookable', { headers: authHeaders(token) })
   if (!response.ok) throw new Error(`Could not load bookable requests (${response.status})`)
   return (await response.json()) as EventRequest[]
+}
+
+/** SCRUM-101: one row of the Coordinator Lead unassigned queue (AC2 fields only). */
+export interface UnassignedEventRequest {
+  id: string
+  name: string | null
+  organiser_email: string
+  start_at: string | null
+  end_at: string | null
+  expected_attendance: number | null
+  submitted_at: string | null
+}
+
+export async function listUnassignedEventRequests(
+  token: string,
+): Promise<UnassignedEventRequest[]> {
+  const response = await fetch('/api/event-requests/unassigned', {
+    headers: authHeaders(token),
+  })
+  if (!response.ok) throw new Error(`Could not load unassigned requests (${response.status})`)
+  return (await response.json()) as UnassignedEventRequest[]
+}
+
+/** SCRUM-100: one row of the Lead active-assignment overview (AC1 fields only).
+ * SCRUM-97 adds `coordinator_id` — the current owner's id (None when unassigned) —
+ * so the UI can send it back as `expected_current_coordinator_id` (ADR-0021). */
+export interface ActiveAssignment {
+  id: string
+  name: string | null
+  status: EventStatus
+  organiser_email: string
+  start_at: string | null
+  end_at: string | null
+  coordinator_id: string | null
+  coordinator_email: string | null
+}
+
+export async function listActiveAssignments(token: string): Promise<ActiveAssignment[]> {
+  const response = await fetch('/api/event-requests/active-assignments', {
+    headers: authHeaders(token),
+  })
+  if (!response.ok) throw new Error(`Could not load assignments (${response.status})`)
+  return (await response.json()) as ActiveAssignment[]
+}
+
+/** SCRUM-98: one eligible owner the Lead may pick — active Event Coordinators only. */
+export interface AssignableCoordinator {
+  id: string
+  email: string
+}
+
+export async function listAssignableCoordinators(token: string): Promise<AssignableCoordinator[]> {
+  const response = await fetch('/api/event-requests/assignable-coordinators', {
+    headers: authHeaders(token),
+  })
+  if (!response.ok) throw new Error(`Could not load coordinators (${response.status})`)
+  return (await response.json()) as AssignableCoordinator[]
+}
+
+/** SCRUM-98: a Lead assigns an unassigned Submitted request to an active coordinator. */
+export async function assignEventRequest(
+  token: string,
+  id: string,
+  coordinatorId: string,
+): Promise<EventRequest> {
+  const response = await fetch(`/api/event-requests/${id}/assign`, {
+    method: 'POST',
+    headers: jsonHeaders(token),
+    body: JSON.stringify({ coordinator_id: coordinatorId }),
+  })
+  if (!response.ok) {
+    const detail = await response
+      .json()
+      .then((body: unknown) =>
+        body && typeof body === 'object' && 'detail' in body
+          ? String((body as { detail: unknown }).detail)
+          : `Assignment failed (${response.status})`,
+      )
+      .catch(() => `Assignment failed (${response.status})`)
+    throw new Error(detail)
+  }
+  return (await response.json()) as EventRequest
+}
+
+/** SCRUM-97: one immutable assignment entry, oldest first. */
+export interface AssignmentHistoryEntry {
+  id: string
+  previous_coordinator_id: string | null
+  new_coordinator_id: string
+  acted_by_id: string
+  assigned_at: string
+}
+
+export async function listAssignmentHistory(
+  token: string,
+  id: string,
+): Promise<AssignmentHistoryEntry[]> {
+  const response = await fetch(`/api/event-requests/${id}/assignment-history`, {
+    headers: authHeaders(token),
+  })
+  if (!response.ok) throw new Error(`Could not load assignment history (${response.status})`)
+  return (await response.json()) as AssignmentHistoryEntry[]
+}
+
+/** SCRUM-97: a Lead moves an active assigned request to another active coordinator. */
+export async function reassignEventRequest(
+  token: string,
+  id: string,
+  coordinatorId: string,
+  expectedCurrentCoordinatorId: string,
+): Promise<EventRequest> {
+  const response = await fetch(`/api/event-requests/${id}/reassign`, {
+    method: 'POST',
+    headers: jsonHeaders(token),
+    body: JSON.stringify({
+      coordinator_id: coordinatorId,
+      expected_current_coordinator_id: expectedCurrentCoordinatorId,
+    }),
+  })
+  if (!response.ok) {
+    const detail = await response
+      .json()
+      .then((body: unknown) =>
+        body && typeof body === 'object' && 'detail' in body
+          ? String((body as { detail: unknown }).detail)
+          : `Reassignment failed (${response.status})`,
+      )
+      .catch(() => `Reassignment failed (${response.status})`)
+    throw new Error(detail)
+  }
+  return (await response.json()) as EventRequest
 }
 
 export async function createEventRequest(
@@ -257,6 +415,46 @@ export async function updateDraft(
     throw new Error(`Draft save failed (${response.status})`)
   }
   return (await response.json()) as EventRequest
+}
+
+/**
+ * SCRUM-36: the assigned coordinator updates ordinary planning information. Sends only
+ * the changed fields. A 422 carries the field problems, and anything else gives the API's
+ * message when it has one.
+ */
+export async function updatePlanningInfo(
+  token: string,
+  id: string,
+  changes: Partial<
+    Pick<
+      EventRequest,
+      | 'name'
+      | 'purpose'
+      | 'description'
+      | 'accessibility_requirement'
+      | 'layout_requirement'
+      | 'registration_requirement'
+    >
+  >,
+): Promise<EventRequest> {
+  const response = await fetch(`/api/event-requests/${id}/planning-info`, {
+    method: 'PATCH',
+    headers: jsonHeaders(token),
+    body: JSON.stringify(changes),
+  })
+  const body = (await response.json().catch(() => null)) as unknown
+  if (response.status === 422) {
+    const problems = parseValidationProblems(body)
+    if (problems) throw new EventRequestValidationError(problems)
+  }
+  if (!response.ok) {
+    const detail =
+      body && typeof body === 'object' && 'detail' in body && typeof body.detail === 'string'
+        ? body.detail
+        : `Update failed (${response.status})`
+    throw new Error(detail)
+  }
+  return body as EventRequest
 }
 
 export async function submitEventRequest(token: string, id: string): Promise<EventRequest> {

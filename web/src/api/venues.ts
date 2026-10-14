@@ -1,3 +1,5 @@
+import type { BookingConflict } from './venueBookingDecisions'
+
 /**
  * Venue catalogue API calls (SCRUM-59). Mirrors api/schemas/venues.py.
  */
@@ -25,6 +27,13 @@ export interface Venue {
   /** Wall-clock opening hours as "HH:MM:SS"; see domain/venue.py for why they are not UTC. */
   opens_at: string
   closes_at: string
+  /**
+   * SCRUM-82: minutes the venue needs to prepare before a booking and to reset after it.
+   * A booking occupies the venue from its start minus setup to its end plus turnaround,
+   * which is what availability and conflict detection compare (AC3, AC4).
+   */
+  setup_minutes: number
+  turnaround_minutes: number
   /** A deactivated venue stays readable but cannot be chosen for new work (ADR-0012). */
   is_active: boolean
 }
@@ -40,6 +49,9 @@ export interface VenueInput {
   /** null when Venue Staff have not entered a time yet; the API names it as required. */
   opens_at: string | null
   closes_at: string | null
+  /** SCRUM-82 AC1: whole minutes, zero or more. Null means no buffer. */
+  setup_minutes: number | null
+  turnaround_minutes: number | null
 }
 
 /** One field Venue Staff must fix before the record can be saved (AC5). */
@@ -104,7 +116,7 @@ function jsonHeaders(token: string): HeadersInit {
   return { ...authHeaders(token), 'Content-Type': 'application/json' }
 }
 
-async function readVenue(response: Response): Promise<Venue> {
+async function readVenue<T extends Venue = Venue>(response: Response): Promise<T> {
   if (response.status === 422) {
     const body = (await response.json()) as { detail: unknown }
     const problems = asVenueProblems(body.detail)
@@ -118,7 +130,7 @@ async function readVenue(response: Response): Promise<Venue> {
     throw new VenueRejectedError([{ field: 'name', reason: 'is already used by another venue' }])
   }
   if (!response.ok) throw new Error(`The venue could not be saved (${response.status})`)
-  return (await response.json()) as Venue
+  return (await response.json()) as T
 }
 
 /** The venues that may be chosen for new work. */
@@ -138,12 +150,24 @@ export async function createVenue(token: string, venue: VenueInput): Promise<Ven
   )
 }
 
+/**
+ * SCRUM-89 AC6: a saved venue, and what the save did to its bookings.
+ *
+ * A superset of `Venue`, so anything that only wanted the venue still gets one.
+ */
+export interface UpdatedVenue extends Venue {
+  buffer_change: {
+    changed: boolean
+    problems: ProblemBooking[]
+  }
+}
+
 export async function updateVenue(
   token: string,
   id: string,
   changes: Partial<VenueInput>,
-): Promise<Venue> {
-  return readVenue(
+): Promise<UpdatedVenue> {
+  return readVenue<UpdatedVenue>(
     await fetch(`/api/venues/${id}`, {
       method: 'PATCH',
       headers: jsonHeaders(token),
@@ -258,4 +282,41 @@ export async function searchVenues(token: string, input: VenueSearchInput): Prom
   const response = await fetch(`/api/venues/search?${params}`, { headers: authHeaders(token) })
   if (!response.ok) throw new Error(`Could not search venues (${response.status})`)
   return (await response.json()) as Venue[]
+}
+
+
+/** SCRUM-89 AC4: one booking that cannot stand under its venue's current buffers. */
+export interface ProblemBooking {
+  booking_id: string
+  /** Whose booking it is. The panel defers to the Coordinator, so it has to name them. */
+  event_request_id: string
+  event_name: string | null
+  start_at: string
+  end_at: string
+  conflict: BookingConflict
+}
+
+/** SCRUM-89 AC4: a venue and everything at it that needs attention. */
+export interface VenueProblems {
+  venue_id: string
+  venue_name: string
+  venue_location: string
+  setup_minutes: number
+  turnaround_minutes: number
+  is_active: boolean
+  problems: ProblemBooking[]
+}
+
+/**
+ * SCRUM-89 AC4: every booking anywhere needing attention, venues with none left out.
+ *
+ * Worked out by the API on each request rather than read from a stored flag, so an empty
+ * list means nothing needs attention right now, not that nothing was ever flagged.
+ */
+export async function listBookingProblems(token: string): Promise<VenueProblems[]> {
+  const response = await fetch('/api/venues/booking-problems', {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new Error(`Could not load booking problems (status ${response.status})`)
+  return (await response.json()) as VenueProblems[]
 }

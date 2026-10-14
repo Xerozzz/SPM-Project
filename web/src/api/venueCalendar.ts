@@ -5,7 +5,7 @@ import type { EventRequest } from './eventRequests'
  * SCRUM-77: one entry in full. Mirrors api/schemas/venue_calendar.py.
  */
 
-export type CalendarStatus = 'confirmed' | 'pending' | 'unavailable'
+export type CalendarStatus = 'confirmed' | 'tentative' | 'pending' | 'unavailable'
 
 export interface CalendarEntry {
   kind: 'booking' | 'unavailability'
@@ -15,11 +15,27 @@ export interface CalendarEntry {
   start_at: string
   end_at: string
   status: CalendarStatus
+  /**
+   * SCRUM-82: the period the venue is actually held, the event widened by the venue's
+   * setup and turnaround. Equal to the event period when the venue has no buffers, and
+   * always for a closure.
+   */
+  effective_start_at: string
+  effective_end_at: string
+  /** SCRUM-83: when a tentative hold ends. Null for anything else. */
+  expires_at?: string | null
+}
+
+/** SCRUM-82: whether an entry holds the venue for longer than its own event period. */
+export function hasBuffer(entry: CalendarEntry): boolean {
+  return entry.effective_start_at !== entry.start_at || entry.effective_end_at !== entry.end_at
 }
 
 /** AC1: how each kind of entry is labelled so they can be told apart. */
 export const CALENDAR_LABELS: Record<CalendarStatus, string> = {
   confirmed: 'Confirmed booking',
+  // SCRUM-83 AC2: a hold is shown as Tentative, distinct from a confirmed booking.
+  tentative: 'Tentative hold',
   pending: 'Pending request',
   unavailable: 'Unavailable',
 }
@@ -120,6 +136,7 @@ export interface CalendarEntryDetails {
   status: DetailsStatus
   reason: string | null
   event_request_id: string | null
+  expires_at?: string | null
 }
 
 export async function getCalendarEntry(

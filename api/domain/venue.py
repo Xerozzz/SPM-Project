@@ -19,6 +19,10 @@ from domain.validation import FieldProblem
 # Order matters only for how problems are reported: it matches the order on the ticket.
 REQUIRED_TEXT_FIELDS: tuple[str, ...] = ("name", "location")
 
+# SCRUM-82 AC1: preparation and reset time the venue needs around a booking, in whole
+# minutes. Kept on the venue rather than the booking so a booking cannot override them.
+BUFFER_FIELDS: tuple[str, ...] = ("setup_minutes", "turnaround_minutes")
+
 # A closed vocabulary so a coordinator searching for "classroom" matches every venue that
 # supports it. Facilities and accessibility features stay free text on purpose: the customer
 # said venue suitability is the coordinator's judgement, not an automatic flag.
@@ -45,6 +49,8 @@ class VenueFields:
     accessibility_features: list[str] | None = None
     opens_at: time | None = None
     closes_at: time | None = None
+    setup_minutes: int | None = None
+    turnaround_minutes: int | None = None
 
 
 def field_names() -> tuple[str, ...]:
@@ -67,8 +73,27 @@ def validate_venue(venue: VenueFields) -> list[FieldProblem]:
     problems.extend(_capacity_problems(venue.maximum_capacity))
     problems.extend(_layout_problems(venue.supported_layouts))
     problems.extend(_operating_hours_problems(venue.opens_at, venue.closes_at))
+    problems.extend(_buffer_problems(venue))
 
     return problems
+
+
+def _buffer_problems(venue: VenueFields) -> list[FieldProblem]:
+    """SCRUM-82 AC1: a buffer is a whole number of minutes, zero or more.
+
+    Absent means no buffer rather than an invalid record, so a venue saved before this
+    field existed, or by a form that does not know about it, stays valid and keeps
+    behaving as it did (AC7). `_stored_values` turns the absence into a stored zero.
+
+    This owns the "zero or more" half of AC1. The "whole number" half is the `int` on
+    `schemas.venues.VenueCreate`, which is where a non-numeric value is refused with the
+    field named, the same split `maximum_capacity` already uses.
+    """
+    return [
+        FieldProblem(name, "must be zero or more minutes")
+        for name in BUFFER_FIELDS
+        if (value := getattr(venue, name)) is not None and value < 0
+    ]
 
 
 def _capacity_problems(maximum_capacity: int | None) -> list[FieldProblem]:

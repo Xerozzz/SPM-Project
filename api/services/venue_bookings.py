@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 
 from core.database import Session
-from domain import venue_booking, venue_suitability
+from domain import venue_booking, venue_hold, venue_suitability
 from domain.booking_conflict import BookedPeriod, UnavailablePeriod, ensure_no_conflict
 from domain.event_request import (
     EQUIPMENT_REQUIREMENT_FACILITIES,
@@ -16,6 +16,7 @@ from domain.event_request import (
 )
 from domain.validation import FieldProblem
 from domain.venue_booking import BookingStatus
+from domain.venue_buffer import VenueBuffers, effective_interval
 from models.event_request import EventRequest
 from models.venue import Venue
 from models.venue_booking import VenueBooking
@@ -29,12 +30,16 @@ class InvalidBookingRequestError(Exception):
         self.problems = problems
 
 
-class PendingBookingExistsError(Exception):
-    pass
-
-
 class BookingNotFoundError(Exception):
     """No venue booking has that id."""
+
+
+class InvalidHoldError(Exception):
+    """SCRUM-83: the hold's expiry is not acceptable, field by field."""
+
+    def __init__(self, problems: list[FieldProblem]) -> None:
+        super().__init__("invalid tentative hold")
+        self.problems = problems
 
 
 def evaluate(
@@ -69,16 +74,21 @@ def submit(
 ) -> tuple[VenueBooking, venue_suitability.SuitabilityResult]:
     locked = event_repo.get_for_update(db, event.id)
     assert locked is not None and locked.coordinator_id is not None
-    if booking_repo.pending_for_event(db, locked.id) is not None:
-        raise PendingBookingExistsError
     suitability = evaluate(db, locked, venue_id, now)
     assert locked.start_at is not None and locked.end_at is not None
+    venue = venue_repo.get(db, venue_id)
+    assert venue is not None  # evaluate() has already refused an unknown venue.
+    effective_start, effective_end = effective_interval(
+        locked.start_at, locked.end_at, _buffers(venue)
+    )
     booking = VenueBooking(
         event_request_id=locked.id,
         venue_id=venue_id,
         requested_by_id=locked.coordinator_id,
         start_at=locked.start_at,
         end_at=locked.end_at,
+        effective_start_at=effective_start,
+        effective_end_at=effective_end,
         status=BookingStatus.PENDING,
     )
     return booking_repo.save_booking(db, booking), suitability
@@ -117,7 +127,10 @@ def approve(
        second is refused by the status transition (checked first, so a booking that is
        not pending is reported as such rather than as a conflict).
     2. Run the SCRUM-73 check, for a named, friendly refusal in the common case.
-    3. Commit. If an overlapping request was approved concurrently and the check raced,
+    3. Refresh the stored effective interval from the venue's buffers as they are now
+       (SCRUM-82 AC4), because they may have changed since the request was submitted and
+       the constraint in step 4 reads these columns.
+    4. Commit. If an overlapping request was approved concurrently and the check raced,
        the exclusion constraint refuses the commit (ConcurrentBookingConflictError).
     """
     booking = booking_repo.get_booking_for_update(db, booking_id)
@@ -125,13 +138,70 @@ def approve(
         raise BookingNotFoundError
     confirmed = venue_booking.approve(booking.status)
     _ensure_no_conflict(db, booking)
+    venue = venue_repo.get(db, booking.venue_id)
+    assert venue is not None
+    booking.effective_start_at, booking.effective_end_at = effective_interval(
+        booking.start_at, booking.end_at, _buffers(venue)
+    )
     booking.status = confirmed
     booking.decided_by_id = decided_by_id
     booking.decided_at = decided_at
     return booking_repo.save_confirmed_booking(db, booking)
 
 
+def hold(
+    db: Session,
+    booking_id: uuid.UUID,
+    held_by_id: uuid.UUID,
+    expires_at: datetime,
+    now: datetime,
+) -> VenueBooking:
+    """SCRUM-83 AC1: Venue Staff put a pending request on a tentative hold until
+    `expires_at`. The request already names the venue, the event and its period, and was
+    made by the event's assigned Coordinator, so the hold is for all of them (ADR-0029).
+
+    The steps are approve's, because a hold occupies the venue the same way (AC3):
+    lock the row and check the transition, check the expiry, run the SCRUM-73 check for a
+    named refusal, refresh the effective interval from the venue's current buffers, and
+    commit under the exclusion constraint, which covers tentative holds since 0021.
+    """
+    booking = booking_repo.get_booking_for_update(db, booking_id)
+    if booking is None:
+        raise BookingNotFoundError
+    held = venue_booking.hold(booking.status)
+    problems = venue_hold.expiry_problems(expires_at, now, booking.start_at)
+    if problems:
+        raise InvalidHoldError(problems)
+    _ensure_no_conflict(db, booking)
+    venue = venue_repo.get(db, booking.venue_id)
+    assert venue is not None
+    booking.effective_start_at, booking.effective_end_at = effective_interval(
+        booking.start_at, booking.end_at, _buffers(venue)
+    )
+    booking.status = held
+    booking.expires_at = expires_at
+    booking.held_by_id = held_by_id
+    booking.held_at = now
+    return booking_repo.save_confirmed_booking(db, booking)
+
+
+def _buffers(venue: Venue) -> VenueBuffers:
+    """SCRUM-82: the venue's current setup and turnaround, as the domain takes them."""
+    return VenueBuffers(
+        setup_minutes=venue.setup_minutes, turnaround_minutes=venue.turnaround_minutes
+    )
+
+
 def _ensure_no_conflict(db: Session, booking: VenueBooking) -> None:
+    """SCRUM-82 AC4: the check compares effective occupied intervals.
+
+    Buffers are read from the venue now rather than from the booking's stored effective
+    columns, so a buffer change takes effect on the next check without touching any
+    booking row. The stored columns exist only for the overlap constraint; ADR-0019 says
+    why the two can differ and which story closes the gap.
+    """
+    venue = venue_repo.get(db, booking.venue_id)
+    assert venue is not None  # a booking cannot exist without its venue (foreign key).
     others = [
         BookedPeriod(id=row.id, status=row.status, start_at=row.start_at, end_at=row.end_at)
         for row in booking_repo.other_bookings_overlapping(db, booking)
@@ -140,7 +210,7 @@ def _ensure_no_conflict(db: Session, booking: VenueBooking) -> None:
         UnavailablePeriod(id=row.id, starts_at=row.starts_at, ends_at=row.ends_at)
         for row in booking_repo.unavailabilities_overlapping(db, booking)
     ]
-    ensure_no_conflict(booking.start_at, booking.end_at, others, closures)
+    ensure_no_conflict(booking.start_at, booking.end_at, others, closures, _buffers(venue))
 
 
 def _validated_venue(db: Session, event: EventRequest, venue_id: uuid.UUID, now: datetime) -> Venue:

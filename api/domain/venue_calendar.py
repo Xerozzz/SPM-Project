@@ -1,8 +1,8 @@
 """Venue availability calendar rules (SCRUM-54, SCRUM-76). Pure, no database.
 
 The calendar shows what is holding a venue across a date range: confirmed bookings,
-pending requests and recorded unavailability blocks. Rejected and cancelled requests
-no longer hold anything, so they are left out.
+tentative holds (SCRUM-83), pending requests and recorded unavailability blocks.
+Rejected and cancelled requests no longer hold anything, so they are left out.
 """
 
 from datetime import datetime, timedelta
@@ -16,22 +16,27 @@ from domain.venue_search import booking_blocks_availability
 MAX_RANGE = timedelta(days=93)
 
 # AC1: the booking statuses that appear on the calendar.
-SHOWN_BOOKING_STATUSES = frozenset({BookingStatus.CONFIRMED, BookingStatus.PENDING})
+SHOWN_BOOKING_STATUSES = frozenset(
+    {BookingStatus.CONFIRMED, BookingStatus.TENTATIVE, BookingStatus.PENDING}
+)
 
 # The closed vocabularies of a calendar entry, the same Literals the API schema uses.
 EntryKind = Literal["booking", "unavailability"]
-EntryStatus = Literal["confirmed", "pending", "unavailable"]
+EntryStatus = Literal["confirmed", "tentative", "pending", "unavailable"]
 
 # AC1: the label each shown booking status gets on the calendar.
 BOOKING_LABELS: dict[BookingStatus, EntryStatus] = {
     BookingStatus.CONFIRMED: "confirmed",
+    # SCRUM-83 AC2: a hold is labelled Tentative, distinct from a confirmed booking.
+    BookingStatus.TENTATIVE: "tentative",
     BookingStatus.PENDING: "pending",
 }
 
 # SCRUM-77: one entry opened in full can be any booking, rejected and cancelled included.
-DetailsStatus = Literal["confirmed", "pending", "rejected", "cancelled", "unavailable"]
+DetailsStatus = Literal["confirmed", "tentative", "pending", "rejected", "cancelled", "unavailable"]
 DETAILS_LABELS: dict[BookingStatus, DetailsStatus] = {
     BookingStatus.CONFIRMED: "confirmed",
+    BookingStatus.TENTATIVE: "tentative",
     BookingStatus.PENDING: "pending",
     BookingStatus.REJECTED: "rejected",
     BookingStatus.CANCELLED: "cancelled",
@@ -61,10 +66,11 @@ def range_problems(start_at: datetime, end_at: datetime) -> list[FieldProblem]:
 def entry_blocks(kind: EntryKind, status: EntryStatus) -> bool:
     """SCRUM-76: does this calendar entry make the venue unavailable?
 
-    A closure always does. A booking does only if it is confirmed (AC1), never while
-    pending (AC2). The booking status rule is venue search's booking_blocks_availability,
-    so the two agree on which bookings block. Opening hours are not part of this:
-    venue search also checks them, the availability check does not.
+    A closure always does. A booking does only if it is confirmed (AC1) or a tentative
+    hold (SCRUM-83 AC3), never while pending (AC2). The booking status rule is venue
+    search's booking_blocks_availability, so the two agree on which bookings block.
+    Opening hours are not part of this: venue search also checks them, the availability
+    check does not.
     """
     if kind == "unavailability":
         return True

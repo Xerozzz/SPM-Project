@@ -13,10 +13,11 @@ from domain.booking_conflict import (
     ensure_no_conflict,
 )
 from domain.venue_booking import BookingStatus
+from domain.venue_buffer import NO_BUFFERS
 
 # The shared half-open rule booking_conflict builds on; tested here against the cases
 # SCRUM-73 depends on, since approval now relies on it as much as search does.
-from domain.venue_search import intervals_overlap
+from domain.venue_search import BLOCKING_STATUSES, intervals_overlap
 
 _START = datetime(2026, 11, 3, 2, 0, tzinfo=UTC)
 _END = _START + timedelta(hours=3)
@@ -24,7 +25,8 @@ _HOUR = timedelta(hours=1)
 
 # Every status that must NOT block approval (AC4). Derived from the enum rather than
 # listed, so a status added later is covered here automatically.
-_NOT_CONFIRMED = [status for status in BookingStatus if status is not BookingStatus.CONFIRMED]
+# SCRUM-83: a tentative hold blocks like a confirmed booking, so it is left out here.
+_NOT_CONFIRMED = [status for status in BookingStatus if status not in BLOCKING_STATUSES]
 
 
 def _booked(
@@ -72,7 +74,7 @@ def test_intervals_overlap_refuses_naive_datetimes() -> None:
 
 @pytest.mark.story("SCRUM-73")
 def test_nothing_on_the_venue_means_no_conflict() -> None:
-    ensure_no_conflict(_START, _END, [], [])
+    ensure_no_conflict(_START, _END, [], [], NO_BUFFERS)
 
 
 @pytest.mark.story("SCRUM-73")
@@ -80,7 +82,7 @@ def test_overlapping_confirmed_booking_is_a_conflict_naming_that_booking() -> No
     clash = _booked(_START + _HOUR, _END + _HOUR)
 
     with pytest.raises(ConflictingBookingError) as raised:
-        ensure_no_conflict(_START, _END, [clash], [])
+        ensure_no_conflict(_START, _END, [clash], [], NO_BUFFERS)
 
     assert raised.value.booking == clash
     assert str(clash.id) in str(raised.value)
@@ -88,12 +90,12 @@ def test_overlapping_confirmed_booking_is_a_conflict_naming_that_booking() -> No
 
 @pytest.mark.story("SCRUM-73")
 def test_boundary_confirmed_booking_ending_exactly_at_the_start_does_not_conflict() -> None:
-    ensure_no_conflict(_START, _END, [_booked(_START - _HOUR, _START)], [])
+    ensure_no_conflict(_START, _END, [_booked(_START - _HOUR, _START)], [], NO_BUFFERS)
 
 
 @pytest.mark.story("SCRUM-73")
 def test_boundary_confirmed_booking_starting_exactly_at_the_end_does_not_conflict() -> None:
-    ensure_no_conflict(_START, _END, [_booked(_END, _END + _HOUR)], [])
+    ensure_no_conflict(_START, _END, [_booked(_END, _END + _HOUR)], [], NO_BUFFERS)
 
 
 @pytest.mark.story("SCRUM-73")
@@ -101,7 +103,7 @@ def test_boundary_confirmed_booking_starting_exactly_at_the_end_does_not_conflic
 def test_overlapping_booking_that_is_not_confirmed_does_not_conflict(
     status: BookingStatus,
 ) -> None:
-    ensure_no_conflict(_START, _END, [_booked(_START, _END, status)], [])
+    ensure_no_conflict(_START, _END, [_booked(_START, _END, status)], [], NO_BUFFERS)
 
 
 @pytest.mark.story("SCRUM-73")
@@ -110,7 +112,7 @@ def test_earliest_clashing_booking_is_named_whatever_the_input_order() -> None:
     earlier = _booked(_START - _HOUR, _START + _HOUR)
 
     with pytest.raises(ConflictingBookingError) as raised:
-        ensure_no_conflict(_START, _END, [later, earlier], [])
+        ensure_no_conflict(_START, _END, [later, earlier], [], NO_BUFFERS)
 
     assert raised.value.booking == earlier
 
@@ -124,7 +126,7 @@ def test_equal_start_clashing_bookings_name_the_lowest_id_whatever_the_input_ord
 
     for order in ([low, high], [high, low]):
         with pytest.raises(ConflictingBookingError) as raised:
-            ensure_no_conflict(_START, _END, order, [])
+            ensure_no_conflict(_START, _END, order, [], NO_BUFFERS)
         assert raised.value.booking == low
 
 
@@ -136,7 +138,7 @@ def test_overlapping_unavailability_is_a_conflict_naming_that_period() -> None:
     closure = _closed(_START - _HOUR, _START + _HOUR)
 
     with pytest.raises(VenueUnavailableError) as raised:
-        ensure_no_conflict(_START, _END, [], [closure])
+        ensure_no_conflict(_START, _END, [], [closure], NO_BUFFERS)
 
     assert raised.value.period == closure
     assert str(closure.id) in str(raised.value)
@@ -144,7 +146,7 @@ def test_overlapping_unavailability_is_a_conflict_naming_that_period() -> None:
 
 @pytest.mark.story("SCRUM-73")
 def test_boundary_unavailability_ending_exactly_at_the_start_does_not_conflict() -> None:
-    ensure_no_conflict(_START, _END, [], [_closed(_START - _HOUR, _START)])
+    ensure_no_conflict(_START, _END, [], [_closed(_START - _HOUR, _START)], NO_BUFFERS)
 
 
 @pytest.mark.story("SCRUM-73")
@@ -153,7 +155,7 @@ def test_earliest_clashing_unavailability_is_named_whatever_the_input_order() ->
     earlier = _closed(_START, _START + _HOUR)
 
     with pytest.raises(VenueUnavailableError) as raised:
-        ensure_no_conflict(_START, _END, [], [later, earlier])
+        ensure_no_conflict(_START, _END, [], [later, earlier], NO_BUFFERS)
 
     assert raised.value.period == earlier
 
@@ -167,11 +169,13 @@ def test_equal_start_clashing_unavailabilities_name_the_lowest_id_whatever_the_i
 
     for order in ([low, high], [high, low]):
         with pytest.raises(VenueUnavailableError) as raised:
-            ensure_no_conflict(_START, _END, [], order)
+            ensure_no_conflict(_START, _END, [], order, NO_BUFFERS)
         assert raised.value.period == low
 
 
 @pytest.mark.story("SCRUM-73")
 def test_a_clashing_booking_is_reported_before_a_clashing_unavailability() -> None:
     with pytest.raises(ConflictingBookingError):
-        ensure_no_conflict(_START, _END, [_booked(_START, _END)], [_closed(_START, _END)])
+        ensure_no_conflict(
+            _START, _END, [_booked(_START, _END)], [_closed(_START, _END)], NO_BUFFERS
+        )
