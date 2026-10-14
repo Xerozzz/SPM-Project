@@ -7,7 +7,7 @@ unknown id, already submitted) that the Definition of Ready asks for.
 import threading
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 
 import httpx
 import pytest
@@ -21,6 +21,7 @@ from models.equipment import Equipment
 from models.event_request import EventRequest
 from models.organisation import Organisation
 from models.user import User
+from models.venue import Venue
 from services import event_requests as service
 
 MakeUser = Callable[..., User]
@@ -30,6 +31,20 @@ MakeClient = Callable[[User | None], httpx.AsyncClient]
 def make_draft(db: Session, organiser: User, **overrides: object) -> EventRequest:
     """A complete draft owned by `organiser`; pass field=None to make it incomplete."""
     _add_catalogue_type(db, "Projector-type requirement")
+    if db.query(Venue).filter(Venue.name == "Auditorium-type venue").first() is None:
+        db.add(
+            Venue(
+                name="Auditorium-type venue",
+                location="Test",
+                maximum_capacity=200,
+                facilities=[],
+                supported_layouts=[],
+                accessibility_features=[],
+                opens_at=time(8),
+                closes_at=time(22),
+            )
+        )
+        db.flush()
     start = datetime.now(UTC) + timedelta(days=30)
     values: dict[str, object] = {
         "name": "Orientation Day",

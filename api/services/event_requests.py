@@ -29,6 +29,7 @@ from repositories import coordinator_assignments as history_repo
 from repositories import equipment as equipment_repo
 from repositories import event_requests as repo
 from repositories import users as users_repo
+from services import venues as venues_service
 
 
 class EventRequestError(Exception):
@@ -87,7 +88,12 @@ def create(
     db: Session, organiser_id: uuid.UUID, fields: EventRequestFields, now: datetime
 ) -> EventRequest:
     """Create a new request without submitting or allocating anything."""
-    problems = validate_event_request(fields, now, equipment_repo.list_distinct_active_types(db))
+    problems = validate_event_request(
+        fields,
+        now,
+        equipment_repo.list_distinct_active_types(db),
+        venues_service.list_selectable_names(db),
+    )
     if problems:
         raise IncompleteEventRequestError(problems)
     request = EventRequest(organiser_id=organiser_id, **fields.__dict__)
@@ -127,7 +133,9 @@ def update_draft(
         equipment_requirement=cast(str | None, changes.get("equipment_requirement")),
     )
     problems = validate_catalogue_requirements(
-        catalogue_changes, equipment_repo.list_distinct_active_types(db)
+        catalogue_changes,
+        equipment_repo.list_distinct_active_types(db),
+        venues_service.list_selectable_names(db),
     )
     if problems:
         raise IncompleteEventRequestError(problems)
@@ -178,7 +186,10 @@ def submit(
     # success. See repositories.event_requests.get_for_update.
     request = _owned_by(db, request_id, organiser_id, lock=True)
     problems = validate_event_request(
-        _fields_of(request), now, equipment_repo.list_distinct_active_types(db)
+        _fields_of(request),
+        now,
+        equipment_repo.list_distinct_active_types(db),
+        venues_service.list_selectable_names(db),
     )
     if problems:
         raise IncompleteEventRequestError(problems)

@@ -1,7 +1,7 @@
 """SCRUM-90: organisers select equipment requirements from the catalogue."""
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
 
 import httpx
 import pytest
@@ -9,12 +9,26 @@ from sqlalchemy.orm import Session
 
 from models.equipment import Equipment
 from models.user import User
+from models.venue import Venue
 
 MakeUser = Callable[..., User]
 MakeClient = Callable[[User | None], httpx.AsyncClient]
 
 
 def add_equipment(db: Session, equipment_type: str, location: str) -> None:
+    if db.query(Venue).filter(Venue.name == "Auditorium-type venue").first() is None:
+        db.add(
+            Venue(
+                name="Auditorium-type venue",
+                location="Test",
+                maximum_capacity=200,
+                facilities=[],
+                supported_layouts=[],
+                accessibility_features=[],
+                opens_at=time(8),
+                closes_at=time(22),
+            )
+        )
     db.add(
         Equipment(
             equipment_type=equipment_type,

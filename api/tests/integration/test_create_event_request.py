@@ -1,6 +1,7 @@
 """SCRUM-28: organisers create a complete event request without submitting it."""
 
 from collections.abc import Callable
+from datetime import time
 
 import httpx
 import pytest
@@ -10,6 +11,7 @@ from domain.event_status import EventStatus
 from models.equipment import Equipment
 from models.event_request import EventRequest
 from models.user import User
+from models.venue import Venue
 
 MakeUser = Callable[..., User]
 MakeClient = Callable[[User | None], httpx.AsyncClient]
@@ -34,6 +36,19 @@ def request_body(**overrides: object) -> dict[str, object]:
 
 
 def add_projector(db: Session) -> None:
+    if db.query(Venue).filter(Venue.name == "Auditorium-type venue").first() is None:
+        db.add(
+            Venue(
+                name="Auditorium-type venue",
+                location="Test",
+                maximum_capacity=200,
+                facilities=[],
+                supported_layouts=[],
+                accessibility_features=[],
+                opens_at=time(8),
+                closes_at=time(22),
+            )
+        )
     if (
         db.query(Equipment)
         .filter(

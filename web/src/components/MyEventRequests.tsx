@@ -10,6 +10,7 @@ import {
   getEventRequest,
   listDraftEventRequests,
   listEquipmentRequirementTypes,
+  listVenueRequirementNames,
   listMyEventRequests,
   submitEventRequest,
   SubmissionRejectedError,
@@ -53,6 +54,11 @@ export default function MyEventRequests() {
   const equipmentTypes = useQuery({
     queryKey: ['equipment-types', token],
     queryFn: () => listEquipmentRequirementTypes(token ?? ''),
+    enabled: token !== null,
+  })
+  const venueNames = useQuery({
+    queryKey: ['venue-names', token],
+    queryFn: () => listVenueRequirementNames(token ?? ''),
     enabled: token !== null,
   })
 
@@ -218,6 +224,8 @@ export default function MyEventRequests() {
           isSubmitting={submit.isPending}
           equipmentTypes={equipmentTypes.data ?? []}
           equipmentTypesError={equipmentTypes.isError ? equipmentTypes.error.message : undefined}
+          venueNames={venueNames.data ?? []}
+          venueNamesError={venueNames.isError ? venueNames.error.message : undefined}
         />
       )}
 
@@ -342,6 +350,8 @@ function DraftForm({
   isSubmitting,
   equipmentTypes,
   equipmentTypesError,
+  venueNames,
+  venueNamesError,
 }: {
   state: EditingState
   onChange: (state: EditingState) => void
@@ -352,6 +362,8 @@ function DraftForm({
   isSubmitting: boolean
   equipmentTypes: string[]
   equipmentTypesError?: string
+  venueNames: string[]
+  venueNamesError?: string
 }) {
   const update = (field: keyof DraftFormValues, value: string) => {
     onChange({ ...state, values: { ...state.values, [field]: value } })
@@ -405,11 +417,26 @@ function DraftForm({
           value={state.values.expected_attendance}
           onChange={(value) => update('expected_attendance', value)}
         />
-        <Field
-          label="Venue requirement"
-          value={state.values.venue_requirement}
-          onChange={(value) => update('venue_requirement', value)}
-        />
+        <label>
+          <span className="text-sm font-medium text-slate-700">Venue requirement</span>
+          <select
+            value={state.values.venue_requirement}
+            onChange={(event) => update('venue_requirement', event.target.value)}
+            className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm"
+          >
+            <option value="">Select a venue</option>
+            {venueNames.map((venueName) => (
+              <option key={venueName} value={venueName}>
+                {venueName}
+              </option>
+            ))}
+          </select>
+          {venueNamesError && (
+            <span role="alert" className="mt-1 block text-sm text-red-600">
+              {venueNamesError}
+            </span>
+          )}
+        </label>
         <Field
           label="Accessibility requirement"
           value={state.values.accessibility_requirement}

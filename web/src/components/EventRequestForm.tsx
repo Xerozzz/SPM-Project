@@ -5,9 +5,9 @@ import {
   createEventRequest,
   EventRequestValidationError,
   listEquipmentRequirementTypes,
+  listVenueRequirementNames,
   type EventRequestCreate,
   FIELD_LABELS,
-  VENUE_REQUIREMENTS,
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
 import {
@@ -50,11 +50,9 @@ const textFields: Array<{
   { name: 'registration_requirement', multiline: true },
 ]
 
-// Venue requirements remain fixed categories. Equipment requirements are types supplied by the
-// catalogue; selecting one describes a need for later review and cannot allocate a resource.
 /**
- * SCRUM-28: collect a new event request. The venue and equipment fields describe needs; they
- * never choose catalogue items or reserve resources.
+ * SCRUM-28: collect a new event request. Catalogue selections describe needs; they never
+ * reserve resources.
  */
 export default function EventRequestForm() {
   const { token } = useAuth()
@@ -65,6 +63,11 @@ export default function EventRequestForm() {
   const equipmentTypes = useQuery({
     queryKey: ['equipment-types', token],
     queryFn: () => listEquipmentRequirementTypes(token ?? ''),
+    enabled: token !== null,
+  })
+  const venueNames = useQuery({
+    queryKey: ['venue-names', token],
+    queryFn: () => listVenueRequirementNames(token ?? ''),
     enabled: token !== null,
   })
 
@@ -144,7 +147,7 @@ export default function EventRequestForm() {
         ))}
         <CatalogueRequirementField
           name="venue_requirement"
-          options={VENUE_REQUIREMENTS}
+          options={venueNames.data ?? []}
           placeholder="Select a venue"
           value={values.venue_requirement}
           error={errors.venue_requirement}
@@ -158,9 +161,9 @@ export default function EventRequestForm() {
           error={errors.equipment_requirement}
           onChange={(value) => change('equipment_requirement', value)}
         />
-        {equipmentTypes.isError && (
+        {(equipmentTypes.isError || venueNames.isError) && (
           <p role="alert" className="text-sm text-red-600">
-            {equipmentTypes.error.message}
+            {equipmentTypes.error?.message ?? venueNames.error?.message}
           </p>
         )}
         <div className="space-y-4">

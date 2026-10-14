@@ -42,6 +42,11 @@ def list_selectable(db: Session) -> list[Venue]:
     return repo.list_active(db)
 
 
+def list_selectable_names(db: Session) -> list[str]:
+    """Active venue names organisers may record as a requirement."""
+    return [venue.name for venue in repo.list_active(db)]
+
+
 def get(db: Session, venue_id: uuid.UUID) -> Venue:
     """AC4: one venue, active or not, so historical references stay readable."""
     venue = repo.get(db, venue_id)

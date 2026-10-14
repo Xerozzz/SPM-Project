@@ -22,6 +22,12 @@ function renderForm() {
         headers: { 'Content-Type': 'application/json' },
       })
     }
+    if (String(input) === '/api/event-requests/venue-names') {
+      return new Response(JSON.stringify(['Hall A']), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
     return new Response(JSON.stringify({ id: 'request-1', name: 'Orientation Day', status: 'draft' }), {
       status: 201,
       headers: { 'Content-Type': 'application/json' },
@@ -46,7 +52,7 @@ async function fillValidForm() {
     'Start date and time': '2026-12-01T09:00',
     'End date and time': '2026-12-01T13:00',
     'Expected attendance': '200',
-    'Venue requirement': 'Auditorium-type venue',
+    'Venue requirement': 'Hall A',
     'Accessibility requirement': 'Step-free access',
     'Equipment requirement': 'Projector',
     'Layout requirement': 'Theatre style',
@@ -191,10 +197,10 @@ test('rejects a start date in the past before creating a request', async () => {
   expect(fetchMock).not.toHaveBeenCalled()
 })
 
-test('shows distinct equipment types loaded from the catalogue', async () => {
+test('shows venue names and equipment types loaded from the catalogues', async () => {
   renderForm()
 
-  expect(screen.getByLabelText('Venue requirement *')).toHaveTextContent('Auditorium-type venue')
+  expect(await screen.findByRole('option', { name: 'Hall A' })).toBeInTheDocument()
   expect(await screen.findByRole('option', { name: 'Projector' })).toBeInTheDocument()
   expect(screen.getAllByText(/does not reserve a specific resource/i)).toHaveLength(2)
 })

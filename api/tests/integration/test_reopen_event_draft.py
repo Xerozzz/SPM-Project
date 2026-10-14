@@ -2,7 +2,7 @@
 
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from typing import cast
 
 import httpx
@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from core.dependencies import EventAccess, require_event_access
 from models.equipment import Equipment
 from models.user import User
+from models.venue import Venue
 
 MakeUser = Callable[..., User]
 MakeClient = Callable[[User | None], httpx.AsyncClient]
@@ -46,6 +47,19 @@ async def create_draft(client: httpx.AsyncClient) -> dict[str, object]:
 
 async def create_complete_draft(db: Session, client: httpx.AsyncClient) -> dict[str, object]:
     start = datetime.now(UTC) + timedelta(days=30)
+    if db.query(Venue).filter(Venue.name == "Seminar room-type venue").first() is None:
+        db.add(
+            Venue(
+                name="Seminar room-type venue",
+                location="Test",
+                maximum_capacity=40,
+                facilities=[],
+                supported_layouts=[],
+                accessibility_features=[],
+                opens_at=time(8),
+                closes_at=time(22),
+            )
+        )
     if (
         db.query(Equipment)
         .filter(

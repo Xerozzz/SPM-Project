@@ -94,7 +94,7 @@ def _sample_event_requests() -> list[tuple[uuid.UUID, dict[str, object]]]:
         "start_at": start,
         "end_at": start + timedelta(hours=4),
         "expected_attendance": 200,
-        "venue_requirement": "Auditorium-type venue",
+        "venue_requirement": "Mochtar Riady Auditorium",
         "accessibility_requirement": "Step-free access and a hearing loop",
         "equipment_requirement": "Projector-type requirement",
         "layout_requirement": "Theatre style",
@@ -108,7 +108,7 @@ def _sample_event_requests() -> list[tuple[uuid.UUID, dict[str, object]]]:
         "start_at": start + timedelta(days=14),
         "end_at": None,
         "expected_attendance": None,
-        "venue_requirement": "Outdoor event space",
+        "venue_requirement": "Hall A",
         "accessibility_requirement": None,
         "equipment_requirement": None,
         "layout_requirement": None,
@@ -124,7 +124,7 @@ def _sample_event_requests() -> list[tuple[uuid.UUID, dict[str, object]]]:
         "start_at": start + timedelta(days=21),
         "end_at": start + timedelta(days=21, hours=6),
         "expected_attendance": 180,
-        "venue_requirement": "Auditorium-type venue",
+        "venue_requirement": "Mochtar Riady Auditorium",
         "accessibility_requirement": "Step-free access",
         "equipment_requirement": "Projector-type requirement",
         "layout_requirement": "Theatre style",
@@ -139,7 +139,7 @@ def _sample_event_requests() -> list[tuple[uuid.UUID, dict[str, object]]]:
         "start_at": start + timedelta(days=35),
         "end_at": start + timedelta(days=35, hours=4),
         "expected_attendance": 150,
-        "venue_requirement": "Auditorium-type venue",
+        "venue_requirement": "Mochtar Riady Auditorium",
         "accessibility_requirement": "Step-free access",
         "equipment_requirement": "Microphone-type requirement",
         "layout_requirement": "Banquet style",
@@ -298,8 +298,9 @@ def main() -> None:
         db.flush()
         _seed_equipment(db)
         db.flush()
-        _seed_event_requests(db)
         _seed_venues(db)
+        db.flush()
+        _seed_event_requests(db)
         db.commit()
     finally:
         db.close()
