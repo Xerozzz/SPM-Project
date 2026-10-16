@@ -14,6 +14,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from domain.equipment import OPERATIONAL_STATUSES
 from domain.equipment_requirement import RequirementReview
 from domain.event_status import EventStatus
 from models.equipment import Equipment
@@ -33,7 +34,9 @@ def catalogue(db: Session, *types: str) -> None:
                 description=None,
                 total_quantity=10,
                 location="Store room",
-                operational_status="operational",
+                # The catalogue's closed vocabulary, not a lowercase lookalike: a check
+                # constraint enforces it (migration 0018, domain/equipment.py).
+                operational_status=OPERATIONAL_STATUSES[0],
             )
         )
     db.flush()
@@ -137,7 +140,7 @@ async def test_a_type_outside_the_active_catalogue_is_refused(
         description=None,
         total_quantity=1,
         location="Store room",
-        operational_status="operational",
+        operational_status=OPERATIONAL_STATUSES[0],
         is_active=False,
     )
     db.add(deactivated)
