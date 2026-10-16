@@ -41,6 +41,9 @@ someone else made two weeks ago.
 | [0028](0028-ordinary-event-updates-by-assigned-coordinator.md) | Ordinary event updates after submission belong to the assigned coordinator | Proposed |
 | [0029](0029-tentative-venue-holds.md) | Place a tentative venue hold on a pending booking request | Proposed |
 | [0030](0030-expire-tentative-holds-with-an-in-process-timer.md) | Expire tentative venue holds with an in-process minute timer | Proposed |
+| [0031](0031-catalogue-backed-venue-requirements.md) | Validate event venue requirements against the catalogue | Proposed |
+| [0032](0032-use-catalogue-equipment-type-names.md) | Use catalogue equipment type names in event requirements | Proposed |
+| [0033](0033-equipment-requirements-as-records.md) | Make an event's equipment requirements records, with the organiser's choice as the first one | Proposed |
 
 ## When to write one
 
