@@ -22,7 +22,7 @@ from models.equipment_requirement_change import EquipmentRequirementChange
 from models.event_equipment_requirement import EventEquipmentRequirement
 from models.event_request import EventRequest
 from models.user import User
-from tests.integration.test_submit_event_request import MakeClient, MakeUser
+from tests.integration.test_submit_event_request import MakeClient, MakeUser, make_draft
 from tests.integration.test_submit_venue_booking import approved_event
 
 
@@ -306,10 +306,20 @@ async def test_approval_carries_the_organisers_choice_across(
     today would start with an empty list and the Coordinator would type it again.
     """
     catalogue(db, "Projector")
-    event, coordinator = planning_event(db, make_user, equipment_requirement="Projector")
+    organiser, coordinator = make_user("organiser"), make_user("coordinator")
+    # Approved through the real route, not by setting the column: the carry-across happens
+    # in `services.event_requests.approve`, so an arrangement that fakes the status would
+    # pass this test while the feature did nothing.
+    event = make_draft(db, organiser, equipment_requirement="Projector")
+    event.status = EventStatus.SUBMITTED
+    event.coordinator_id = coordinator.id
+    db.flush()
 
     async with make_client(coordinator) as client:
+        approved = await client.post(f"/api/event-requests/{event.id}/approve")
         response = await client.get(url(event))
+
+    assert approved.status_code == 200, approved.text
 
     assert [row["equipment_type"] for row in response.json()] == ["Projector"]
     assert response.json()[0]["quantity"] == 1
