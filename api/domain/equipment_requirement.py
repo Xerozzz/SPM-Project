@@ -46,25 +46,44 @@ class RequirementFields:
     technical_requirements: str | None = None
 
 
-def validate_requirement(
+def validate_new_requirement(
     fields: RequirementFields,
     catalogue_types: frozenset[str],
     types_already_on_the_event: frozenset[str],
 ) -> list[FieldProblem]:
-    """Every problem that blocks saving; an empty list means it may be saved.
+    """Every problem that blocks adding a requirement; empty means it may be saved.
 
     `catalogue_types` are the types currently active in the catalogue, and
-    `types_already_on_the_event` are the ones this event already asks for, excluding the
-    requirement being edited. Both are passed in rather than looked up, so this stays pure
-    and the service owns where they come from.
+    `types_already_on_the_event` are the ones this event already asks for. Both are passed
+    in rather than looked up, so this stays pure and the service owns where they come from.
     """
     problems: list[FieldProblem] = []
     problems.extend(
         _type_problems(fields.equipment_type, catalogue_types, types_already_on_the_event)
     )
-    problems.extend(_quantity_problems(fields.quantity))
-    problems.extend(_technical_problems(fields.technical_requirements))
+    problems.extend(_change_problems(fields.quantity, fields.technical_requirements))
     return problems
+
+
+def validate_change(quantity: int | None, technical_requirements: str | None) -> list[FieldProblem]:
+    """Every problem that blocks changing a requirement that already exists.
+
+    Deliberately says nothing about the equipment type. The type cannot be changed (AC4
+    makes one type one line), and re-checking it against the *active* catalogue would mean
+    that deactivating the last entry of a type froze every requirement already asking for
+    it: the Coordinator would be told to fix a field they cannot send, and their only way
+    out would be to delete the line. The type was legal when the line was created, and
+    whether it can still be supplied is SCRUM-44's question, not a reason to refuse an
+    edit to the quantity.
+    """
+    return _change_problems(quantity, technical_requirements)
+
+
+def _change_problems(
+    quantity: int | None, technical_requirements: str | None
+) -> list[FieldProblem]:
+    """The rules that apply to a requirement's own values, whether new or changed."""
+    return _quantity_problems(quantity) + _technical_problems(technical_requirements)
 
 
 def _type_problems(

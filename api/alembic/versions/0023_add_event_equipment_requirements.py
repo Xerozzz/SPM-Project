@@ -101,6 +101,15 @@ def upgrade() -> None:
     # AC1: what the organiser already chose becomes the first requirement, so the
     # Coordinator maintains it rather than entering it a second time. No audit row is
     # written for these: nobody performed this change, the schema did.
+    #
+    # Approved events only, matching where the application seeds at runtime. ADR-0033
+    # rejects seeding earlier precisely because an organiser can still edit a draft or a
+    # submitted request, which would leave the row and the string disagreeing while both
+    # are live. Backfilling every status would have done that to every existing draft.
+    #
+    # The length guard exists because `create_draft` does not validate this column at all
+    # (only `update_draft` and `submit` do), so a long pasted string could otherwise
+    # overflow VARCHAR(200) and abort the upgrade half way through a deploy.
     op.execute(
         """
         INSERT INTO event_equipment_requirements (
@@ -110,8 +119,10 @@ def upgrade() -> None:
         SELECT gen_random_uuid(), e.id, btrim(e.equipment_requirement), 1,
                NULL, 'pending_review', NULL, now(), now()
         FROM event_requests AS e
-        WHERE e.equipment_requirement IS NOT NULL
+        WHERE e.status = 'approved'
+          AND e.equipment_requirement IS NOT NULL
           AND btrim(e.equipment_requirement) <> ''
+          AND length(btrim(e.equipment_requirement)) <= 200
         """
     )
 

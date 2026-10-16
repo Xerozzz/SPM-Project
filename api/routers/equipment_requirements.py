@@ -28,7 +28,10 @@ router = APIRouter(prefix="/event-requests", tags=["equipment-requirements"])
 MaintainableEvent = Annotated[
     EventRequest, Depends(require_event_access(EventAccess.MAINTAIN_EQUIPMENT))
 ]
-# AC4 of SCRUM-44 and AC1 here: anyone who may see the event may read what it needs.
+# Reading follows ordinary event visibility, so the organiser sees what is being
+# arranged for them. Note this does NOT include Technical Support Staff, who fall
+# through require_event_access(VIEW) to a 403: SCRUM-44 needs them to read these rows
+# and will have to widen the rule or add a route of its own.
 ViewableEvent = Annotated[EventRequest, Depends(require_event_access(EventAccess.VIEW))]
 AnyUser = Annotated[dict[str, object], Depends(get_current_user)]
 Db = Annotated[Session, Depends(get_db)]
@@ -89,17 +92,20 @@ def update_requirement(
     user: AnyUser,
     db: Db,
 ) -> RequirementRead:
-    """AC2 and AC5: change a requirement, which sends it back for review."""
-    existing = service.list_for_event(db, event)
-    current = next((row for row in existing if row.id == requirement_id), None)
-    fields = RequirementFields(
-        equipment_type=current.equipment_type if current is not None else None,
-        quantity=body.quantity,
-        technical_requirements=body.technical_requirements,
-    )
+    """AC2 and AC5: change a requirement, which sends it back for review.
+
+    `exclude_unset` is what makes this a real PATCH: a field the caller left out keeps its
+    value rather than being erased. Sending `technical_requirements: null` still clears it,
+    because that is an answer rather than a silence.
+    """
     try:
         changed = service.update(
-            db, event, requirement_id, fields, _user_id(user), datetime.now(UTC)
+            db,
+            event,
+            requirement_id,
+            body.model_dump(exclude_unset=True),
+            _user_id(user),
+            datetime.now(UTC),
         )
     except service.RequirementNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipment requirement not found") from exc

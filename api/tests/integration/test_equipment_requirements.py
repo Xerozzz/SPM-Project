@@ -6,7 +6,6 @@ assigned coordinator and a catalogue holding Projector and Microphone.
 """
 
 import uuid
-from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -279,11 +278,12 @@ async def test_every_change_records_who_what_and_both_sides(
     # AC8 says old and new values, not old and new quantities. The free text is the other
     # half, and a PATCH that omits it clears it, which the audit has to show.
     assert rows[0].new_technical_requirements == "Needs an HDMI cable"
+    # The PATCH sent only a quantity, so the free text is carried through unchanged.
     assert (rows[1].old_technical_requirements, rows[1].new_technical_requirements) == (
         "Needs an HDMI cable",
-        None,
+        "Needs an HDMI cable",
     )
-    assert rows[2].new_technical_requirements is None
+    assert rows[2].new_technical_requirements == "Needs an HDMI cable"
 
 
 @pytest.mark.story("SCRUM-43")
@@ -481,60 +481,105 @@ async def test_the_history_starts_empty(
 
     assert response.status_code == 200
     assert response.json() == []
-    assert datetime.now(UTC) is not None
 
 
 @pytest.mark.story("SCRUM-43")
-async def test_approving_a_second_time_does_not_duplicate_the_seeded_requirement(
+async def test_approval_does_not_duplicate_a_requirement_that_already_exists(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
-    """A rejected request can be submitted and approved again, so the seed must be idempotent.
+    """The guard in `seed_from_event`, for the case that can actually happen.
 
-    Claimed in `seed_from_event`'s docstring and in ADR-0033, and nothing proved it. A
-    second seed would also breach the live-line-per-type index, so the approval itself
-    would fail rather than merely duplicating.
+    An earlier draft of this test cycled an approved event back to SUBMITTED, which
+    `_ALLOWED_TRANSITIONS` forbids, so it proved nothing. The real case is migration
+    0023: it backfills a requirement for an approved event, and the seed must then not
+    add a second one. Arranged here by putting the row in first, as the migration would.
     """
     catalogue(db, "Projector")
     organiser, coordinator = make_user("organiser"), make_user("coordinator")
     event = make_draft(db, organiser, equipment_requirement="Projector")
     event.status = EventStatus.SUBMITTED
     event.coordinator_id = coordinator.id
+    db.add(
+        EventEquipmentRequirement(
+            event_request_id=event.id,
+            equipment_type="Projector",
+            quantity=1,
+            technical_requirements=None,
+            review_status=RequirementReview.PENDING_REVIEW,
+        )
+    )
     db.flush()
 
     async with make_client(coordinator) as client:
-        first = await client.post(f"/api/event-requests/{event.id}/approve")
-        # Back round the loop: rejected, resubmitted, approved again.
-        event.status = EventStatus.SUBMITTED
-        db.flush()
-        second = await client.post(f"/api/event-requests/{event.id}/approve")
+        approved = await client.post(f"/api/event-requests/{event.id}/approve")
         listed = await client.get(url(event))
 
-    assert first.status_code == 200, first.text
-    assert second.status_code == 200, second.text
+    assert approved.status_code == 200, approved.text
     assert [row["equipment_type"] for row in listed.json()] == ["Projector"]
 
 
 @pytest.mark.story("SCRUM-43")
-async def test_a_coordinators_own_requirement_survives_a_second_approval(
+async def test_a_partial_change_leaves_the_other_field_alone(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
-    # The guard is "this event has requirements", not "this type is present", so a
-    # coordinator who has already replaced the organiser's choice does not get it back.
-    catalogue(db, "Projector", "Microphone")
-    organiser, coordinator = make_user("organiser"), make_user("coordinator")
-    event = make_draft(db, organiser, equipment_requirement="Projector")
-    event.status = EventStatus.SUBMITTED
-    event.coordinator_id = coordinator.id
-    db.flush()
+    """Found in review: a PATCH that sent only a quantity used to erase the free text.
+
+    Both directions, because the old behaviour was asymmetric: an absent quantity was a
+    422 while absent free text was silently destructive.
+    """
+    catalogue(db, "Projector")
+    event, coordinator = planning_event(db, make_user)
 
     async with make_client(coordinator) as client:
-        await client.post(f"/api/event-requests/{event.id}/approve")
-        seeded = (await client.get(url(event))).json()[0]
-        await client.delete(url(event, f"/{seeded['id']}"))
-        await client.post(url(event), json=body(equipment_type="Microphone"))
-        event.status = EventStatus.SUBMITTED
-        db.flush()
-        await client.post(f"/api/event-requests/{event.id}/approve")
-        listed = await client.get(url(event))
+        added = await client.post(url(event), json=body())
+        requirement = url(event, f"/{added.json()['id']}")
+        quantity_only = await client.patch(requirement, json={"quantity": 5})
+        text_only = await client.patch(requirement, json={"technical_requirements": "Two mics"})
 
-    assert [row["equipment_type"] for row in listed.json()] == ["Microphone"]
+    assert quantity_only.status_code == 200, quantity_only.text
+    assert quantity_only.json()["technical_requirements"] == "Needs an HDMI cable"
+    assert text_only.status_code == 200, text_only.text
+    assert text_only.json()["quantity"] == 5
+    assert text_only.json()["technical_requirements"] == "Two mics"
+
+
+@pytest.mark.story("SCRUM-43")
+async def test_free_text_can_still_be_cleared_on_purpose(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # Sending null is an answer; leaving the field out is a silence. They must differ.
+    catalogue(db, "Projector")
+    event, coordinator = planning_event(db, make_user)
+
+    async with make_client(coordinator) as client:
+        added = await client.post(url(event), json=body())
+        cleared = await client.patch(
+            url(event, f"/{added.json()['id']}"), json={"technical_requirements": None}
+        )
+
+    assert cleared.json()["technical_requirements"] is None
+
+
+@pytest.mark.story("SCRUM-43")
+async def test_a_requirement_can_be_changed_after_its_type_is_deactivated(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """Found in review, and the worst of what it found.
+
+    Technical Support deactivating the last entry of a type used to freeze every
+    requirement already asking for it: the Coordinator was told to fix `equipment_type`,
+    a field the PATCH schema does not even accept, and the only way out was to delete the
+    line. Changing a quantity must not depend on the catalogue at all.
+    """
+    catalogue(db, "Projector")
+    event, coordinator = planning_event(db, make_user)
+
+    async with make_client(coordinator) as client:
+        added = await client.post(url(event), json=body())
+        for entry in db.scalars(select(Equipment)):
+            entry.is_active = False
+        db.flush()
+        changed = await client.patch(url(event, f"/{added.json()['id']}"), json={"quantity": 4})
+
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["quantity"] == 4

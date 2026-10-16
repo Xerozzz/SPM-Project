@@ -31,8 +31,11 @@ still asks for a kind of thing rather than a particular item in a particular roo
 
 **Approval is the handoff.** Before approval the organiser owns the single type they
 picked; at approval that type becomes the event's first requirement, with a quantity of
-one. Migration 0023 does the same for events that already exist. Neither writes an audit
-row, because nobody performed those changes.
+one. Migration 0023 does the same for events that already exist, **and only for approved
+ones**, so the migration draws the line in the same place the application does. Backfilling
+every status would have caused exactly the drift this ADR rejects below: an organiser can
+still edit a draft, so the row and the string would disagree while both were live. Neither
+path writes an audit row, because nobody performed those changes.
 
 That point is chosen deliberately. Approval is where an event stops being a draft and
 becomes the assigned Coordinator's to plan, which is exactly the boundary AC1 and AC2
@@ -45,6 +48,13 @@ Support Staff work from.
 
 **Uniqueness is a partial index**, over live rows only. A removed requirement keeps its
 row, so a plain unique constraint would make removal a one-way door for that type.
+
+**An edit is judged without the catalogue.** Adding a requirement checks the type
+against the active catalogue; changing one does not, and `validate_change` is not even
+given the catalogue to check against. Re-checking would mean that deactivating the last
+entry of a type froze every requirement already asking for it: the Coordinator would be
+told to fix a field the PATCH schema does not accept, and their only way out would be to
+delete the line. Whether a type can still be supplied is SCRUM-44's question.
 
 **The review vocabulary is written down in full now** (`pending_review`, `available`,
 `partially_available`, `unavailable`), although SCRUM-43 only ever sets the first. The
@@ -79,6 +89,10 @@ closed list rather than inventing a second one.
   organiser's field. Consolidating them is a follow-up that supersedes ADR-0024's storage
   decision, touches SCRUM-56's suitability check and SCRUM-90's form, and deserves its own
   story rather than being smuggled into this one.
+- The uniqueness rule is checked in the domain and enforced by the index, which is a
+  read followed by a write. Two coordinators adding the same type at the same instant
+  both pass the check, and the loser is turned back into the same refusal by catching the
+  index violation, the way `repositories.equipment` already does.
 - A quantity of one is assumed for every seeded requirement. It is the only honest reading
   of a field that never held a number, and it is wrong whenever the organiser wanted more.
 - The type cannot be edited on an existing line. Moving a line to a different type is a

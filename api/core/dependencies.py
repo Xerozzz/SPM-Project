@@ -129,18 +129,17 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
-        # SCRUM-43 AC10: only the currently assigned coordinator, and only while the
-        # event is being planned. The codebase calls that phase APPROVED (see the note on
-        # ACTIVE_STATUSES), which is the "Approved or Planning" the ticket describes.
-        # SUBMITTED is too early and CONFIRMED too late: AC11 sends a change after
-        # confirmation through the significant-change process instead.
-        if permission is EventAccess.MAINTAIN_EQUIPMENT:
-            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
-            if is_assigned and request.status is EventStatus.APPROVED:
-                return request
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
-
-        if permission is EventAccess.SUBMIT_VENUE_BOOKING:
+        # Two separate permissions that happen to ask the same question today: the
+        # assigned coordinator, while the event is being planned. The codebase calls that
+        # phase APPROVED (see the note on ACTIVE_STATUSES), which is the "Approved or
+        # Planning" SCRUM-43 AC10 describes. SUBMITTED is too early and CONFIRMED too
+        # late, since AC11 sends a post-confirmation change through the significant-change
+        # process instead.
+        #
+        # Kept as two members rather than one, because they mean different things and
+        # either could be widened on its own. The rule is written once so that widening
+        # one is a deliberate edit rather than two branches silently drifting apart.
+        if permission in (EventAccess.MAINTAIN_EQUIPMENT, EventAccess.SUBMIT_VENUE_BOOKING):
             is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
             if is_assigned and request.status is EventStatus.APPROVED:
                 return request

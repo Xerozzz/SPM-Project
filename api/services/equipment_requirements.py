@@ -18,7 +18,8 @@ from sqlalchemy.orm import Session
 from domain.equipment_requirement import (
     RequirementFields,
     review_after_change,
-    validate_requirement,
+    validate_change,
+    validate_new_requirement,
 )
 from domain.validation import FieldProblem
 from models.equipment_requirement_change import EquipmentRequirementChange, RequirementAction
@@ -57,7 +58,7 @@ def add(
     now: datetime,
 ) -> EventEquipmentRequirement:
     """AC2 and AC3: add a requirement to an event the Coordinator is maintaining."""
-    _ensure_valid(db, event, fields, replacing=None)
+    _ensure_valid(db, event, fields)
     assert fields.equipment_type is not None and fields.quantity is not None
     requirement = EventEquipmentRequirement(
         event_request_id=event.id,
@@ -82,29 +83,51 @@ def add(
         new_quantity=requirement.quantity,
         new_technical=requirement.technical_requirements,
     )
-    return repo.save(db, requirement)
+    try:
+        return repo.save(db, requirement)
+    except repo.DuplicateRequirementError as exc:
+        # Two coordinators added the same type at the same moment and the index refused
+        # the second. Reported as the rule it broke, so the loser sees what the check
+        # would have told them rather than a 500.
+        raise InvalidRequirementError(
+            [FieldProblem("equipment_type", "is already required for this event")]
+        ) from exc
 
 
 def update(
     db: Session,
     event: EventRequest,
     requirement_id: uuid.UUID,
-    fields: RequirementFields,
+    changes: dict[str, object],
     actor_id: uuid.UUID,
     now: datetime,
 ) -> EventEquipmentRequirement:
     """AC2 and AC5: change a requirement, which sends it back for review.
+
+    `changes` holds only what the caller actually sent, so a field left out keeps its
+    value and is not quietly erased. The record is validated as it would be *after* the
+    change, the same way `services.venues.update` does it, so sending an invalid quantity
+    is refused whether or not the other field came with it.
 
     The type is not changed here. AC4 makes one type one line, so moving a line to a
     different type is a removal and an addition, which keeps the history honest about
     what was asked for and when.
     """
     requirement = _live_requirement(db, event, requirement_id)
-    _ensure_valid(db, event, fields, replacing=requirement.id)
-    assert fields.quantity is not None
+    merged_quantity = changes.get("quantity", requirement.quantity)
+    merged_technical = changes.get("technical_requirements", requirement.technical_requirements)
+    problems = validate_change(
+        merged_quantity if isinstance(merged_quantity, int) else None,
+        merged_technical if isinstance(merged_technical, str) else None,
+    )
+    if problems:
+        raise InvalidRequirementError(problems)
+    assert isinstance(merged_quantity, int)
     old_quantity, old_technical = requirement.quantity, requirement.technical_requirements
-    requirement.quantity = fields.quantity
-    requirement.technical_requirements = fields.technical_requirements
+    requirement.quantity = merged_quantity
+    requirement.technical_requirements = (
+        merged_technical if isinstance(merged_technical, str) else None
+    )
     requirement.review_status = review_after_change()
     requirement.updated_at = now
     _record(
@@ -171,17 +194,11 @@ def _live_requirement(
     return requirement
 
 
-def _ensure_valid(
-    db: Session,
-    event: EventRequest,
-    fields: RequirementFields,
-    *,
-    replacing: uuid.UUID | None,
-) -> None:
-    problems = validate_requirement(
+def _ensure_valid(db: Session, event: EventRequest, fields: RequirementFields) -> None:
+    problems = validate_new_requirement(
         fields,
         frozenset(catalogue_repo.list_distinct_active_types(db)),
-        repo.live_types_for_event(db, event.id, excluding=replacing),
+        repo.live_types_for_event(db, event.id),
     )
     if problems:
         raise InvalidRequirementError(problems)
@@ -233,8 +250,11 @@ def seed_from_event(db: Session, event: EventRequest, now: datetime) -> None:
     Added to the session, not committed: the caller's save commits it with the approval,
     so an approval that fails leaves no requirement behind.
 
-    Idempotent, because a rejected request can be submitted and approved again, and quiet
-    about quantity: a field that never held a number can only honestly become one.
+    Idempotent, which matters for migration 0023: that backfills a requirement for every
+    approved event, so an event approved before the migration and re-read after it must
+    not gain a second line. An approved event cannot return to SUBMITTED, so approval
+    itself never runs twice. Quiet about quantity, because a field that never held a
+    number can only honestly become one.
 
     No audit row is written. AC8 records what a person did to a requirement, and nobody
     added this one; the approval carried it across. The same is true of 0023's backfill.

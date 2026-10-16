@@ -3,6 +3,7 @@
 import uuid
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models.equipment_requirement_change import EquipmentRequirementChange
@@ -48,12 +49,38 @@ def live_types_for_event(
     )
 
 
+# AC4 is checked in the domain before the insert, but that is a read followed by a write:
+# two coordinators adding the same type at the same moment both pass it. The partial unique
+# index is what actually guarantees it, so the loser has to be turned back into the same
+# refusal the check would have given rather than escaping as a 500.
+DUPLICATE_LIVE_TYPE_INDEX = "event_equipment_requirements_one_live_line_per_type"
+
+
+class DuplicateRequirementError(Exception):
+    """The database refused a second live line for one type on one event (AC4)."""
+
+
 def save(db: Session, requirement: EventEquipmentRequirement) -> EventEquipmentRequirement:
-    """Commit the requirement and any audit row added alongside it."""
+    """Commit the requirement and any audit row added alongside it.
+
+    Same shape as `repositories.equipment.save`, which has the same read-then-write race
+    on its own uniqueness.
+    """
     db.add(requirement)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        if _violates_one_live_line_per_type(exc):
+            raise DuplicateRequirementError from exc
+        raise
     db.refresh(requirement)
     return requirement
+
+
+def _violates_one_live_line_per_type(error: IntegrityError) -> bool:
+    constraint = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
+    return constraint == DUPLICATE_LIVE_TYPE_INDEX
 
 
 def record_change(db: Session, change: EquipmentRequirementChange) -> None:
