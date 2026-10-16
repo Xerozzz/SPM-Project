@@ -276,6 +276,14 @@ async def test_every_change_records_who_what_and_both_sides(
     assert (rows[0].old_quantity, rows[0].new_quantity) == (None, 2)
     assert (rows[1].old_quantity, rows[1].new_quantity) == (2, 7)
     assert (rows[2].old_quantity, rows[2].new_quantity) == (7, None)
+    # AC8 says old and new values, not old and new quantities. The free text is the other
+    # half, and a PATCH that omits it clears it, which the audit has to show.
+    assert rows[0].new_technical_requirements == "Needs an HDMI cable"
+    assert (rows[1].old_technical_requirements, rows[1].new_technical_requirements) == (
+        "Needs an HDMI cable",
+        None,
+    )
+    assert rows[2].new_technical_requirements is None
 
 
 @pytest.mark.story("SCRUM-43")
@@ -474,3 +482,59 @@ async def test_the_history_starts_empty(
     assert response.status_code == 200
     assert response.json() == []
     assert datetime.now(UTC) is not None
+
+
+@pytest.mark.story("SCRUM-43")
+async def test_approving_a_second_time_does_not_duplicate_the_seeded_requirement(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """A rejected request can be submitted and approved again, so the seed must be idempotent.
+
+    Claimed in `seed_from_event`'s docstring and in ADR-0033, and nothing proved it. A
+    second seed would also breach the live-line-per-type index, so the approval itself
+    would fail rather than merely duplicating.
+    """
+    catalogue(db, "Projector")
+    organiser, coordinator = make_user("organiser"), make_user("coordinator")
+    event = make_draft(db, organiser, equipment_requirement="Projector")
+    event.status = EventStatus.SUBMITTED
+    event.coordinator_id = coordinator.id
+    db.flush()
+
+    async with make_client(coordinator) as client:
+        first = await client.post(f"/api/event-requests/{event.id}/approve")
+        # Back round the loop: rejected, resubmitted, approved again.
+        event.status = EventStatus.SUBMITTED
+        db.flush()
+        second = await client.post(f"/api/event-requests/{event.id}/approve")
+        listed = await client.get(url(event))
+
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert [row["equipment_type"] for row in listed.json()] == ["Projector"]
+
+
+@pytest.mark.story("SCRUM-43")
+async def test_a_coordinators_own_requirement_survives_a_second_approval(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # The guard is "this event has requirements", not "this type is present", so a
+    # coordinator who has already replaced the organiser's choice does not get it back.
+    catalogue(db, "Projector", "Microphone")
+    organiser, coordinator = make_user("organiser"), make_user("coordinator")
+    event = make_draft(db, organiser, equipment_requirement="Projector")
+    event.status = EventStatus.SUBMITTED
+    event.coordinator_id = coordinator.id
+    db.flush()
+
+    async with make_client(coordinator) as client:
+        await client.post(f"/api/event-requests/{event.id}/approve")
+        seeded = (await client.get(url(event))).json()[0]
+        await client.delete(url(event, f"/{seeded['id']}"))
+        await client.post(url(event), json=body(equipment_type="Microphone"))
+        event.status = EventStatus.SUBMITTED
+        db.flush()
+        await client.post(f"/api/event-requests/{event.id}/approve")
+        listed = await client.get(url(event))
+
+    assert [row["equipment_type"] for row in listed.json()] == ["Microphone"]
