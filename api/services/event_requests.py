@@ -29,6 +29,7 @@ from repositories import coordinator_assignments as history_repo
 from repositories import equipment as equipment_repo
 from repositories import event_requests as repo
 from repositories import users as users_repo
+from services import equipment_requirements
 from services import venues as venues_service
 
 
@@ -311,6 +312,10 @@ def approve(
     request.decided_by_id = coordinator_id
     request.decided_at = now
     request.rejection_reason = None
+    # SCRUM-43 AC1: the organiser's chosen equipment type becomes the first requirement
+    # the coordinator maintains, so it is never entered twice. Still no allocation: a
+    # requirement says what is needed, and SCRUM-53 is what commits anything.
+    equipment_requirements.seed_from_event(db, request, now)
     return repo.save(db, request)
 
 

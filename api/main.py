@@ -19,6 +19,7 @@ from core.hold_expiry import HoldExpiryTimer
 from routers import (
     auth,
     equipment,
+    equipment_requirements,
     event_clarifications,
     event_requests,
     notifications,
@@ -73,6 +74,9 @@ def create_app() -> FastAPI:
     # Feature routers are registered here, one line each, as stories land:
     app.include_router(auth.router, prefix="/api")
     app.include_router(equipment.router, prefix="/api")
+    # SCRUM-43: before event_requests, so /{request_id}/equipment-requirements matches
+    # here rather than a catch-all on the same prefix in that router.
+    app.include_router(equipment_requirements.router, prefix="/api")
     app.include_router(event_clarifications.router, prefix="/api")
     app.include_router(notifications.router)
     app.include_router(event_requests.router, prefix="/api")

@@ -34,6 +34,7 @@ class EventAccess(StrEnum):
     EDIT = "edit"
     DECIDE = "decide"
     SUBMIT_VENUE_BOOKING = "submit_venue_booking"
+    MAINTAIN_EQUIPMENT = "maintain_equipment"
     REQUEST_CLARIFICATION = "request_clarification"
     RESPOND_TO_CLARIFICATION = "respond_to_clarification"
     UPDATE_PLANNING_INFO = "update_planning_info"
@@ -125,6 +126,17 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
         if permission is EventAccess.UPDATE_PLANNING_INFO:
             is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
             if is_assigned and is_active_status(request.status):
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        # SCRUM-43 AC10: only the currently assigned coordinator, and only while the
+        # event is being planned. The codebase calls that phase APPROVED (see the note on
+        # ACTIVE_STATUSES), which is the "Approved or Planning" the ticket describes.
+        # SUBMITTED is too early and CONFIRMED too late: AC11 sends a change after
+        # confirmation through the significant-change process instead.
+        if permission is EventAccess.MAINTAIN_EQUIPMENT:
+            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+            if is_assigned and request.status is EventStatus.APPROVED:
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
