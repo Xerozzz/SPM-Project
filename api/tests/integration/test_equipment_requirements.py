@@ -283,7 +283,9 @@ async def test_every_change_records_who_what_and_both_sides(
         "Needs an HDMI cable",
         "Needs an HDMI cable",
     )
-    assert rows[2].new_technical_requirements == "Needs an HDMI cable"
+    # After a removal there is no new value, which is different from an unchanged one.
+    assert rows[2].old_technical_requirements == "Needs an HDMI cable"
+    assert rows[2].new_technical_requirements is None
 
 
 @pytest.mark.story("SCRUM-43")
