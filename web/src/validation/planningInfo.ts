@@ -1,4 +1,4 @@
-import type { EventRequest } from '../api/eventRequests'
+import type { EventRequest, EventStatus } from '../api/eventRequests'
 
 /**
  * SCRUM-36: the ordinary planning fields the assigned coordinator may change, with their
@@ -43,4 +43,13 @@ export function blankPlanningFields(draft: PlanningInfo): OrdinaryField[] {
   return ORDINARY_FIELDS.filter(([field]) => draft[field].trim().length === 0).map(
     ([field]) => field,
   )
+}
+
+/**
+ * SCRUM-36 AC1: ordinary edits are offered only while the event is Submitted or Approved.
+ * Mirrors ORDINARY_UPDATE_STATUSES in api/domain/event_request.py. A Confirmed event is
+ * changed through the significant-change process instead.
+ */
+export function acceptsOrdinaryUpdate(status: EventStatus): boolean {
+  return status === 'submitted' || status === 'approved'
 }

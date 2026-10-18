@@ -16,6 +16,7 @@ from domain.event_request import (
     ORDINARY_FIELDS,
     EventRequestFields,
     FieldProblem,
+    accepts_ordinary_update,
     field_names,
     validate_catalogue_requirements,
     validate_event_request,
@@ -154,16 +155,15 @@ def update_planning_info(
     """SCRUM-36: the assigned coordinator updates ordinary planning information (AC2).
 
     require_event_access(UPDATE_PLANNING_INFO) has already checked the caller. The row is
-    then read locked and checked again, so a request reassigned or rejected in between is
-    refused rather than edited. Only ORDINARY_FIELDS are copied (AC3), and the status is
-    never touched, so an update cannot move the request through its lifecycle.
+    then read locked and checked again, so a request reassigned, rejected or confirmed in
+    between is refused rather than edited (AC1, AC4). Only ORDINARY_FIELDS are copied
+    (AC3), and the status is never touched, so an update cannot move the request through
+    its lifecycle.
     """
     request = repo.get_for_update(db, request_id)
     if request is None:
         raise EventRequestNotFoundError
-    if request.coordinator_id != coordinator_id or not event_status.is_active_status(
-        request.status
-    ):
+    if request.coordinator_id != coordinator_id or not accepts_ordinary_update(request.status):
         raise NotAuthorisedError
     problems = validate_ordinary_update(changes)
     if problems:

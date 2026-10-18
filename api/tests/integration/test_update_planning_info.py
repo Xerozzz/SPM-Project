@@ -133,9 +133,11 @@ async def test_ordinary_update_is_allowed_on_an_approved_request(
 
 
 @pytest.mark.story("SCRUM-36")
-async def test_ordinary_update_is_allowed_on_a_confirmed_request(
+async def test_a_confirmed_request_cannot_be_updated_directly(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
+    """AC1: a Confirmed event cannot be changed directly. Its changes go through the
+    significant-change process (SCRUM-37/SCRUM-47), not this ordinary edit."""
     organiser = make_user("organiser")
     coordinator = make_user("coordinator")
     request = await _submitted_and_assigned(db, make_client, organiser, coordinator)
@@ -143,12 +145,15 @@ async def test_ordinary_update_is_allowed_on_a_confirmed_request(
     # the SCRUM-34 tests do.
     request.status = EventStatus.CONFIRMED
     db.flush()
+    before = content_of(request)
 
     async with make_client(coordinator) as client:
         response = await _update(client, request.id, {"description": "Updated programme"})
 
-    assert response.status_code == 200
-    assert response.json()["status"] == "confirmed"
+    assert response.status_code == 403
+    db.refresh(request)
+    assert content_of(request) == before
+    assert request.status is EventStatus.CONFIRMED
 
 
 @pytest.mark.story("SCRUM-36")
@@ -287,6 +292,24 @@ async def test_the_shared_dependency_refuses_a_request_that_is_no_longer_active(
 
 
 @pytest.mark.story("SCRUM-36")
+async def test_the_shared_dependency_refuses_a_confirmed_request(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """AC1 comes from require_event_access(UPDATE_PLANNING_INFO): the dependency refuses a
+    Confirmed request before the body is read, so a body that would be a 422 is a 403."""
+    organiser = make_user("organiser")
+    coordinator = make_user("coordinator")
+    request = await _submitted_and_assigned(db, make_client, organiser, coordinator)
+    request.status = EventStatus.CONFIRMED
+    db.flush()
+
+    async with make_client(coordinator) as client:
+        response = await _update(client, request.id, {"expected_attendance": 50})
+
+    assert response.status_code == 403
+
+
+@pytest.mark.story("SCRUM-36")
 async def test_a_signed_out_user_is_refused(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -391,6 +414,23 @@ async def test_a_request_rejected_after_the_access_check_is_refused(
 
     with pytest.raises(service.NotAuthorisedError):
         service.update_planning_info(db, request.id, coordinator.id, {"name": "Renamed"})
+
+
+@pytest.mark.story("SCRUM-36")
+async def test_a_request_confirmed_after_the_access_check_is_refused(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    organiser = make_user("organiser")
+    coordinator = make_user("coordinator")
+    request = await _submitted_and_assigned(db, make_client, organiser, coordinator)
+    # Confirmed between the dependency check and the locked read.
+    request.status = EventStatus.CONFIRMED
+    db.flush()
+
+    with pytest.raises(service.NotAuthorisedError):
+        service.update_planning_info(db, request.id, coordinator.id, {"name": "Renamed"})
+    db.refresh(request)
+    assert request.name == "Orientation Day"
 
 
 @pytest.mark.story("SCRUM-36")

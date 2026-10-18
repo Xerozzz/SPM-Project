@@ -2,6 +2,7 @@ import { expect, test } from 'vitest'
 
 import type { EventRequest } from '../api/eventRequests'
 import {
+  acceptsOrdinaryUpdate,
   blankPlanningFields,
   changedPlanningInfo,
   ORDINARY_FIELDS,
@@ -49,4 +50,12 @@ test('SCRUM-36: blank and whitespace-only fields are reported', () => {
   const draft = { ...planningInfoOf(request), name: '   ' }
 
   expect(blankPlanningFields(draft)).toEqual(['name', 'description'])
+})
+
+test('SCRUM-36 AC1: only Submitted and Approved events offer ordinary edits', () => {
+  expect(acceptsOrdinaryUpdate('submitted')).toBe(true)
+  expect(acceptsOrdinaryUpdate('approved')).toBe(true)
+  expect(acceptsOrdinaryUpdate('confirmed')).toBe(false)
+  expect(acceptsOrdinaryUpdate('draft')).toBe(false)
+  expect(acceptsOrdinaryUpdate('rejected')).toBe(false)
 })
