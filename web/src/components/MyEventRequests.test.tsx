@@ -83,8 +83,9 @@ function defaultHandler(key: string): Handler | null {
   if (key === 'GET /api/event-requests/drafts') return () => json([])
   if (key === 'GET /api/event-requests/equipment-types') return () => json(['Projector'])
   if (key === 'GET /api/event-requests/venue-names') return () => json(['Hall A'])
-  // Submitted requests render their clarification thread, which loads on mount.
-  if (/^GET \/api\/event-requests\/[^/]+\/clarifications$/.test(key)) return () => json([])
+  // SCRUM-106: the organiser view renders no clarification surface at all — the
+  // thread lives only on the coordinator review card — so no clarification fetch
+  // is expected here. If one fires, the mock throws and the test fails loudly.
   return null
 }
 
