@@ -365,6 +365,22 @@ def approve(
     # the coordinator maintains, so it is never entered twice. Still no allocation: a
     # requirement says what is needed, and SCRUM-53 is what commits anything.
     equipment_requirements.seed_from_event(db, request, now)
+    # SCRUM-94: notify the owning organiser of the approval. Staged before the commit
+    # so the decision and its notification land or roll back together; the occurrence
+    # time is the decision time, not a second clock read. The source_id carries the
+    # decision time because a rejected request can be resubmitted and decided again —
+    # each decision is its own notification, while a retried HTTP call never reaches
+    # here (the status machine above refuses it first).
+    db.flush()
+    notifications_repo.stage(
+        db,
+        recipient_id=request.organiser_id,
+        event_request_id=request.id,
+        type=NotificationType.REQUEST_APPROVED,
+        source_type=NotificationSource.EVENT_DECISION,
+        source_id=f"{request.id}:{now.isoformat()}",
+        occurred_at=now,
+    )
     return repo.save(db, request)
 
 
@@ -377,6 +393,19 @@ def reject(
     request.decided_by_id = coordinator_id
     request.decided_at = now
     request.rejection_reason = reason.strip()
+    # SCRUM-94: notify the owning organiser of the rejection. Same transaction as the
+    # decision (see approve). The reason stays on the event — readable through the
+    # authorised event view — and is never copied into the notification.
+    db.flush()
+    notifications_repo.stage(
+        db,
+        recipient_id=request.organiser_id,
+        event_request_id=request.id,
+        type=NotificationType.REQUEST_REJECTED,
+        source_type=NotificationSource.EVENT_DECISION,
+        source_id=f"{request.id}:{now.isoformat()}",
+        occurred_at=now,
+    )
     return repo.save(db, request)
 
 
