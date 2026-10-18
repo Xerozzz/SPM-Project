@@ -39,8 +39,7 @@ test('an organiser submission notifies the active Lead inbox', async ({ page }) 
   await page.getByLabel('Layout requirement *').fill('Theatre style')
   await page.getByLabel('Registration requirement *').fill('Open registration')
   await page.getByRole('button', { name: 'Create event request' }).click()
-  // Creating sends it for review in the same press, so there is no separate submit
-  // step and no “has been created” message to wait for.
+  // Creating sends it for review in the same press, so there is no separate submit step.
   await expect(page.getByRole('status').filter({ hasText: 'submitted for review' })).toContainText(
     `“${name}” has been submitted for review.`,
   )

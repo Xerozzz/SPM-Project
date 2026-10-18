@@ -19,6 +19,10 @@ class NotificationType(StrEnum):
     VENUE_HOLD_EXPIRED = "venue_hold_expired"
     # SCRUM-96: an event request was submitted unassigned and needs Lead triage.
     UNASSIGNED_SUBMISSION = "unassigned_submission"
+    # SCRUM-102 AC3: the request was assigned or reassigned — the type names which,
+    # so a recipient can tell without opening the event.
+    COORDINATOR_ASSIGNED = "coordinator_assigned"
+    COORDINATOR_REASSIGNED = "coordinator_reassigned"
 
 
 class NotificationSource(StrEnum):
@@ -37,3 +41,7 @@ class NotificationSource(StrEnum):
     # is the source_id, so retrying the same submission collides (idempotent) while
     # a later submission of a different request stays distinct.
     EVENT_SUBMISSION = "event_submission"
+    # SCRUM-102: one assignment-history row, so retrying the same assignment action
+    # collides per recipient while a later reassignment (a new history row) stays
+    # distinct. The history row id is the source_id.
+    COORDINATOR_ASSIGNMENT = "coordinator_assignment"

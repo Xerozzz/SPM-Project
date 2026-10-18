@@ -17,6 +17,7 @@ from core.database import SessionLocal
 from core.security import hash_password
 from domain.event_status import EventStatus
 from models.event_request import EventRequest
+from models.notification import Notification
 from models.organisation import Organisation
 from models.user import User
 from services import event_requests as service
@@ -312,6 +313,10 @@ def _committed_submitted() -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID]:
 def _delete_committed(request_id: uuid.UUID, *user_ids: uuid.UUID) -> None:
     session = SessionLocal()
     try:
+        # SCRUM-102: assignment now stages inbox rows referencing the request, so
+        # they go first — otherwise the request delete violates the FK constraint.
+        session.query(Notification).filter(Notification.event_request_id == request_id).delete()
+        session.commit()
         request = session.get(EventRequest, request_id)
         organisation_id: uuid.UUID | None = None
         if request is not None:
