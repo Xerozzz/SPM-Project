@@ -1,4 +1,5 @@
-"""The assigned Coordinator maintains an event's equipment requirements (SCRUM-43)."""
+"""The assigned Coordinator maintains an event's equipment requirements (SCRUM-43), and
+Technical Support Staff review them (SCRUM-44)."""
 
 import uuid
 from datetime import UTC, datetime
@@ -8,19 +9,24 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from core.database import get_db
-from core.dependencies import EventAccess, get_current_user, require_event_access
+from core.dependencies import EventAccess, get_current_user, require_event_access, require_role
 from domain.equipment_requirement import RequirementFields
+from domain.roles import Role
 from models.event_request import EventRequest
 from schemas.equipment_requirements import (
     RequirementChangeRead,
     RequirementCreate,
+    RequirementForReview,
     RequirementRead,
+    RequirementReviewUpdate,
     RequirementUpdate,
 )
 from schemas.event_requests import FieldProblemRead
 from services import equipment_requirements as service
 
 router = APIRouter(prefix="/event-requests", tags=["equipment-requirements"])
+# SCRUM-44 works across events rather than inside one, so it has its own prefix.
+review_router = APIRouter(prefix="/equipment-requirements", tags=["equipment-requirements"])
 
 # AC10: the currently assigned coordinator, while the event is being planned. After a
 # reassignment the rights move with the assignment, because this reads the event's
@@ -29,11 +35,11 @@ MaintainableEvent = Annotated[
     EventRequest, Depends(require_event_access(EventAccess.MAINTAIN_EQUIPMENT))
 ]
 # Reading follows ordinary event visibility, so the organiser sees what is being
-# arranged for them. Note this does NOT include Technical Support Staff, who fall
-# through require_event_access(VIEW) to a 403: SCRUM-44 needs them to read these rows
-# and will have to widen the rule or add a route of its own.
+# arranged for them. Technical Support Staff are not included; SCRUM-44 gives them
+# the review routes at the end of this module instead.
 ViewableEvent = Annotated[EventRequest, Depends(require_event_access(EventAccess.VIEW))]
 AnyUser = Annotated[dict[str, object], Depends(get_current_user)]
+TechSupport = Annotated[dict[str, object], Depends(require_role(Role.TECH_SUPPORT))]
 Db = Annotated[Session, Depends(get_db)]
 
 
@@ -126,3 +132,31 @@ def remove_requirement(
     except service.RequirementNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipment requirement not found") from exc
     return RequirementRead.model_validate(removed)
+
+
+@review_router.get("/review", response_model=list[RequirementForReview])
+def list_for_review(_: TechSupport, db: Db) -> list[RequirementForReview]:
+    """SCRUM-44 AC1: every live requirement of an event in planning, with its timing."""
+    return [
+        RequirementForReview(
+            **RequirementRead.model_validate(row).model_dump(),
+            event_name=event.name,
+            event_start_at=event.start_at,
+            event_end_at=event.end_at,
+        )
+        for row, event in service.list_for_review(db)
+    ]
+
+
+@review_router.patch("/{requirement_id}/review", response_model=RequirementRead)
+def review_requirement(
+    requirement_id: uuid.UUID, body: RequirementReviewUpdate, _: TechSupport, db: Db
+) -> RequirementRead:
+    """SCRUM-44 AC2: record whether it can be fulfilled; 404 if removed, 409 outside planning."""
+    try:
+        reviewed = service.review(db, requirement_id, body.review_status, datetime.now(UTC))
+    except service.RequirementNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipment requirement not found") from exc
+    except service.ReviewNotAllowedError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Event is not in planning") from exc
+    return RequirementRead.model_validate(reviewed)

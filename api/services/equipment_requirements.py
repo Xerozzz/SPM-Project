@@ -17,7 +17,10 @@ from sqlalchemy.orm import Session
 
 from domain.equipment_requirement import (
     RequirementFields,
+    RequirementReview,
+    ReviewRefusal,
     review_after_change,
+    review_refusal,
     validate_change,
     validate_new_requirement,
 )
@@ -27,6 +30,7 @@ from models.event_equipment_requirement import EventEquipmentRequirement
 from models.event_request import EventRequest
 from repositories import equipment as catalogue_repo
 from repositories import equipment_requirements as repo
+from repositories import event_requests as event_request_repo
 
 
 class RequirementError(Exception):
@@ -35,6 +39,10 @@ class RequirementError(Exception):
 
 class RequirementNotFoundError(RequirementError):
     """No such requirement on this event."""
+
+
+class ReviewNotAllowedError(RequirementError):
+    """SCRUM-44: the requirement's event is not in planning, so it cannot be reviewed."""
 
 
 class InvalidRequirementError(RequirementError):
@@ -177,6 +185,37 @@ def remove(
 def history_for_event(db: Session, event: EventRequest) -> list[EquipmentRequirementChange]:
     """AC7 and AC8: every add, change and removal on this event, oldest first."""
     return repo.changes_for_event(db, event.id)
+
+
+def list_for_review(db: Session) -> list[tuple[EventEquipmentRequirement, EventRequest]]:
+    """SCRUM-44 AC1: what Technical Support Staff have to assess, with each event's timing."""
+    return repo.list_for_review(db)
+
+
+def review(
+    db: Session, requirement_id: uuid.UUID, outcome: RequirementReview, now: datetime
+) -> EventEquipmentRequirement:
+    """SCRUM-44 AC2: record whether a requirement can be fulfilled.
+
+    Only the status changes. Nothing is reserved and no stock moves (AC5): SCRUM-53 is what
+    turns a requirement into a commitment. No audit row is written, because
+    `equipment_requirement_changes` has no column for a review outcome and adding one is a
+    migration this story does not make.
+    """
+    requirement = repo.get(db, requirement_id)
+    if requirement is None:
+        raise RequirementNotFoundError
+    event = event_request_repo.get(db, requirement.event_request_id)
+    # The foreign key guarantees the event exists; this only narrows the type for mypy.
+    assert event is not None
+    refusal = review_refusal(event.status, removed=requirement.removed_at is not None)
+    if refusal is ReviewRefusal.REQUIREMENT_REMOVED:
+        raise RequirementNotFoundError
+    if refusal is ReviewRefusal.EVENT_NOT_IN_PLANNING:
+        raise ReviewNotAllowedError
+    requirement.review_status = outcome
+    requirement.updated_at = now
+    return repo.save(db, requirement)
 
 
 def _live_requirement(
