@@ -23,6 +23,10 @@ class NotificationType(StrEnum):
     # so a recipient can tell without opening the event.
     COORDINATOR_ASSIGNED = "coordinator_assigned"
     COORDINATOR_REASSIGNED = "coordinator_reassigned"
+    # SCRUM-94: the request was approved or rejected — the type names the decision,
+    # so the owning organiser can tell without opening the event.
+    REQUEST_APPROVED = "request_approved"
+    REQUEST_REJECTED = "request_rejected"
 
 
 class NotificationSource(StrEnum):
@@ -45,3 +49,8 @@ class NotificationSource(StrEnum):
     # collides per recipient while a later reassignment (a new history row) stays
     # distinct. The history row id is the source_id.
     COORDINATOR_ASSIGNMENT = "coordinator_assignment"
+    # SCRUM-94: the decision on one event request — the request id is the source_id,
+    # so retrying the same decision collides (idempotent). A later decision on the
+    # same request (reject, resubmit, reject again) is a new decision with a new
+    # decision time, so the source_id carries the decision time to stay distinct.
+    EVENT_DECISION = "event_decision"
