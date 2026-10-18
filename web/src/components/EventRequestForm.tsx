@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { type FormEvent, type ReactNode, useState } from 'react'
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react'
 
 import {
   createDraft,
@@ -73,6 +73,10 @@ export default function EventRequestForm({
   const [values, setValues] = useState<FormValues>(initialValues)
   const [errors, setErrors] = useState<FieldErrors>({})
   const [outcome, setOutcome] = useState<string | null>(null)
+  // Survives a failed submit so the retry patches that request instead of making
+  // another. Not state: nothing renders from it.
+  const started = useRef<string | null>(null)
+  const section = useRef<HTMLElement>(null)
   // Reloads the fields when a different draft is chosen. Keyed on the id rather than the
   // object, so re-rendering the list does not throw away what is being typed.
   const [loadedId, setLoadedId] = useState<string | null>(null)
@@ -80,8 +84,25 @@ export default function EventRequestForm({
     setLoadedId(editing?.id ?? null)
     setValues(editing ? formValuesOf(editing) : initialValues)
     setErrors({})
-    setOutcome(null)
+    // Only when a draft is being loaded in. A save releases the form by clearing
+    // `editing`, which comes back through here in the same pass, and clearing the
+    // message unconditionally would wipe the confirmation that save just set.
+    if (editing) setOutcome(null)
+    started.current = null
   }
+  // The form is above a long list, far enough up the page to be off screen by the time
+  // anyone reaches the draft they want. Choosing one filled it in where nobody could see
+  // it, so pressing Edit draft looked like it did nothing at all. Keyed on the id, not
+  // the object, so a list refresh does not drag the page around while someone is typing.
+  const editingId = editing?.id ?? null
+  useEffect(() => {
+    if (editingId === null) return
+    section.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+    // Moving focus is what tells a keyboard or screen reader user the form is now theirs;
+    // the scroll only helps people who can see it.
+    section.current?.querySelector<HTMLInputElement>('#name')?.focus({ preventScroll: true })
+  }, [editingId])
+
   const equipmentTypes = useQuery({
     queryKey: ['equipment-types', token],
     queryFn: () => listEquipmentRequirementTypes(token ?? ''),
@@ -116,13 +137,19 @@ export default function EventRequestForm({
    */
   const createRequest = useMutation({
     mutationFn: async (request: EventRequestCreate) => {
-      const created = editing
-        ? await updateDraft(token ?? '', editing.id, request as EventRequestDraftInput)
+      // The request this press is about: the draft being edited, or the one an earlier
+      // press already created. Without the second case a submit that fails leaves a
+      // request behind and the retry creates another, so one press becomes two records.
+      const existing = editing?.id ?? started.current
+      const saved = existing
+        ? await updateDraft(token ?? '', existing, request as EventRequestDraftInput)
         : await createEventRequest(token ?? '', request)
-      return submitEventRequest(token ?? '', created.id)
+      started.current = saved.id
+      return submitEventRequest(token ?? '', saved.id)
     },
     onError: showProblems,
     onSuccess: (request) => {
+      started.current = null
       setValues(initialValues)
       setErrors({})
       refreshLists()
@@ -137,12 +164,15 @@ export default function EventRequestForm({
    * the check runs when it is submitted.
    */
   const saveDraft = useMutation({
-    mutationFn: (draft: EventRequestDraftInput) =>
-      editing
-        ? updateDraft(token ?? '', editing.id, draft)
-        : createDraft(token ?? '', draft),
+    mutationFn: (draft: EventRequestDraftInput) => {
+      const existing = editing?.id ?? started.current
+      return existing
+        ? updateDraft(token ?? '', existing, draft)
+        : createDraft(token ?? '', draft)
+    },
     onError: showProblems,
     onSuccess: (request) => {
+      started.current = null
       setValues(initialValues)
       setErrors({})
       refreshLists()
@@ -195,14 +225,23 @@ export default function EventRequestForm({
   function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const request = requestBody()
-    if (request) createRequest.mutate(request)
+    if (!request) return
+    // Whichever button is pressed owns the message area, so the other one's last
+    // failure does not sit there contradicting the result of this press.
+    saveDraft.reset()
+    createRequest.mutate(request)
+  }
+
+  function save() {
+    createRequest.reset()
+    saveDraft.mutate(draftBody())
   }
 
   return (
-    <section className="mt-6 rounded-lg border border-slate-200 p-4">
-      <h2 className="font-medium">New event request</h2>
+    <section ref={section} className="mt-6 rounded-lg border border-slate-200 p-4">
+      <h2 className="font-medium">{editing ? 'Edit draft' : 'New event request'}</h2>
       <p className="mt-1 text-sm text-slate-500">
-        Fields marked * are required to create a request.
+        Fields marked * are required to submit a request. A draft can be saved without them.
       </p>
       <form className="mt-4 space-y-4" noValidate onSubmit={create}>
         {textFields.map(({ name, multiline }) => (
@@ -276,9 +315,13 @@ export default function EventRequestForm({
             className="w-full rounded border border-slate-300 p-2"
           />
         </Field>
-        {createRequest.isError && (
+        {/* Both buttons, not just the first: a Save draft that the API refuses used to
+            fail silently, because `createDraft` throws a plain error that the field-level
+            handler has nothing to do with. */}
+        {(createRequest.error ?? saveDraft.error) && (
           <p role="alert" className="text-sm text-red-600">
-            {createRequest.error.message}. Your entered details are still available to edit.
+            {(createRequest.error ?? saveDraft.error)?.message}. Your entered details are
+            still available to edit.
           </p>
         )}
         {outcome && (
@@ -296,10 +339,7 @@ export default function EventRequestForm({
           </button>
           <button
             type="button"
-            onClick={() => {
-              const draft = draftBody()
-              saveDraft.mutate(draft)
-            }}
+            onClick={save}
             disabled={createRequest.isPending || saveDraft.isPending}
             className="rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
           >

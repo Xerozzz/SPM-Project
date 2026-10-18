@@ -85,7 +85,6 @@ export default function MyEventRequests({
     },
   })
 
-
   return (
     <section className="mt-6 space-y-4">
       <div className="rounded-lg border border-slate-200 p-4">
@@ -154,8 +153,6 @@ export default function MyEventRequests({
         )}
       </div>
 
-
-
       <section className="rounded-lg border border-slate-200 p-4">
         <h2 className="font-medium">Organisation drafts</h2>
         {visibleDrafts.isPending && <p className="mt-2 text-sm">Loading...</p>}
@@ -197,11 +194,8 @@ export default function MyEventRequests({
 
 type Outcome =
   | { kind: 'incomplete'; name: string | null; problems: FieldProblem[] }
-  | { kind: 'saved'; request: EventRequest }
   | { kind: 'submitted'; request: EventRequest }
   | { kind: 'failed'; message: string }
-
-
 
 type SubmitTarget = Pick<EventRequest, 'id' | 'name'>
 
@@ -213,13 +207,6 @@ function StatusLabel({ status }: { status: EventRequest['status'] }) {
 }
 
 function OutcomeMessage({ outcome }: { outcome: Outcome }) {
-  if (outcome.kind === 'saved') {
-    return (
-      <p role="status" className="rounded bg-green-50 p-3 text-sm text-green-800">
-        “{titleOf(outcome.request)}” was saved as a Draft.
-      </p>
-    )
-  }
   if (outcome.kind === 'submitted') {
     return (
       <p role="status" className="rounded bg-green-50 p-3 text-sm text-green-800">
@@ -247,12 +234,6 @@ function OutcomeMessage({ outcome }: { outcome: Outcome }) {
     </p>
   )
 }
-
-
-
-
-
-
 
 function titleOf(request: EventRequest): string {
   return request.name ?? 'Untitled request'

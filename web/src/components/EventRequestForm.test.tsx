@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { useState } from 'react'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { AuthProvider } from '../auth/context'
@@ -303,4 +304,128 @@ test('editing a draft patches it rather than creating another', async () => {
     '/api/event-requests/req-7',
     expect.objectContaining({ method: 'PATCH' }),
   )
+})
+
+
+// --------------------------------------------------------- the form inside its page
+//
+// `renderForm` pins `editing` to a constant, which hides everything about the handover:
+// Home owns that state and the form clears it by calling `onDone`. These tests wire it
+// the way the page does, because all three bugs below only exist once it moves.
+
+function Page({ initial }: { initial: EventRequest | null }) {
+  const [editing, setEditing] = useState<EventRequest | null>(initial)
+  return <EventRequestForm editing={editing} onDone={() => setEditing(null)} />
+}
+
+function renderPage(initial: EventRequest | null, respond?: typeof globalThis.fetch) {
+  localStorage.setItem(
+    'connectsphere.token',
+    JSON.stringify({ token: 'token', userId: 'user-1', roles: ['organiser'] }),
+  )
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const url = String(input)
+    if (url === '/api/event-requests/equipment-types')
+      return new Response(JSON.stringify(['Projector']), { status: 200 })
+    if (url === '/api/event-requests/venue-names')
+      return new Response(JSON.stringify(['Hall A']), { status: 200 })
+    if (respond) return respond(input, init)
+    const submitted = url.endsWith('/submit')
+    return new Response(
+      JSON.stringify({
+        id: 'req-7',
+        name: 'Orientation Day',
+        status: submitted ? 'submitted' : 'draft',
+      }),
+      { status: submitted ? 200 : 201 },
+    )
+  })
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={client}>
+      <AuthProvider>
+        <Page initial={initial} />
+      </AuthProvider>
+    </QueryClientProvider>,
+  )
+}
+
+test('saving an edited draft still confirms it, after the form has been released', async () => {
+  // Submitting clears `editing`, which reloads the form for a new request in the same
+  // pass. That reload used to clear the message the submit had just set, so the
+  // organiser pressed the button and was told nothing at all.
+  renderPage(existingDraft)
+  await waitFor(() => expect(screen.getByLabelText('Name *')).toHaveValue('Orientation Day'))
+  fireEvent.click(screen.getByRole('button', { name: 'Submit for review' }))
+
+  await waitFor(() => {
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '“Orientation Day” has been submitted for review.',
+    )
+  })
+  // Released, not still holding the draft.
+  expect(screen.getByRole('button', { name: 'Create event request' })).toBeInTheDocument()
+})
+
+test('a draft the API refuses to save says so', async () => {
+  // `createDraft` throws a plain error, not a validation one, so the field-level handler
+  // has nothing to show for it. Without an alert the button just quietly did nothing.
+  renderPage(null, async () => new Response('nope', { status: 500 }))
+  await screen.findByRole('option', { name: 'Projector' })
+  fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'Orientation Day' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+
+  await waitFor(() => {
+    expect(screen.getByRole('alert')).toHaveTextContent('Draft save failed (500)')
+  })
+})
+
+test('a retry after a failed submit does not leave a second request behind', async () => {
+  // Creating is two calls. If the first succeeds and the second does not, the request
+  // exists; pressing the button again has to finish that one rather than make another.
+  let submits = 0
+  const created: string[] = []
+  renderPage(null, async (input) => {
+    const url = String(input)
+    if (url.endsWith('/submit')) {
+      submits += 1
+      if (submits === 1) return new Response('boom', { status: 500 })
+      return new Response(JSON.stringify({ id: 'req-7', name: 'Orientation Day' }), {
+        status: 200,
+      })
+    }
+    created.push(url)
+    return new Response(JSON.stringify({ id: 'req-7', name: 'Orientation Day' }), { status: 201 })
+  })
+  await fillValidForm()
+  fireEvent.click(screen.getByRole('button', { name: 'Create event request' }))
+  await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+
+  fireEvent.click(screen.getByRole('button', { name: 'Create event request' }))
+  await waitFor(() => expect(submits).toBe(2))
+
+  expect(created.filter((url) => url === '/api/event-requests')).toHaveLength(1)
+  expect(created).toContain('/api/event-requests/req-7')
+})
+
+test('the heading says which of the two things the form is doing', async () => {
+  renderPage(existingDraft)
+
+  await waitFor(() => {
+    expect(screen.getByRole('heading', { name: 'Edit draft' })).toBeInTheDocument()
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(screen.getByRole('heading', { name: 'New event request' })).toBeInTheDocument()
+})
+
+test('choosing a draft brings the form to the organiser', async () => {
+  // The form sits above a long list of requests, well off screen by the time anyone
+  // scrolls to the draft they want. Filling it in silently up there reads as a dead
+  // button, which is how the original report described it.
+  const scrollIntoView = vi.fn()
+  Element.prototype.scrollIntoView = scrollIntoView
+  renderPage(existingDraft)
+
+  await waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
+  expect(screen.getByLabelText('Name *')).toHaveFocus()
 })
