@@ -63,23 +63,32 @@ async def test_coordinator_can_create_clarification_with_audit_fields(
 
 
 @pytest.mark.story("SCRUM-30")
-async def test_coordinator_review_list_contains_submitted_requests_not_drafts(
+async def test_coordinator_review_list_contains_only_assigned_submitted_requests(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     organiser = make_user("organiser")
     coordinator = make_user("coordinator")
+    other = make_user("coordinator")
     submitted = await submitted_request(db, organiser, make_client)
+    submitted.coordinator_id = coordinator.id
+    db.flush()
     make_draft(db, organiser, name="Still a draft")
 
     async with make_client(coordinator) as client:
-        response = await client.get("/api/event-requests/reviewable")
+        mine = await client.get("/api/event-requests/reviewable")
+    async with make_client(other) as client:
+        theirs = await client.get("/api/event-requests/reviewable")
 
-    assert response.status_code == 200
-    assert [row["id"] for row in response.json()] == [str(submitted.id)]
+    # SCRUM-104 supersedes the old read-only rule: the list holds only the caller's
+    # currently assigned Submitted requests, never drafts or other owners' events.
+    assert mine.status_code == 200
+    assert [row["id"] for row in mine.json()] == [str(submitted.id)]
+    assert theirs.status_code == 200
+    assert theirs.json() == []
 
 
 @pytest.mark.story("SCRUM-30")
-async def test_unassigned_coordinator_can_view_but_cannot_request_clarification(
+async def test_unassigned_coordinator_is_refused_view_and_clarification_request(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     organiser = make_user("organiser")
@@ -95,8 +104,10 @@ async def test_unassigned_coordinator_can_view_but_cannot_request_clarification(
         view = await client.get(f"/api/event-requests/{request.id}")
         clarification = await request_clarification(client, request)
 
-    assert view.status_code == 200
-    assert view.json()["id"] == str(request.id)
+    # SCRUM-104 supersedes the old read-only rule: without the assignment there is
+    # neither view access nor clarification access, and no details leak.
+    assert view.status_code == 403
+    assert view.json() == {"detail": "Forbidden"}
     assert clarification.status_code == 403
 
 

@@ -36,9 +36,9 @@ def _user_id(user: dict[str, object]) -> uuid.UUID:
 
 
 @router.get("/reviewable", response_model=list[EventRequestRead])
-def list_reviewable_events(_user: Coordinator, db: Db) -> list[EventRequestRead]:
-    """Return submitted requests available for coordinator review."""
-    rows = event_request_service.list_for_review(db)
+def list_reviewable_events(user: Coordinator, db: Db) -> list[EventRequestRead]:
+    """SCRUM-104: Submitted requests currently assigned to the signed-in coordinator."""
+    rows = event_request_service.list_for_review(db, _user_id(user))
     return [EventRequestRead.model_validate(row) for row in rows]
 
 

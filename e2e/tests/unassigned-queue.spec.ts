@@ -158,3 +158,72 @@ test('a Lead reassigns an assigned request and views its history', async ({ page
   await expect(history).toBeVisible()
   await expect(entry).toContainText('First assignment')
 })
+
+// TC-104-07: after reassignment the outgoing coordinator loses access, the incoming
+// coordinator gains it, and both Leads keep allocation visibility after refresh.
+test('a reassigned request moves coordinator access and keeps Lead visibility', async ({
+  page,
+}) => {
+  const name = `E2E assigned access ${Date.now()}`
+  await signIn(page, 'organiser@example.com')
+  await expect(page.getByRole('heading', { name: 'My event requests' })).toBeVisible()
+
+  await page.getByLabel('Name *').fill(name)
+  await page.getByLabel('Purpose *').fill('Welcome new students')
+  await page.getByLabel('Description *').fill('Campus orientation activities')
+  await page.getByLabel('Start date and time *').fill('2030-12-01T09:00')
+  await page.getByLabel('End date and time *').fill('2030-12-01T13:00')
+  await page.getByLabel('Expected attendance *').fill('200')
+  await page.getByLabel('Venue requirement *').selectOption('Hall A')
+  await page.getByLabel('Accessibility requirement *').fill('Step-free access')
+  await page.getByLabel('Equipment requirement *').selectOption('Projector')
+  await page.getByLabel('Layout requirement *').fill('Theatre style')
+  await page.getByLabel('Registration requirement *').fill('Open registration')
+  await page.getByRole('button', { name: 'Create event request' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'submitted for review' })).toContainText(
+    `“${name}” has been submitted for review.`,
+  )
+  await signOut(page)
+
+  // The Lead assigns to the first coordinator, then immediately reassigns.
+  await signIn(page, 'coordinator-lead@example.com')
+  const queue = page.getByLabel('Unassigned requests')
+  const queueEntry = queue.getByRole('listitem').filter({ hasText: name })
+  await queueEntry
+    .getByLabel(`Coordinator for ${name}`)
+    .selectOption({ label: 'coordinator@example.com' })
+  await queueEntry.getByRole('button', { name: 'Assign' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'has been assigned' })).toContainText(
+    `“${name}” has been assigned.`,
+  )
+  const overview = page.getByLabel('Active requests')
+  const entry = overview.getByRole('listitem').filter({ hasText: name })
+  await entry
+    .getByLabel(`New coordinator for ${name}`)
+    .selectOption({ label: 'coordinator2@example.com' })
+  await entry.getByRole('button', { name: 'Reassign' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'has been reassigned' })).toContainText(
+    `“${name}” has been reassigned.`,
+  )
+  await signOut(page)
+
+  // The outgoing coordinator's list no longer holds the event after refresh.
+  await signIn(page, 'coordinator@example.com')
+  const outgoing = page.getByRole('heading', { name: 'Coordinator events' }).locator('..')
+  await expect(outgoing.getByRole('article').filter({ hasText: name })).toHaveCount(0)
+  await signOut(page)
+
+  // The incoming coordinator sees it with the decision buttons.
+  await signIn(page, 'coordinator2@example.com')
+  const incoming = page.getByRole('heading', { name: 'Coordinator events' }).locator('..')
+  const card = incoming.getByRole('article').filter({ hasText: name })
+  await expect(card).toBeVisible()
+  await expect(card.getByRole('button', { name: 'Approve' })).toBeVisible()
+  await signOut(page)
+
+  // The Lead still sees the allocation after refresh.
+  await signIn(page, 'coordinator-lead@example.com')
+  await page.reload()
+  const refreshed = page.getByLabel('Active requests')
+  await expect(refreshed.getByRole('listitem').filter({ hasText: name })).toBeVisible()
+})
