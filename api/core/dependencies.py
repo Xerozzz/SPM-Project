@@ -35,6 +35,7 @@ class EventAccess(StrEnum):
     DECIDE = "decide"
     SUBMIT_VENUE_BOOKING = "submit_venue_booking"
     MAINTAIN_EQUIPMENT = "maintain_equipment"
+    CHECK_EQUIPMENT_AVAILABILITY = "check_equipment_availability"
     REQUEST_CLARIFICATION = "request_clarification"
     RESPOND_TO_CLARIFICATION = "respond_to_clarification"
     UPDATE_PLANNING_INFO = "update_planning_info"
@@ -142,6 +143,15 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
         if permission in (EventAccess.MAINTAIN_EQUIPMENT, EventAccess.SUBMIT_VENUE_BOOKING):
             is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
             if is_assigned and request.status is EventStatus.APPROVED:
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        # SCRUM-52 AC5: Technical Support Staff, who assess every event's equipment, and
+        # the event's assigned coordinator. No status here: outside planning the service
+        # answers 409, which says more than a 403 to someone who may see the event.
+        if permission is EventAccess.CHECK_EQUIPMENT_AVAILABILITY:
+            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+            if is_assigned or Role.TECH_SUPPORT.value in roles:
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 

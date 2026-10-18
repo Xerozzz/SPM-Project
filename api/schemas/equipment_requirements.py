@@ -1,4 +1,4 @@
-"""API contracts for an event's equipment requirements (SCRUM-43, SCRUM-44).
+"""API contracts for an event's equipment requirements (SCRUM-43, SCRUM-44, SCRUM-52).
 
 Mirrors domain/equipment_requirement.py.
 """
@@ -72,6 +72,24 @@ class RequirementForReview(BaseModel):
     quantity: int
     technical_requirements: str | None
     review_status: RequirementReview
+
+
+class RequirementAvailabilityRead(BaseModel):
+    """SCRUM-52 AC1 and AC4: one requirement, its event's window, and whether it can be met.
+
+    `result` is only ever one of the three outcomes, never `pending_review`.
+    """
+
+    id: uuid.UUID
+    equipment_type: str
+    quantity: int
+    technical_requirements: str | None
+    event_start_at: datetime | None
+    event_end_at: datetime | None
+    stock: int
+    reserved: int
+    available: int
+    result: RequirementReview
 
 
 class RequirementChangeRead(BaseModel):

@@ -1,7 +1,8 @@
-"""The assigned Coordinator maintains an event's equipment requirements (SCRUM-43), and
-Technical Support Staff review them (SCRUM-44)."""
+"""The assigned Coordinator maintains an event's equipment requirements (SCRUM-43),
+Technical Support Staff review them (SCRUM-44), and both can check availability (SCRUM-52)."""
 
 import uuid
+from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -14,6 +15,7 @@ from domain.equipment_requirement import RequirementFields
 from domain.roles import Role
 from models.event_request import EventRequest
 from schemas.equipment_requirements import (
+    RequirementAvailabilityRead,
     RequirementChangeRead,
     RequirementCreate,
     RequirementForReview,
@@ -38,9 +40,14 @@ MaintainableEvent = Annotated[
 # arranged for them. Technical Support Staff are not included; SCRUM-44 gives them
 # the review routes at the end of this module instead.
 ViewableEvent = Annotated[EventRequest, Depends(require_event_access(EventAccess.VIEW))]
+CheckableEvent = Annotated[
+    EventRequest, Depends(require_event_access(EventAccess.CHECK_EQUIPMENT_AVAILABILITY))
+]
 AnyUser = Annotated[dict[str, object], Depends(get_current_user)]
 TechSupport = Annotated[dict[str, object], Depends(require_role(Role.TECH_SUPPORT))]
 Db = Annotated[Session, Depends(get_db)]
+
+_AVAILABILITY_FIELDS = {"id", "equipment_type", "quantity", "technical_requirements"}
 
 
 def _user_id(user: dict[str, object]) -> uuid.UUID:
@@ -67,6 +74,26 @@ def requirement_history(event: ViewableEvent, db: Db) -> list[RequirementChangeR
     """AC7 and AC8: every add, change and removal, including requirements since removed."""
     return [
         RequirementChangeRead.model_validate(row) for row in service.history_for_event(db, event)
+    ]
+
+
+@router.get(
+    "/{request_id}/equipment-availability", response_model=list[RequirementAvailabilityRead]
+)
+def equipment_availability(event: CheckableEvent, db: Db) -> list[RequirementAvailabilityRead]:
+    """SCRUM-52: whether each requirement can be met; 409 outside planning. Reserves nothing."""
+    try:
+        checked = service.check_availability(db, event)
+    except service.ReviewNotAllowedError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Event is not in planning") from exc
+    return [
+        RequirementAvailabilityRead(
+            **RequirementRead.model_validate(row).model_dump(include=_AVAILABILITY_FIELDS),
+            event_start_at=event.start_at,
+            event_end_at=event.end_at,
+            **asdict(availability),
+        )
+        for row, availability in checked
     ]
 
 

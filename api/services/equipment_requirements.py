@@ -15,6 +15,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from domain.equipment_availability import Availability, StockEntry, assess, count_in_service
 from domain.equipment_requirement import (
     RequirementFields,
     RequirementReview,
@@ -216,6 +217,35 @@ def review(
     requirement.review_status = outcome
     requirement.updated_at = now
     return repo.save(db, requirement)
+
+
+def check_availability(
+    db: Session, event: EventRequest
+) -> list[tuple[EventEquipmentRequirement, Availability]]:
+    """SCRUM-52: whether each live requirement could be met over the event's window.
+
+    Planning only, by the same rule as a review, because this is the question a review
+    answers. Read-only (AC6): nothing is added to the session and nothing is committed.
+    """
+    if review_refusal(event.status, removed=False) is ReviewRefusal.EVENT_NOT_IN_PLANNING:
+        raise ReviewNotAllowedError
+    # Submission refuses an event without both times (domain.event_request), and only a
+    # submitted event can be approved; this narrows the types for mypy.
+    assert event.start_at is not None and event.end_at is not None
+    requirements = repo.list_for_event(db, event.id)
+    entries = catalogue_repo.list_by_types(db, {row.equipment_type for row in requirements})
+    results = []
+    for row in requirements:
+        stock = count_in_service(
+            StockEntry(e.total_quantity, e.operational_status, e.is_active)
+            for e in entries
+            if e.equipment_type == row.equipment_type
+        )
+        reserved = catalogue_repo.reserved_quantity(
+            db, row.equipment_type, event.start_at, event.end_at, excluding_event_id=event.id
+        )
+        results.append((row, assess(row.quantity, stock, reserved)))
+    return results
 
 
 def _live_requirement(
