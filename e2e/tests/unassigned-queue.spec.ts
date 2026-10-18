@@ -223,6 +223,7 @@ test('a reassigned request moves coordinator access and keeps Lead visibility', 
 
   // The Lead still sees the allocation after refresh.
   await signIn(page, 'coordinator-lead@example.com')
+  await expect(page.getByLabel('Active requests')).toBeVisible()
   await page.reload()
   const refreshed = page.getByLabel('Active requests')
   await expect(refreshed.getByRole('listitem').filter({ hasText: name })).toBeVisible()
