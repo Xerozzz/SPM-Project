@@ -1,6 +1,8 @@
 """Database access for equipment catalogue entries (SCRUM-84)."""
 
 import uuid
+from collections.abc import Iterable
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -45,6 +47,40 @@ def list_distinct_active_types(db: Session) -> list[str]:
         .order_by(Equipment.equipment_type)
     )
     return list(db.scalars(statement))
+
+
+def list_by_types(db: Session, equipment_types: Iterable[str]) -> list[Equipment]:
+    """SCRUM-52: every entry of these types, including retired and damaged ones.
+
+    Nothing is filtered here: which entries count toward stock is
+    `domain.equipment_availability`'s rule, so it is decided and tested in one place.
+    """
+    statement = (
+        select(Equipment)
+        .where(Equipment.equipment_type.in_(list(equipment_types)))
+        .order_by(Equipment.equipment_type, Equipment.id)
+    )
+    return list(db.scalars(statement))
+
+
+def reserved_quantity(
+    db: Session,
+    equipment_type: str,
+    start_at: datetime,
+    end_at: datetime,
+    excluding_event_id: uuid.UUID,
+) -> int:
+    """SCRUM-52 AC2: how many of this type other events have reserved over this window.
+
+    Always 0 for now, because nothing creates reservations yet. SCRUM-53 will replace this
+    body with a real query at this same call site, so the service does not change. It will
+    count a reservation when its window overlaps [start_at, end_at) by the half-open rule in
+    `domain.venue_search.intervals_overlap` (back-to-back events do not overlap), and leave
+    out `excluding_event_id` so an event is never short of equipment it holds itself.
+    """
+    # Named so the signature is already the one SCRUM-53 fills in; unused until then.
+    del db, equipment_type, start_at, end_at, excluding_event_id
+    return 0
 
 
 def save(db: Session, equipment: Equipment) -> Equipment:
