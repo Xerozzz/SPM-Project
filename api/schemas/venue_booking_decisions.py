@@ -13,6 +13,7 @@ from domain.booking_conflict import (
 )
 from domain.venue_booking import BookingStatus
 from domain.venue_booking_decision import MAX_REASON_LENGTH
+from domain.venue_buffer import VenueBuffers, effective_interval
 from models.event_request import EventRequest
 from models.venue import Venue
 from models.venue_booking import VenueBooking
@@ -40,23 +41,39 @@ class VenueBookingHold(BaseModel):
 
 class ConflictRead(BaseModel):
     """SCRUM-75 AC1: what the SCRUM-73 check says would block approving a request.
-    SCRUM-83: `hold` when the clash is a tentative hold rather than a confirmed booking."""
+    SCRUM-83: `hold` when the clash is a tentative hold rather than a confirmed booking.
+
+    SCRUM-82: the effective interval is carried as well as the event period, because the
+    rule compares effective intervals (AC3/AC4). Quoting only the event period makes a
+    refusal read as nonsense: a request at 21:14 reported as clashing with a booking from
+    18:00 to 20:00 looks like no clash at all until the turnaround is visible.
+
+    For a closure the two pairs are the same. A closure is not widened (AC5), so saying
+    so plainly is better than leaving the reader to wonder whether it was.
+    """
 
     kind: Literal["booking", "hold", "unavailability"]
     id: uuid.UUID
     start_at: datetime
     end_at: datetime
+    effective_start_at: datetime
+    effective_end_at: datetime
     message: str
 
     @classmethod
-    def from_error(cls, exc: ConflictingBookingError | VenueUnavailableError) -> Self:
+    def from_error(
+        cls, exc: ConflictingBookingError | VenueUnavailableError, buffers: VenueBuffers
+    ) -> Self:
         if isinstance(exc, ConflictingBookingError):
             booking = exc.booking
+            held_from, held_to = effective_interval(booking.start_at, booking.end_at, buffers)
             return cls(
                 kind="hold" if booking.status is BookingStatus.TENTATIVE else "booking",
                 id=booking.id,
                 start_at=booking.start_at,
                 end_at=booking.end_at,
+                effective_start_at=held_from,
+                effective_end_at=held_to,
                 message=str(exc),
             )
         period = exc.period
@@ -65,6 +82,8 @@ class ConflictRead(BaseModel):
             id=period.id,
             start_at=period.starts_at,
             end_at=period.ends_at,
+            effective_start_at=period.starts_at,
+            effective_end_at=period.ends_at,
             message=str(exc),
         )
 
@@ -81,6 +100,12 @@ class VenueBookingDecisionRead(BaseModel):
     event_name: str | None
     start_at: datetime
     end_at: datetime
+    # SCRUM-82 AC3: the period the venue is actually held for, and the buffers that made
+    # it wider, so Venue Staff can see why two requests that look apart are not.
+    effective_start_at: datetime
+    effective_end_at: datetime
+    setup_minutes: int
+    turnaround_minutes: int
     expected_attendance: int | None
     venue_requirement: str | None
     accessibility_requirement: str | None
@@ -106,6 +131,10 @@ class VenueBookingDecisionRead(BaseModel):
         venue: Venue,
         conflict: BookingConflictError | None = None,
     ) -> Self:
+        buffers = VenueBuffers(
+            setup_minutes=venue.setup_minutes, turnaround_minutes=venue.turnaround_minutes
+        )
+        held_from, held_to = effective_interval(booking.start_at, booking.end_at, buffers)
         return cls(
             id=booking.id,
             status=booking.status,
@@ -116,6 +145,13 @@ class VenueBookingDecisionRead(BaseModel):
             event_name=event.name,
             start_at=booking.start_at,
             end_at=booking.end_at,
+            # From the venue as it is now, not the stored snapshot. The conflict beside
+            # it is computed live, and a stale snapshot (ADR-0019, the thing SCRUM-89
+            # reports) would have the two lines on one card contradicting each other.
+            effective_start_at=held_from,
+            effective_end_at=held_to,
+            setup_minutes=venue.setup_minutes,
+            turnaround_minutes=venue.turnaround_minutes,
             expected_attendance=event.expected_attendance,
             venue_requirement=event.venue_requirement,
             accessibility_requirement=event.accessibility_requirement,
@@ -129,12 +165,15 @@ class VenueBookingDecisionRead(BaseModel):
             held_by_id=booking.held_by_id,
             held_at=booking.held_at,
             coordinator_id=event.coordinator_id,
-            conflict=_conflict_read(conflict),
+            conflict=_conflict_read(conflict, venue),
         )
 
 
-def _conflict_read(exc: BookingConflictError | None) -> ConflictRead | None:
+def _conflict_read(exc: BookingConflictError | None, venue: Venue) -> ConflictRead | None:
     """Only the two named conflicts can come from the read-only SCRUM-73 check."""
     if isinstance(exc, (ConflictingBookingError, VenueUnavailableError)):
-        return ConflictRead.from_error(exc)
+        buffers = VenueBuffers(
+            setup_minutes=venue.setup_minutes, turnaround_minutes=venue.turnaround_minutes
+        )
+        return ConflictRead.from_error(exc, buffers)
     return None

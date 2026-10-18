@@ -52,6 +52,9 @@ class ReviewedBooking:
 
     booking: VenueBooking
     event: EventRequest | None
+    # The venue whose buffers made this a problem. Carried so a caller can explain the
+    # clash in terms of the period the venue is actually held for (SCRUM-82 AC3).
+    venue: Venue
     conflict: ConflictingBookingError | VenueUnavailableError
 
 
@@ -106,6 +109,7 @@ def review(db: Session, venue: Venue, now: datetime) -> list[ReviewedBooking]:
         ReviewedBooking(
             booking=rows[problem.booking.id],
             event=event_repo.get(db, rows[problem.booking.id].event_request_id),
+            venue=venue,
             conflict=problem.conflict,
         )
         for problem in problems

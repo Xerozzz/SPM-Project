@@ -40,6 +40,9 @@ const PROBLEM: VenueProblems = {
         id: 'booking-2',
         start_at: '2030-03-04T04:00:00Z',
         end_at: '2030-03-04T05:00:00Z',
+        // Held wider than the event: 30 minutes of setup is what makes these clash.
+        effective_start_at: '2030-03-04T03:30:00Z',
+        effective_end_at: '2030-03-04T05:00:00Z',
         message: 'conflicts with confirmed booking booking-2',
       },
     },
@@ -73,7 +76,13 @@ test('SCRUM-89 AC4: each venue lists the bookings needing attention and why', as
   expect(within(card).getByText(/30 min setup, 45 min turnaround/)).toBeInTheDocument()
   // The clash itself, in the same words the decisions panel uses, so Venue Staff do not
   // have to learn two vocabularies for the same thing.
-  expect(within(card).getByText(/Clashes with a confirmed booking from/)).toBeInTheDocument()
+  // Named by the period the venue is held for, not the event period. The two bookings
+  // here are back to back; it is the 30 minutes of setup that makes them clash, and a
+  // message quoting only 12:00-13:00 would look like no clash at all.
+  expect(
+    within(card).getByText(/Clashes with a confirmed booking holding the venue/),
+  ).toBeInTheDocument()
+  expect(within(card).getByText(/11:30:00 am/)).toBeInTheDocument()
   // The raw id is what the API's message carries; the screen must not repeat it.
   expect(within(card).queryByText(/booking-2/)).toBeNull()
   // And the reassuring message must not sit above a list of problems. Found by mutation:

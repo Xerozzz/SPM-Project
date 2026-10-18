@@ -4,6 +4,8 @@
  * Mirrors schemas/venue_booking_decisions.py on the API.
  */
 
+import { formatSingaporeTime } from './venueCalendar'
+
 export type BookingStatus =
   'pending' | 'tentative' | 'confirmed' | 'rejected' | 'cancelled' | 'expired'
 
@@ -25,6 +27,12 @@ export interface BookingConflict {
   id: string
   start_at: string
   end_at: string
+  /**
+   * SCRUM-82: the period the venue is actually held for. Same as the event period for a
+   * closure, which is not widened, and for a venue with no buffers.
+   */
+  effective_start_at: string
+  effective_end_at: string
   message: string
 }
 
@@ -47,6 +55,11 @@ export interface VenueBookingDecision {
   decided_by_id: string | null
   decided_at: string | null
   decision_reason: string | null
+  /** SCRUM-82 AC3: this request's own held period, and the buffers behind it. */
+  effective_start_at: string
+  effective_end_at: string
+  setup_minutes: number
+  turnaround_minutes: number
   /** SCRUM-83: the hold, if Venue Staff placed one, and the Coordinator it is for. */
   expires_at?: string | null
   held_by_id?: string | null
@@ -55,14 +68,25 @@ export interface VenueBookingDecision {
   conflict: BookingConflict | null
 }
 
-/** What Venue Staff are told about a clash, in plain words, in Singapore time. */
+/**
+ * What Venue Staff are told about a clash, in plain words, in Singapore time.
+ *
+ * The held period leads, not the event period. SCRUM-82 compares the periods the venue
+ * is occupied for, so quoting the event period alone made refusals read as nonsense: a
+ * request at 9:14 pm was reported as clashing with a booking from 6 pm to 8 pm, which
+ * looks like no clash at all until the 45 minutes of turnaround are visible.
+ */
 export function describeConflict(conflict: BookingConflict): string {
-  const sgt = (value: string) =>
-    new Date(value).toLocaleString('en-SG', { timeZone: 'Asia/Singapore' })
-  const period = `${sgt(conflict.start_at)} to ${sgt(conflict.end_at)}`
-  if (conflict.kind === 'booking') return `Clashes with a confirmed booking from ${period}.`
-  if (conflict.kind === 'hold') return `Clashes with a tentative hold from ${period}.`
-  return `The venue is closed from ${period}.`
+  const held = `${formatSingaporeTime(conflict.effective_start_at)} to ${formatSingaporeTime(
+    conflict.effective_end_at,
+  )}`
+  if (conflict.kind === 'unavailability') return `The venue is closed from ${held}.`
+  const what = conflict.kind === 'hold' ? 'a tentative hold' : 'a confirmed booking'
+  const event = `${formatSingaporeTime(conflict.start_at)} to ${formatSingaporeTime(conflict.end_at)}`
+  // Only worth spelling out when the two differ. With no buffers they are the same and
+  // the second clause would just repeat the first (AC7).
+  if (held === event) return `Clashes with ${what} from ${event}.`
+  return `Clashes with ${what} holding the venue ${held} (event ${event}, plus setup and turnaround).`
 }
 
 /** Longest reason the API accepts (MAX_REASON_LENGTH in domain/venue_booking_decision.py). */

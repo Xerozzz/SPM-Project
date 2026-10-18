@@ -116,6 +116,12 @@ export interface VenueBooking {
   start_at: string
   end_at: string
   status: BookingStatus
+  /**
+   * SCRUM-82 AC3: the period the venue is actually held for, setup and turnaround
+   * included. Null only for an API that predates this field.
+   */
+  effective_start_at?: string | null
+  effective_end_at?: string | null
   /** SCRUM-83 AC2: when a tentative hold on this request ends. */
   expires_at?: string | null
   /**

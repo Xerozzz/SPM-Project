@@ -56,9 +56,11 @@ const rejectedBooking = {
 }
 
 function bookingPeriod(booking: { start_at: string; end_at: string }) {
-  return `${new Date(booking.start_at).toLocaleString()} to ${new Date(
-    booking.end_at,
-  ).toLocaleString()}`
+  // Singapore time, because that is what the screen shows. Using the machine's own
+  // locale passed here and would have failed on CI, which runs in UTC.
+  const sgt = (value: string) =>
+    new Date(value).toLocaleString('en-SG', { timeZone: 'Asia/Singapore' })
+  return `${sgt(booking.start_at)} to ${sgt(booking.end_at)}`
 }
 
 afterEach(() => {
@@ -446,6 +448,9 @@ const CLASH = {
   id: 'booking-9',
   start_at: '2030-03-04T04:00:00Z',
   end_at: '2030-03-04T05:00:00Z',
+  // No buffers on this venue, so the held period is the event period (SCRUM-82 AC7).
+  effective_start_at: '2030-03-04T04:00:00Z',
+  effective_end_at: '2030-03-04T05:00:00Z',
   message: 'conflicts with confirmed booking booking-9',
 }
 
@@ -471,4 +476,41 @@ test('SCRUM-89 AC4: a booking with nothing wrong says nothing', async () => {
     await screen.findByRole('heading', { name: 'Existing venue booking requests' }),
   ).toBeInTheDocument()
   expect(screen.queryByText(/Needs attention/)).toBeNull()
+})
+
+// ------------------------------------------ SCRUM-82: the Coordinator's side of a clash
+//
+// Reported from testing: a clash named a period that did not overlap the booking it was
+// refusing. Venue Staff see it on their queue and the Coordinator sees it here, so both
+// screens need the period the venue is actually held for, not just the event period.
+
+test('SCRUM-82 AC3: a booking says how long the venue is held when buffers widen it', async () => {
+  const sgt = (value: string) =>
+    new Date(value).toLocaleString('en-SG', { timeZone: 'Asia/Singapore' })
+  const held = {
+    ...pendingBooking,
+    effective_start_at: '2030-05-01T01:30:00Z',
+    effective_end_at: '2030-05-01T06:45:00Z',
+  }
+  signInAsCoordinator()
+  renderExistingBookingReview([held])
+
+  expect(await screen.findByText('Venue held:')).toBeInTheDocument()
+  expect(
+    screen.getByText(`${sgt('2030-05-01T01:30:00Z')} to ${sgt('2030-05-01T06:45:00Z')}`),
+  ).toBeInTheDocument()
+})
+
+test('SCRUM-82 AC7: a booking at a venue with no buffers says nothing extra', async () => {
+  // The held period equals the event period, so repeating it would be noise.
+  const held = {
+    ...pendingBooking,
+    effective_start_at: pendingBooking.start_at,
+    effective_end_at: pendingBooking.end_at,
+  }
+  signInAsCoordinator()
+  renderExistingBookingReview([held])
+
+  await screen.findByText(bookingPeriod(pendingBooking))
+  expect(screen.queryByText('Venue held:')).toBeNull()
 })
