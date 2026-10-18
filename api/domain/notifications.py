@@ -17,6 +17,8 @@ class NotificationType(StrEnum):
     GENERAL = "general"
     # SCRUM-108 AC3: the venue hold for one of your events has expired.
     VENUE_HOLD_EXPIRED = "venue_hold_expired"
+    # SCRUM-96: an event request was submitted unassigned and needs Lead triage.
+    UNASSIGNED_SUBMISSION = "unassigned_submission"
 
 
 class NotificationSource(StrEnum):
@@ -31,3 +33,7 @@ class NotificationSource(StrEnum):
     GENERAL = "general"
     # SCRUM-108: one venue booking row, so each expired hold notifies exactly once.
     VENUE_BOOKING = "venue_booking"
+    # SCRUM-96: the source is the submission of one event request — the request id
+    # is the source_id, so retrying the same submission collides (idempotent) while
+    # a later submission of a different request stays distinct.
+    EVENT_SUBMISSION = "event_submission"

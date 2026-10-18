@@ -21,6 +21,7 @@ from domain.event_request import (
     validate_event_request,
     validate_ordinary_update,
 )
+from domain.notifications import NotificationSource, NotificationType
 from domain.roles import Role
 from models.event_coordinator_assignment import EventCoordinatorAssignment
 from models.event_request import EventRequest
@@ -28,6 +29,7 @@ from models.user import User
 from repositories import coordinator_assignments as history_repo
 from repositories import equipment as equipment_repo
 from repositories import event_requests as repo
+from repositories import notifications as notifications_repo
 from repositories import users as users_repo
 from services import equipment_requirements
 from services import venues as venues_service
@@ -198,6 +200,22 @@ def submit(
     # (AGENTS.md §3). InvalidTransitionError propagates if the request is not a draft.
     request.status = event_status.submit(request.status)
     request.submitted_at = now
+    # SCRUM-96: notify every active Coordinator Lead of the unassigned submission.
+    # Staged before the commit so the request and its notifications land or roll back
+    # together; the occurrence time is the submission time, not a second clock read;
+    # the (event_submission, request id) source pair makes a retry collide instead of
+    # duplicating (ADR-0022).
+    db.flush()
+    for lead in users_repo.list_active_coordinator_leads(db):
+        notifications_repo.stage(
+            db,
+            recipient_id=lead.id,
+            event_request_id=request.id,
+            type=NotificationType.UNASSIGNED_SUBMISSION,
+            source_type=NotificationSource.EVENT_SUBMISSION,
+            source_id=str(request.id),
+            occurred_at=now,
+        )
     return repo.save(db, request)
 
 
