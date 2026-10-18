@@ -49,6 +49,7 @@ def _problem_read(problem: buffer_review.ReviewedBooking) -> ProblemBookingRead:
         event_name=problem.event.name if problem.event is not None else None,
         start_at=problem.booking.start_at,
         end_at=problem.booking.end_at,
+        status=problem.booking.status,
         conflict=ConflictRead.from_error(problem.conflict, buffer_review.buffers_of(problem.venue)),
     )
 

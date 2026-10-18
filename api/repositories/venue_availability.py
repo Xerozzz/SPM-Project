@@ -139,6 +139,35 @@ def get_booking_for_update(db: Session, booking_id: uuid.UUID) -> VenueBooking |
     return db.get(VenueBooking, booking_id, with_for_update=True, populate_existing=True)
 
 
+def blocking_periods_from(db: Session, venue_id: uuid.UUID, now: datetime) -> list[VenueBooking]:
+    """SCRUM-89 AC1: everything still holding this venue at or after `now`.
+
+    Confirmed bookings *and* tentative holds. A hold occupies the venue exactly as a
+    booking does (SCRUM-83 AC3), so a buffer change can make a hold clash, and a hold can
+    be what a booking now clashes with. Reviewing only confirmed bookings missed both.
+
+    Expired holds are excluded because expiry is a status (ADR-0030): a hold that has run
+    out is `expired`, not `tentative`, so `BLOCKING_STATUSES` already leaves it out. The
+    clock is deliberately not compared here. ADR-0030 rejected reading `expires_at` on
+    every read, because the overlap constraint cannot do the same and the two would
+    disagree; the cost is that a hold can be reported for up to a minute after it runs
+    out, which is the same lag search, the calendar and the availability check accept.
+
+    The cut is the effective end, for the reason given on `confirmed_bookings_from`.
+    """
+    statement = (
+        select(VenueBooking)
+        .join(Venue, Venue.id == VenueBooking.venue_id)
+        .where(
+            VenueBooking.venue_id == venue_id,
+            VenueBooking.status.in_(BLOCKING_STATUSES),
+            VenueBooking.end_at + _turnaround() > now,
+        )
+        .order_by(VenueBooking.start_at, VenueBooking.id)
+    )
+    return list(db.scalars(statement))
+
+
 def other_bookings_overlapping(db: Session, booking: VenueBooking) -> list[VenueBooking]:
     """Every other booking on the same venue overlapping `booking`'s period (SCRUM-73).
 

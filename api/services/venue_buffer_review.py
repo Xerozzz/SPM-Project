@@ -78,7 +78,12 @@ def buffers_of(venue: Venue) -> VenueBuffers:
 
 
 def review(db: Session, venue: Venue, now: datetime) -> list[ReviewedBooking]:
-    """AC1 and AC2: the venue's live confirmed bookings that now clash, in start order.
+    """AC1 and AC2: the venue's live bookings and holds that now clash, in start order.
+
+    Confirmed bookings and tentative holds both. A hold occupies the venue the same way a
+    booking does (SCRUM-83 AC3), so a buffer change can catch one out, and a hold can be
+    the thing a booking now clashes with. Expiry is a status rather than a clock
+    comparison (ADR-0030), so a hold that has run out is simply not in the candidates.
 
     One query for the bookings and one for the closures, then the comparison happens in
     the domain. Deliberately not a query per booking: every booking at a venue has to be
@@ -92,7 +97,7 @@ def review(db: Session, venue: Venue, now: datetime) -> list[ReviewedBooking]:
     Events are loaded only for bookings that turned out to be problematic, so a venue with
     nothing wrong costs no extra query.
     """
-    rows = {row.id: row for row in booking_repo.confirmed_bookings_from(db, venue.id, now)}
+    rows = {row.id: row for row in booking_repo.blocking_periods_from(db, venue.id, now)}
     closures = closure_repo.list_for_venue(db, venue.id)
     problems = problematic_bookings(
         [
