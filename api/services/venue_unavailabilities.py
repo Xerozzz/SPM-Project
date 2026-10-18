@@ -35,7 +35,12 @@ class ConfirmedBookingInTheWayError(VenueUnavailabilityError):
     """
 
     def __init__(self, booking_id: uuid.UUID) -> None:
-        super().__init__(f"conflicts with confirmed booking {booking_id}")
+        # Written for the Venue Staff member who is being refused, because this string is
+        # what the screen shows them. The id trails it so a conflict can still be traced.
+        super().__init__(
+            "This venue is already committed to a confirmed booking for part of that "
+            f"period, so it cannot be closed. Booking {booking_id}."
+        )
         self.booking_id = booking_id
 
 

@@ -182,14 +182,29 @@ export async function deactivateVenue(token: string, id: string): Promise<Venue>
   )
 }
 
+/** The server's own explanation, when it sent one as a plain sentence. */
+async function reasonFrom(response: Response): Promise<string | null> {
+  try {
+    const body = (await response.clone().json()) as { detail?: unknown }
+    return typeof body.detail === 'string' && body.detail.trim() !== '' ? body.detail : null
+  } catch {
+    return null
+  }
+}
+
 async function readUnavailability(response: Response): Promise<VenueUnavailability> {
   if (response.status === 422) {
     const body = (await response.json()) as { detail: unknown }
     const problems = asVenueProblems(body.detail)
     if (problems !== null) throw new VenueUnavailabilityRejectedError(problems)
   }
-  if (!response.ok)
-    throw new Error(`The unavailability period could not be saved (${response.status})`)
+  if (!response.ok) {
+    // A 409 carries the reason as a sentence: the venue is inactive, or a confirmed
+    // booking is in the way. Falling through to the status code alone threw away the
+    // only part the person reading the screen can act on.
+    const reason = await reasonFrom(response)
+    throw new Error(reason ?? `The unavailability period could not be saved (${response.status})`)
+  }
   return (await response.json()) as VenueUnavailability
 }
 

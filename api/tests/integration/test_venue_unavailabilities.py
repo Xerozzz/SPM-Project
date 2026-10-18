@@ -327,7 +327,10 @@ async def test_a_closure_over_a_confirmed_booking_is_refused(
         response = await client.post(f"/api/venues/{venue.id}/unavailabilities", json=body())
 
     assert response.status_code == 409
-    assert str(booking.id) in response.json()["detail"]
+    detail = response.json()["detail"]
+    # Readable by the person being refused, not just by whoever reads the logs.
+    assert "already committed to a confirmed booking" in detail
+    assert str(booking.id) in detail
     assert db.query(VenueUnavailability).count() == 0
 
 
