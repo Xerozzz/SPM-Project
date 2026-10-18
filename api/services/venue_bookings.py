@@ -20,6 +20,7 @@ from domain.venue_buffer import VenueBuffers, effective_interval
 from models.event_request import EventRequest
 from models.venue import Venue
 from models.venue_booking import VenueBooking
+from repositories import equipment_requirements as requirement_repo
 from repositories import event_requests as event_repo
 from repositories import venue_availability as booking_repo
 from repositories import venues as venue_repo
@@ -48,10 +49,7 @@ def evaluate(
 ) -> venue_suitability.SuitabilityResult:
     venue = _validated_venue(db, event, venue_id, now)
     assert event.expected_attendance is not None
-    equipment = event.equipment_requirement
-    required_facilities = (
-        [EQUIPMENT_REQUIREMENT_FACILITIES[equipment]] if equipment is not None else []
-    )
+    required_facilities = _facilities_needed(db, event)
     # `venue_requirement` is retained as event context, but Venue has no comparable
     # venue-type field yet. SCRUM-38 therefore cannot include it in suitability scoring.
     return venue_suitability.evaluate_suitability(
@@ -68,6 +66,28 @@ def evaluate(
             supported_layouts=venue.supported_layouts,
         ),
     )
+
+
+def _facilities_needed(db: Session, event: EventRequest) -> list[str]:
+    """SCRUM-43: what the event's maintained requirements ask the venue to provide.
+
+    Read from `event_equipment_requirements`, not from the organiser's
+    `equipment_requirement` string. That column is the original submission and the
+    Coordinator does not write back to it (ADR-0033), so once they add, change or remove
+    anything the two disagree, and suitability was scoring the stale one. It also only
+    ever named a single type, so an event needing three things was judged on one of them.
+
+    `EQUIPMENT_REQUIREMENT_FACILITIES` still bridges the two vocabularies. Equipment types
+    and venue facilities are separate lists (ADR-0031, ADR-0032): a venue offers a fixed
+    projector, it does not offer the portable things that arrive from the store room. A
+    requirement with no counterpart is therefore not a missing facility and is left
+    unscored, exactly as it is today, rather than reported as something the venue lacks.
+    """
+    return [
+        EQUIPMENT_REQUIREMENT_FACILITIES[requirement.equipment_type]
+        for requirement in requirement_repo.list_for_event(db, event.id)
+        if requirement.equipment_type in EQUIPMENT_REQUIREMENT_FACILITIES
+    ]
 
 
 def submit(

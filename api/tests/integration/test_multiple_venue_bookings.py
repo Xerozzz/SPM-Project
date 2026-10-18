@@ -10,7 +10,12 @@ from domain.venue_booking import BookingStatus
 from models.venue_booking import VenueBooking
 from tests.integration.test_booking_conflict import _booking, _closure
 from tests.integration.test_submit_event_request import MakeClient, MakeUser
-from tests.integration.test_submit_venue_booking import approved_event, bookings, submit
+from tests.integration.test_submit_venue_booking import (
+    approved_event,
+    bookings,
+    seed_equipment,
+    submit,
+)
 from tests.integration.test_venue_availability import check
 from tests.integration.test_venue_search import make_venue
 
@@ -41,6 +46,9 @@ async def test_each_selected_venue_has_its_own_suitability(
 ) -> None:
     coordinator = make_user("coordinator")
     event = approved_event(db, make_user("organiser"), coordinator, expected_attendance=150)
+    # SCRUM-43: suitability reads the maintained requirements, so the event needs the
+    # row approval would have given it rather than only the organiser's string.
+    seed_equipment(db, event)
     first = make_venue(db, maximum_capacity=100, facilities=[], supported_layouts=["classroom"])
     second = make_venue(
         db, name="Hall B", maximum_capacity=200, accessibility_features=["Lift access"]
