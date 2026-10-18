@@ -22,6 +22,7 @@ from core.security import hash_password
 from domain.event_status import EventStatus
 from models.event_coordinator_assignment import EventCoordinatorAssignment
 from models.event_request import EventRequest
+from models.notification import Notification
 from models.organisation import Organisation
 from models.user import User
 from repositories import coordinator_assignments as history_repo
@@ -393,6 +394,10 @@ def _delete_committed(request_id: uuid.UUID, *user_ids: uuid.UUID) -> None:
     created — the same cleanup pattern as the TC-98 concurrency test."""
     session = SessionLocal()
     try:
+        # SCRUM-102: reassignment stages inbox rows referencing the request, so
+        # they go before the history rows and the request itself.
+        session.query(Notification).filter(Notification.event_request_id == request_id).delete()
+        session.commit()
         session.query(EventCoordinatorAssignment).filter(
             EventCoordinatorAssignment.event_request_id == request_id
         ).delete()
