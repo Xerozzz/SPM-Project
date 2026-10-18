@@ -168,6 +168,15 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
         if request.status is EventStatus.DRAFT:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
+        # SCRUM-104: an ordinary Coordinator sees only the event currently assigned to
+        # them. A Lead keeps allocation visibility for every event, including through a
+        # dual Lead+Coordinator account, so the Lead check comes first.
+        if Role.COORDINATOR_LEAD.value in roles:
+            return request
+
+        if Role.COORDINATOR.value in roles and request.coordinator_id != viewer_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
         if Role.COORDINATOR.value in roles:
             return request
 

@@ -166,28 +166,18 @@ test('coordinator reviews a request assigned to them and approves it', async () 
   )
 })
 
-test('a request assigned to another coordinator offers no decision buttons', async () => {
-  // The API refuses these with 403 (require_event_access(DECIDE) wants the assigned
-  // coordinator), but the UI used to show Approve and Reject on every submitted request,
-  // because status_permits describes the status and not the viewer. Four of seven buttons
-  // on a seeded database did nothing but raise a 403.
+test('SCRUM-104: the coordinator list holds only assigned events, so each card is actionable', async () => {
+  // The API scopes /reviewable to the signed-in coordinator and refuses other events
+  // with 403, so someone else's event never reaches this list — there is no read-only
+  // card state to assert on. Every rendered card offers the status-permitted decision.
   signInAsCoordinator()
-  renderReview([{ ...submitted, coordinator_id: 'someone-else' }])
+  renderReview([submitted])
 
   expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: 'Reject' })).not.toBeInTheDocument()
-  expect(screen.getByText(/Assigned to another coordinator/)).toBeInTheDocument()
-})
-
-test('an unassigned request offers no decision buttons either', async () => {
-  signInAsCoordinator()
-  renderReview([{ ...submitted, coordinator_id: null }])
-
-  expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
-  // Not the same sentence as "assigned to another coordinator": nobody is assigned here.
-  expect(screen.getByText(/Not assigned to a coordinator yet/)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument()
+  expect(screen.queryByText(/Assigned to another coordinator/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/Not assigned to a coordinator yet/)).not.toBeInTheDocument()
 })
 
 test('coordinator events include submitted and approved bookable requests', async () => {
@@ -373,14 +363,15 @@ test('SCRUM-78: adds another venue, retains both records on reload and accepts a
   ])
 })
 
-test('approved event assigned to another coordinator hides the booking UI', async () => {
+test('SCRUM-104: another coordinator\u2019s approved event never reaches the booking list', async () => {
+  // /bookable is already scoped to the signed-in coordinator
+  // (list_bookable_for_coordinator), so someone else's approved event is refused
+  // before it renders — no booking form and no clarification box appear for it.
   signInAsCoordinator()
-  renderReview([], [{ ...approved, coordinator_id: 'someone-else' }])
+  renderReview([], [])
 
-  expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
+  expect(await screen.findByText('No coordinator events are available.')).toBeInTheDocument()
   expect(screen.queryByRole('heading', { name: 'Venue booking request' })).not.toBeInTheDocument()
-  expect(screen.getByRole('region', { name: 'Clarification history' })).toBeInTheDocument()
-  expect(await screen.findByText('No clarification messages yet.')).toBeInTheDocument()
   expect(screen.queryByLabelText('Clarification request')).not.toBeInTheDocument()
 })
 
@@ -439,7 +430,6 @@ test('booking failure with a non-JSON body shows the generic status error', asyn
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Booking request failed (500)')
 })
-
 
 // --------------------------------------------------------- SCRUM-89 AC4
 

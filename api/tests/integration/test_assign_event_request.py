@@ -132,10 +132,10 @@ async def test_assigned_coordinator_gains_owner_only_actions(
 
 
 @pytest.mark.story("SCRUM-98")
-async def test_other_coordinator_keeps_visibility_but_not_owner_actions(
+async def test_other_coordinator_is_refused_view_and_owner_actions(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
-    """AC3: another coordinator can view the request but gets 403 for owner-only actions."""
+    """SCRUM-104: another coordinator is refused the request without disclosure."""
     organiser = make_user("organiser")
     owner = make_user("coordinator")
     other = make_user("coordinator")
@@ -156,7 +156,8 @@ async def test_other_coordinator_keeps_visibility_but_not_owner_actions(
         )
         approval = await client.post(f"/api/event-requests/{request.id}/approve")
 
-    assert read.status_code == 200
+    assert read.status_code == 403
+    assert read.json() == {"detail": "Forbidden"}
     assert clarification.status_code == 403
     assert approval.status_code == 403
 

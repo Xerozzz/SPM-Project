@@ -143,7 +143,7 @@ async def test_same_organisation_calendar_entry_opens_with_read_only_details(
 
 
 @pytest.mark.story("SCRUM-87")
-async def test_coordinator_event_access_is_unchanged(
+async def test_coordinator_sees_only_assigned_event_details(
     db: Session,
     make_user: MakeUser,
     make_client: MakeClient,
@@ -173,7 +173,9 @@ async def test_coordinator_event_access_is_unchanged(
 
     assert calendar.status_code == 403
     assert draft_detail.status_code == 403
-    assert submitted_detail.status_code == 200
+    # SCRUM-104: an unassigned submitted event is not visible to an ordinary
+    # coordinator either — it waits in the Lead queue until assignment.
+    assert submitted_detail.status_code == 403
 
 
 @pytest.mark.story("SCRUM-87")

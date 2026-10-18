@@ -88,7 +88,7 @@ async def test_organisers_and_attendees_cannot_open_entries(
 
 
 @pytest.mark.story("SCRUM-77")
-async def test_a_coordinator_may_see_the_events_details(
+async def test_a_coordinator_sees_the_entry_but_not_unassigned_event_details(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     row = booking(db, make_user, make_venue(db), BookingStatus.CONFIRMED)
@@ -97,8 +97,11 @@ async def test_a_coordinator_may_see_the_events_details(
         entry = await client.get(f"/api/venue-calendar/bookings/{row.id}")
         event = await client.get(f"/api/event-requests/{entry.json()['event_request_id']}")
 
-    assert event.status_code == 200
-    assert event.json()["id"] == str(row.event_request_id)
+    # SCRUM-104: the calendar entry itself stays visible, but the event details belong
+    # to the assigned coordinator — this viewer holds no assignment, so no disclosure.
+    assert entry.status_code == 200
+    assert event.status_code == 403
+    assert event.json() == {"detail": "Forbidden"}
 
 
 @pytest.mark.story("SCRUM-77")
