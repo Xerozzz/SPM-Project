@@ -157,10 +157,14 @@ def test_submit_never_reassigns_a_request_that_already_has_a_coordinator(
 
 @pytest.mark.story("SCRUM-34")
 @pytest.mark.story("SCRUM-101")
-async def test_assignment_is_visible_to_the_organiser_and_to_any_coordinator(
+async def test_assignment_is_visible_to_the_organiser_but_not_to_other_coordinators(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
-    """SCRUM-101: a fresh submission reads back unassigned to every viewer."""
+    """SCRUM-101: a fresh submission reads back unassigned to its organiser.
+
+    SCRUM-104: an unassigned submission is not visible to an ordinary coordinator at
+    all — the Lead queue owns it until assignment.
+    """
     organiser = make_user("organiser")
     make_user("coordinator")
     other_coordinator = make_user("coordinator")
@@ -175,8 +179,8 @@ async def test_assignment_is_visible_to_the_organiser_and_to_any_coordinator(
 
     assert seen_by_owner.status_code == 200
     assert seen_by_owner.json()["coordinator_id"] is None
-    assert seen_by_other.status_code == 200
-    assert seen_by_other.json()["coordinator_id"] is None
+    assert seen_by_other.status_code == 403
+    assert seen_by_other.json() == {"detail": "Forbidden"}
 
 
 @pytest.mark.story("SCRUM-34")
@@ -369,7 +373,7 @@ async def test_read_endpoint_returns_the_request_to_its_organiser(
 
 
 @pytest.mark.story("SCRUM-34")
-async def test_coordinator_can_view_but_not_edit_an_unassigned_event(
+async def test_coordinator_is_refused_view_and_edit_of_an_unassigned_event(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     organiser = make_user("organiser")
@@ -383,7 +387,10 @@ async def test_coordinator_can_view_but_not_edit_an_unassigned_event(
         view = await client.get(f"/api/event-requests/{submitted.id}")
         edit = await client.patch(f"/api/event-requests/{submitted.id}", json={"name": "Hijacked"})
 
-    assert view.status_code == 200
+    # SCRUM-104 supersedes the old read-only rule: an unassigned event belongs to the
+    # Lead queue, so an ordinary coordinator is refused without disclosure.
+    assert view.status_code == 403
+    assert view.json() == {"detail": "Forbidden"}
     assert edit.status_code == 403
 
 

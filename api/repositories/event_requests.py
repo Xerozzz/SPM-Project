@@ -45,10 +45,31 @@ def list_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventReques
 
 
 def list_submitted(db: Session) -> list[EventRequest]:
-    """Submitted requests available for coordinator review, oldest first."""
+    """Submitted requests available for coordinator review, oldest first.
+
+    Kept for callers that legitimately see every Submitted request (Lead allocation
+    views). Coordinator review uses `list_submitted_for_coordinator` instead (SCRUM-104).
+    """
     statement = (
         select(EventRequest)
         .where(EventRequest.status == EventStatus.SUBMITTED)
+        .order_by(EventRequest.submitted_at.asc(), EventRequest.id.asc())
+    )
+    return list(db.scalars(statement))
+
+
+def list_submitted_for_coordinator(db: Session, coordinator_id: uuid.UUID) -> list[EventRequest]:
+    """SCRUM-104: Submitted requests currently assigned to this coordinator, oldest first.
+
+    `id` is the stable secondary order for equal `submitted_at` values, matching the
+    unscoped list. Unassigned requests and other coordinators' requests never appear.
+    """
+    statement = (
+        select(EventRequest)
+        .where(
+            EventRequest.status == EventStatus.SUBMITTED,
+            EventRequest.coordinator_id == coordinator_id,
+        )
         .order_by(EventRequest.submitted_at.asc(), EventRequest.id.asc())
     )
     return list(db.scalars(statement))

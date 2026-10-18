@@ -96,7 +96,7 @@ async def test_only_a_coordinator_can_review_or_decide(
 
 
 @pytest.mark.story("SCRUM-31")
-async def test_non_assigned_coordinator_can_view_but_cannot_decide_a_request(
+async def test_non_assigned_coordinator_is_refused_view_and_decision(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     organiser = make_user("organiser")
@@ -116,6 +116,9 @@ async def test_non_assigned_coordinator_can_view_but_cannot_decide_a_request(
         )
 
     assert assigned_coordinator.id == request.coordinator_id
-    assert read.status_code == 200
+    # SCRUM-104 supersedes the old read-only rule: another Coordinator's event is
+    # refused without disclosure, not served read-only.
+    assert read.status_code == 403
+    assert read.json() == {"detail": "Forbidden"}
     assert approval.status_code == 403
     assert rejection.status_code == 403
