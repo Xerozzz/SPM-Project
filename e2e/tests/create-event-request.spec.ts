@@ -1,7 +1,11 @@
 import { expect, type Page, test } from '@playwright/test'
 
-// SCRUM-28: an organiser creates one complete event request through the UI. This covers only
-// creation; saving/resuming drafts and submitting them belong to their respective stories.
+// SCRUM-28: an organiser creates one complete event request through the UI.
+//
+// There is one form, with two ways out of it. "Create event request" is for a request the
+// organiser is finished with: it goes straight for review. "Save draft" keeps an unfinished
+// one without asking anyone to look at it. Both are covered here; what happens to a draft
+// afterwards belongs to the submission story.
 
 async function signInAsOrganiser(page: Page) {
   await page.goto('/')
@@ -12,15 +16,13 @@ async function signInAsOrganiser(page: Page) {
 }
 
 function row(page: Page, name: string) {
-  return page.getByRole('listitem').filter({
-    has: page.getByRole('button', { name: `Edit draft ${name}`, exact: true }),
-  })
+  const ownRequests = page
+    .getByRole('heading', { name: 'My event requests' })
+    .locator('xpath=../following-sibling::ul[1]')
+  return ownRequests.getByRole('listitem').filter({ hasText: name })
 }
 
-test('an organiser creates a complete event request as a draft', async ({ page }) => {
-  const name = `E2E orientation ${Date.now()}`
-  await signInAsOrganiser(page)
-
+async function fillCompleteForm(page: Page, name: string) {
   await page.getByLabel('Name *').fill(name)
   await page.getByLabel('Purpose *').fill('Welcome new students')
   await page.getByLabel('Description *').fill('Campus orientation activities')
@@ -32,10 +34,33 @@ test('an organiser creates a complete event request as a draft', async ({ page }
   await page.getByLabel('Equipment requirement *').selectOption('Projector')
   await page.getByLabel('Layout requirement *').fill('Theatre style')
   await page.getByLabel('Registration requirement *').fill('Open registration')
+}
+
+test('an organiser creates a complete event request and it goes for review', async ({ page }) => {
+  const name = `E2E orientation ${Date.now()}`
+  await signInAsOrganiser(page)
+
+  await fillCompleteForm(page, name)
   await page.getByRole('button', { name: 'Create event request' }).click()
 
-  await expect(page.getByRole('status').filter({ hasText: 'has been created' })).toContainText(
-    `“${name}” has been created.`,
+  // Home also has a role="status" line for API health, so pick ours by its text.
+  await expect(page.getByRole('status').filter({ hasText: 'submitted for review' })).toContainText(
+    `“${name}” has been submitted for review.`,
+  )
+  await expect(row(page, name)).toContainText('Submitted')
+})
+
+test('an organiser saves an event request as a draft without sending it', async ({ page }) => {
+  const name = `E2E draft ${Date.now()}`
+  await signInAsOrganiser(page)
+
+  await fillCompleteForm(page, name)
+  await page.getByRole('button', { name: 'Save draft' }).click()
+
+  await expect(page.getByRole('status').filter({ hasText: 'saved as a draft' })).toContainText(
+    `“${name}” has been saved as a draft.`,
   )
   await expect(row(page, name)).toContainText('Draft')
+  // Still the organiser's to finish: the draft can be reopened in the same form above.
+  await expect(row(page, name).getByRole('button', { name: `Edit draft ${name}` })).toBeVisible()
 })
