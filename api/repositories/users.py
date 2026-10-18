@@ -28,3 +28,15 @@ def list_active_coordinators(db: Session) -> list[User]:
         .order_by(User.created_at, User.id)
     )
     return list(db.scalars(stmt))
+
+
+def list_active_coordinator_leads(db: Session) -> list[User]:
+    """Active Coordinator Leads, ordered by account creation — SCRUM-96's
+    unassigned-submission recipients. One row per account: a multi-role Lead
+    matches once, not once per role."""
+    stmt = (
+        select(User)
+        .where(User.roles.contains([Role.COORDINATOR_LEAD.value]), User.is_active.is_(True))
+        .order_by(User.created_at, User.id)
+    )
+    return list(db.scalars(stmt))
