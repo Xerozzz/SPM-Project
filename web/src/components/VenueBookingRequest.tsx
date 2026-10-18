@@ -12,6 +12,7 @@ import {
 } from '../api/eventRequests'
 import { listVenues, type Venue } from '../api/venues'
 import { describeConflict } from '../api/venueBookingDecisions'
+import { formatSingaporeTime } from '../api/venueCalendar'
 import { useAuth } from '../auth/useAuth'
 
 export default function VenueBookingRequest({ event }: { event: EventRequest }) {
@@ -183,6 +184,12 @@ function ExistingVenueBookings({
                   {formatBookingTime(booking.start_at)} to {formatBookingTime(booking.end_at)}
                 </dd>
               </div>
+              {heldPeriod(booking) && (
+                <div>
+                  <dt className="inline font-medium">Venue held: </dt>
+                  <dd className="inline">{heldPeriod(booking)}</dd>
+                </div>
+              )}
             </dl>
             {booking.conflict && (
               <p className="mt-2 rounded bg-amber-50 p-2 text-amber-800" role="status">
@@ -198,7 +205,24 @@ function ExistingVenueBookings({
 }
 
 function formatBookingTime(value: string) {
-  return new Date(value).toLocaleString()
+  // Singapore time, like every other time on this page. A bare toLocaleString() uses the
+  // reader's own machine, which put two different timezones in one sentence next to a
+  // clash the API had already described in Singapore time.
+  return formatSingaporeTime(value)
+}
+
+/**
+ * SCRUM-82 AC3: how long the venue is really held, when that is wider than the event.
+ *
+ * Shown only when it differs, so a venue with no buffers reads exactly as it did (AC7).
+ * Without this a clash reads as nonsense on this screen too: a booking at 9:14 pm told
+ * it clashes with one holding the venue until 8:45 pm looks like no clash at all.
+ */
+function heldPeriod(booking: VenueBooking): string | null {
+  const { effective_start_at: from, effective_end_at: to } = booking
+  if (!from || !to) return null
+  if (from === booking.start_at && to === booking.end_at) return null
+  return `${formatSingaporeTime(from)} to ${formatSingaporeTime(to)}`
 }
 
 function Suitability({ result }: { result: VenueSuitability }) {

@@ -230,7 +230,7 @@ export default function VenueBookingDecisions() {
                 {booking.status === 'expired' &&
                   booking.expires_at &&
                   ` at ${formatSingaporeTime(booking.expires_at)}`}
-                {booking.decided_at && ` on ${new Date(booking.decided_at).toLocaleString()}`}
+                {booking.decided_at && ` on ${formatSingaporeTime(booking.decided_at)}`}
                 {booking.decision_reason && `: ${booking.decision_reason}`}
               </p>
             </article>
@@ -242,12 +242,24 @@ export default function VenueBookingDecisions() {
 }
 
 function BookingDetails({ booking }: { booking: VenueBookingDecision }) {
+  // SCRUM-82 AC3: the venue is held wider than the event runs, and a refusal quotes the
+  // held period. Without this line the two do not add up on screen: a request at 9:14 pm
+  // refused for clashing with a booking that ends at 8:00 pm reads as a bug.
+  const held =
+    booking.setup_minutes > 0 || booking.turnaround_minutes > 0
+      ? `${formatSingaporeTime(booking.effective_start_at)} to ${formatSingaporeTime(
+          booking.effective_end_at,
+        )} (${booking.setup_minutes} min setup, ${booking.turnaround_minutes} min turnaround)`
+      : null
   const rows: [string, string | number | null][] = [
     ['Venue', `${booking.venue_name}, ${booking.venue_location}`],
     [
       'When',
-      `${new Date(booking.start_at).toLocaleString()} to ${new Date(booking.end_at).toLocaleString()}`,
+      `${formatSingaporeTime(booking.start_at)} to ${formatSingaporeTime(booking.end_at)}`,
     ],
+    // Omitted rather than shown empty when the venue has no buffers: the row renders
+    // "Not given" for a null, and there is nothing missing here (AC7).
+    ...(held ? ([['Venue held', held]] as [string, string][]) : []),
     ['Attendance', booking.expected_attendance],
     ['Venue type', booking.venue_requirement],
     ['Accessibility', booking.accessibility_requirement],

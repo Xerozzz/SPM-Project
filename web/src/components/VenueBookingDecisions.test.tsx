@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
-import type { VenueBookingDecision } from '../api/venueBookingDecisions'
+import { describeConflict, type VenueBookingDecision } from '../api/venueBookingDecisions'
 import { AuthProvider } from '../auth/context'
 import VenueBookingDecisions from './VenueBookingDecisions'
 
@@ -40,6 +40,11 @@ const PENDING: VenueBookingDecision = {
   decided_by_id: null,
   decided_at: null,
   decision_reason: null,
+  // No buffers on this venue, so the held period is the event period (AC7).
+  effective_start_at: '2030-01-01T02:00:00Z',
+  effective_end_at: '2030-01-01T06:00:00Z',
+  setup_minutes: 0,
+  turnaround_minutes: 0,
   conflict: null,
 }
 
@@ -159,6 +164,9 @@ test('SCRUM-75 AC1: a clash is shown and Approve is disabled', async () => {
           id: 'closure-1',
           start_at: '2030-01-01T00:00:00Z',
           end_at: '2030-01-01T08:00:00Z',
+          // A closure is never widened (SCRUM-82 AC5), so these match its own times.
+          effective_start_at: '2030-01-01T00:00:00Z',
+          effective_end_at: '2030-01-01T08:00:00Z',
           message: 'venue is unavailable for period closure-1',
         },
       },
@@ -229,6 +237,8 @@ test('SCRUM-75: a refusal from a stale list reloads it and shows the named clash
               id: 'closure-1',
               start_at: '2030-01-01T00:00:00Z',
               end_at: '2030-01-01T08:00:00Z',
+              effective_start_at: '2030-01-01T00:00:00Z',
+              effective_end_at: '2030-01-01T08:00:00Z',
               message: 'venue is unavailable for period closure-1',
             },
           }
@@ -293,4 +303,77 @@ test('SCRUM-75: an old rejection error goes away when Approve is tried', async (
   fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
 
   await waitFor(() => expect(screen.queryByText(/already rejected/)).toBeNull())
+})
+
+// ------------------------------------------------- SCRUM-82: buffers on screen
+//
+// Reported from testing: a request at 9:14 pm was refused for clashing with a booking
+// "from 6:00 pm to 8:00 pm". On its face that is not a clash at all. What makes it one
+// is the venue's 45 minutes of turnaround, and nothing on the screen said so.
+
+const sgtOf = (value: string) =>
+  new Date(value).toLocaleString('en-SG', { timeZone: 'Asia/Singapore' })
+
+test('SCRUM-82: a refusal names the period the venue is held, not just the event', () => {
+  const text = describeConflict({
+    kind: 'booking',
+    id: 'other-1',
+    start_at: '2030-01-01T10:00:00Z',
+    end_at: '2030-01-01T12:00:00Z',
+    effective_start_at: '2030-01-01T09:30:00Z',
+    effective_end_at: '2030-01-01T12:45:00Z',
+    message: 'conflicts with confirmed booking other-1',
+  })
+
+  expect(text).toContain(sgtOf('2030-01-01T12:45:00Z'))
+  expect(text).toContain('holding the venue')
+  // The event period is still there, so the reader can tell the two apart.
+  expect(text).toContain(sgtOf('2030-01-01T12:00:00Z'))
+})
+
+test('SCRUM-82 AC7: with no buffers the refusal keeps its plain wording', () => {
+  const text = describeConflict({
+    kind: 'booking',
+    id: 'other-1',
+    start_at: '2030-01-01T10:00:00Z',
+    end_at: '2030-01-01T12:00:00Z',
+    effective_start_at: '2030-01-01T10:00:00Z',
+    effective_end_at: '2030-01-01T12:00:00Z',
+    message: 'conflicts with confirmed booking other-1',
+  })
+
+  expect(text).toBe(
+    `Clashes with a confirmed booking from ${sgtOf('2030-01-01T10:00:00Z')} to ${sgtOf(
+      '2030-01-01T12:00:00Z',
+    )}.`,
+  )
+})
+
+test('SCRUM-82 AC3: the request card says how long the venue is held for', async () => {
+  const buffered: VenueBookingDecision = {
+    ...PENDING,
+    effective_start_at: '2030-01-01T01:30:00Z',
+    effective_end_at: '2030-01-01T06:45:00Z',
+    setup_minutes: 30,
+    turnaround_minutes: 45,
+  }
+  renderPanel(async () => json([buffered]))
+
+  await screen.findByText('Orientation Day')
+  expect(screen.getByText('Venue held:')).toBeInTheDocument()
+  expect(
+    screen.getByText(
+      `${sgtOf('2030-01-01T01:30:00Z')} to ${sgtOf(
+        '2030-01-01T06:45:00Z',
+      )} (30 min setup, 45 min turnaround)`,
+    ),
+  ).toBeInTheDocument()
+})
+
+test('SCRUM-82 AC7: a venue with no buffers has no held line to show', async () => {
+  renderPanel(async () => json([PENDING]))
+
+  await screen.findByText('Orientation Day')
+  // Absent, not shown empty: the row renders "Not given" for a null value.
+  expect(screen.queryByText('Venue held:')).toBeNull()
 })

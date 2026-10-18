@@ -45,6 +45,13 @@ class VenueBookingRead(BaseModel):
     start_at: datetime
     end_at: datetime
     status: BookingStatus
+    # SCRUM-82 AC3: the period the venue is actually held for, so a clash the Coordinator
+    # is shown adds up. Without it a booking at 21:14 reads as clashing with one that
+    # finished at 20:00, and the 45 minutes of turnaround explaining it are nowhere.
+    # Derived from the venue's current buffers rather than the stored snapshot, because
+    # that snapshot is what SCRUM-89 exists to report as stale (ADR-0019).
+    effective_start_at: datetime | None = None
+    effective_end_at: datetime | None = None
     # SCRUM-83 AC2: when a tentative hold on this request ends.
     expires_at: datetime | None = None
     # SCRUM-89 AC4: set when the venue's current buffers mean this booking can no longer

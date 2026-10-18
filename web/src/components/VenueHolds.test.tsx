@@ -47,6 +47,11 @@ const PENDING: VenueBookingDecision = {
   decided_by_id: null,
   decided_at: null,
   decision_reason: null,
+  // No buffers on this venue, so the held period is the event period (AC7).
+  effective_start_at: '2030-01-10T02:00:00Z',
+  effective_end_at: '2030-01-10T06:00:00Z',
+  setup_minutes: 0,
+  turnaround_minutes: 0,
   expires_at: null,
   held_by_id: null,
   held_at: null,
@@ -254,6 +259,8 @@ test('SCRUM-83 AC3: a clash with a hold is described as a tentative hold', () =>
       id: 'b-7',
       start_at: '2030-01-10T02:00:00Z',
       end_at: '2030-01-10T06:00:00Z',
+      effective_start_at: '2030-01-10T02:00:00Z',
+      effective_end_at: '2030-01-10T06:00:00Z',
       message: 'conflicts with tentative hold b-7',
     }),
   ).toBe(
@@ -307,7 +314,7 @@ test('SCRUM-83 AC2: the Coordinator sees their request is on a tentative hold', 
 
   expect(
     await screen.findByText(
-      `tentative hold until ${new Date(HELD.expires_at ?? '').toLocaleString()}`,
+      `tentative hold until ${sgt(HELD.expires_at ?? '')}`,
     ),
   ).toBeInTheDocument()
 })
@@ -445,7 +452,7 @@ test('SCRUM-108: the Coordinator sees that their hold expired', async () => {
 
   expect(
     await screen.findByText(
-      `tentative hold expired at ${new Date(EXPIRED.expires_at ?? '').toLocaleString()}`,
+      `tentative hold expired at ${sgt(EXPIRED.expires_at ?? '')}`,
     ),
   ).toBeInTheDocument()
 })

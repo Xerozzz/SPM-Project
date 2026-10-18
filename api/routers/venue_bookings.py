@@ -13,7 +13,11 @@ from core.dependencies import EventAccess, require_event_access, require_role
 from domain.booking_conflict import BookingConflictError
 from domain.roles import Role
 from domain.venue_booking import InvalidBookingTransitionError
+from domain.venue_buffer import effective_interval
 from models.event_request import EventRequest
+from models.venue import Venue
+from models.venue_booking import VenueBooking
+from repositories import venues as venue_repo
 from schemas.event_requests import FieldProblemRead
 from schemas.venue_booking_decisions import ConflictRead
 from schemas.venue_bookings import (
@@ -53,15 +57,34 @@ def list_venue_bookings(event: PlanningEvent, db: Db) -> list[VenueBookingRead]:
     """
     rows = service.list_for_event(db, event)
     problems = buffer_review.problems_by_booking(db, rows, datetime.now(UTC))
-    return [
-        VenueBookingRead(
-            **VenueBookingRead.model_validate(row).model_dump(exclude={"conflict"}),
-            conflict=(
-                ConflictRead.from_error(problems[row.id].conflict) if row.id in problems else None
-            ),
-        )
-        for row in rows
-    ]
+    # One lookup per venue, not per booking: an event's bookings are usually at the same
+    # few venues, and the buffers have to come from the venue as it is now.
+    venues: dict[uuid.UUID, Venue] = {}
+    for row in rows:
+        if row.venue_id not in venues:
+            venue = venue_repo.get(db, row.venue_id)
+            assert venue is not None  # a booking cannot exist without its venue.
+            venues[row.venue_id] = venue
+    return [_booking_read(row, venues[row.venue_id], problems.get(row.id)) for row in rows]
+
+
+def _booking_read(
+    row: VenueBooking, venue: Venue, problem: buffer_review.ReviewedBooking | None
+) -> VenueBookingRead:
+    buffers = buffer_review.buffers_of(venue)
+    held_from, held_to = effective_interval(row.start_at, row.end_at, buffers)
+    return VenueBookingRead(
+        **VenueBookingRead.model_validate(row).model_dump(
+            exclude={"conflict", "effective_start_at", "effective_end_at"}
+        ),
+        effective_start_at=held_from,
+        effective_end_at=held_to,
+        conflict=(
+            ConflictRead.from_error(problem.conflict, buffer_review.buffers_of(problem.venue))
+            if problem is not None
+            else None
+        ),
+    )
 
 
 @router.get("/{request_id}/venue-bookings/suitability", response_model=SuitabilityRead)
@@ -105,4 +128,9 @@ def approve_venue_booking(booking_id: uuid.UUID, user: VenueStaff, db: Db) -> Ve
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Venue booking not found") from exc
     except (BookingConflictError, InvalidBookingTransitionError) as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    return VenueBookingRead.model_validate(booking)
+    venue = venue_repo.get(db, booking.venue_id)
+    assert venue is not None  # a booking cannot exist without its venue.
+    # Through `_booking_read` like the listing, so `effective_*` means the same thing on
+    # both routes. `model_validate` alone would have returned the stored snapshot here
+    # and the derived period there, which is the field meaning two things at once.
+    return _booking_read(booking, venue, None)

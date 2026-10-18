@@ -24,7 +24,7 @@ from models.venue_unavailability import VenueUnavailability
 from services import venue_bookings as booking_service
 from services import venue_calendar as calendar_service
 from services import venue_search as search_service
-from tests.integration.test_submit_event_request import MakeUser
+from tests.integration.test_submit_event_request import MakeClient, MakeUser
 from tests.integration.test_submit_venue_booking import approved_event
 from tests.integration.test_venue_search import effective_for, make_venue
 
@@ -415,3 +415,126 @@ async def test_a_buffer_change_never_writes_to_a_booking(db: Session, make_user:
     # exactly what SCRUM-89 will report. Nothing here refuses the buffer change.
     buffers = VenueBuffers(setup_minutes=_SETUP, turnaround_minutes=_TURNAROUND)
     assert bookings_clash(first.start_at, first.end_at, second.start_at, second.end_at, buffers)
+
+
+# ------------------------------------- what Venue Staff are actually told (AC3, AC4)
+#
+# Reported from testing SCRUM-82: a request was refused for clashing with a booking
+# whose quoted period did not overlap it. The rule was right; the explanation quoted the
+# event period, and the buffers that caused the clash appeared nowhere. Someone deciding
+# on a request cannot act on a reason that contradicts itself, so the payload behind that
+# screen has to carry the period the venue is actually held for.
+
+
+@pytest.mark.story("SCRUM-82")
+async def test_the_decision_queue_reports_the_held_period_and_the_buffers(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    venue = buffered_venue(db)
+    coordinator = make_user("coordinator")
+    booking = booking_for(db, coordinator, venue, at(10), at(12), status=BookingStatus.PENDING)
+
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.get("/api/venue-bookings")
+
+    assert response.status_code == 200, response.text
+    row = next(r for r in response.json() if r["id"] == str(booking.id))
+    assert row["setup_minutes"] == _SETUP
+    assert row["turnaround_minutes"] == _TURNAROUND
+    assert row["effective_start_at"] == at(9.5).isoformat().replace("+00:00", "Z")
+    assert row["effective_end_at"] == at(12.75).isoformat().replace("+00:00", "Z")
+
+
+@pytest.mark.story("SCRUM-82")
+async def test_a_clash_names_the_held_period_of_the_booking_in_the_way(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """The reported case: the two events are back to back and still clash.
+
+    10:00-12:00 is confirmed; 12:44-14:00 is requested. Neither period overlaps the
+    other, so the conflict is only explicable through the first booking's 45 minutes of
+    turnaround. The payload has to say 12:45, not 12:00.
+    """
+    venue = buffered_venue(db)
+    coordinator = make_user("coordinator")
+    confirmed = booking_for(db, coordinator, venue, at(10), at(12))
+    requested = booking_for(
+        db, coordinator, venue, at(12.75) - _MINUTE, at(14), status=BookingStatus.PENDING
+    )
+
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.get("/api/venue-bookings")
+
+    row = next(r for r in response.json() if r["id"] == str(requested.id))
+    conflict = row["conflict"]
+    assert conflict is not None, "the clash itself is SCRUM-73; this test is about reporting it"
+    assert conflict["id"] == str(confirmed.id)
+    # The event period, unchanged: 10:00 to 12:00.
+    assert conflict["start_at"] == at(10).isoformat().replace("+00:00", "Z")
+    assert conflict["end_at"] == at(12).isoformat().replace("+00:00", "Z")
+    # The part that was missing: when the venue stops being held.
+    assert conflict["effective_end_at"] == at(12.75).isoformat().replace("+00:00", "Z")
+    assert conflict["effective_start_at"] == at(9.5).isoformat().replace("+00:00", "Z")
+
+
+@pytest.mark.story("SCRUM-82")
+async def test_a_closure_is_reported_at_its_own_width(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # AC5: a closure is never widened, so the two pairs agree and nothing implies the
+    # closure was stretched to meet the booking.
+    venue = buffered_venue(db)
+    coordinator = make_user("coordinator")
+    closure_for(db, venue, at(8), at(9))
+    # 09:15 less 30 minutes of setup is 08:45, inside the closure. At 09:30 the setup
+    # would touch 09:00 exactly, which is not an overlap.
+    requested = booking_for(db, coordinator, venue, at(9.25), at(11), status=BookingStatus.PENDING)
+
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.get("/api/venue-bookings")
+
+    conflict = next(r for r in response.json() if r["id"] == str(requested.id))["conflict"]
+    assert conflict["kind"] == "unavailability"
+    assert (
+        conflict["effective_start_at"]
+        == conflict["start_at"]
+        == at(8).isoformat().replace("+00:00", "Z")
+    )
+    assert (
+        conflict["effective_end_at"]
+        == conflict["end_at"]
+        == at(9).isoformat().replace("+00:00", "Z")
+    )
+
+
+@pytest.mark.story("SCRUM-82")
+async def test_the_held_period_follows_the_venue_not_the_stored_snapshot(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """ADR-0019: the stored effective columns are a snapshot and may be stale.
+
+    They are written when a booking is submitted, approved or held, and a later buffer
+    change deliberately does not rewrite them. The clash shown beside them is computed
+    from the venue as it is now, so what the screen calls the held period has to be too,
+    or one card contradicts itself for exactly the bookings SCRUM-89 exists to flag.
+    """
+    venue = buffered_venue(db, setup_minutes=0, turnaround_minutes=0)
+    coordinator = make_user("coordinator")
+    booking = booking_for(db, coordinator, venue, at(10), at(12), status=BookingStatus.PENDING)
+    assert (booking.effective_start_at, booking.effective_end_at) == (at(10), at(12))
+
+    venue.setup_minutes, venue.turnaround_minutes = _SETUP, _TURNAROUND
+    db.flush()
+
+    async with make_client(coordinator) as client:
+        response = await client.get(
+            f"/api/event-requests/{booking.event_request_id}/venue-bookings"
+        )
+
+    assert response.status_code == 200, response.text
+    row = next(r for r in response.json() if r["id"] == str(booking.id))
+    assert row["effective_start_at"] == at(9.5).isoformat().replace("+00:00", "Z")
+    assert row["effective_end_at"] == at(12.75).isoformat().replace("+00:00", "Z")
+    # The row itself is untouched, which is the state SCRUM-89 reports on.
+    db.refresh(booking)
+    assert (booking.effective_start_at, booking.effective_end_at) == (at(10), at(12))
