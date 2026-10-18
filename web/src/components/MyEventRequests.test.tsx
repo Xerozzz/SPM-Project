@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import type { EventRequest } from '../api/eventRequests'
@@ -55,7 +55,10 @@ function json(body: unknown, status = 200) {
   })
 }
 
-function renderSignedIn(handlers: Record<string, Handler>) {
+function renderSignedIn(
+  handlers: Record<string, Handler>,
+  onEditDraft: (request: EventRequest) => void = () => {},
+) {
   localStorage.setItem(
     'connectsphere.token',
     JSON.stringify({ token: 'token', userId: 'user-1', roles: ['organiser'] }),
@@ -70,7 +73,7 @@ function renderSignedIn(handlers: Record<string, Handler>) {
   render(
     <QueryClientProvider client={client}>
       <AuthProvider>
-        <MyEventRequests />
+        <MyEventRequests onEditDraft={onEditDraft} />
       </AuthProvider>
     </QueryClientProvider>,
   )
@@ -103,85 +106,8 @@ test('shows a rejection reason to the organiser', async () => {
   ).toBeInTheDocument()
 })
 
-test('incomplete form can be saved as a draft with confirmation and status', async () => {
-  let listed: EventRequest[] = []
-  const saved = eventRequest({ id: 'req-3', name: 'Hackathon', status: 'draft' })
-  const create = vi.fn((init?: RequestInit) => {
-    expect(JSON.parse(String(init?.body))).toMatchObject({
-      name: 'Hackathon',
-      purpose: null,
-      start_at: null,
-      expected_attendance: null,
-    })
-    listed = [saved]
-    return json(saved, 201)
-  })
 
-  renderSignedIn({
-    'GET /api/event-requests': () => json(listed),
-    'GET /api/event-requests/drafts': () => json(listed),
-    'POST /api/event-requests/drafts': create,
-  })
 
-  fireEvent.click(await screen.findByRole('button', { name: 'New draft' }))
-  fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Hackathon' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Save Draft' }))
-
-  expect(await screen.findByRole('status')).toHaveTextContent('“Hackathon” was saved as a Draft.')
-  expect(create).toHaveBeenCalledOnce()
-  expect(await screen.findAllByText('Draft')).not.toHaveLength(0)
-})
-
-test('reopened draft shows persisted values and can be edited', async () => {
-  let listed = [draft]
-  const update = vi.fn((init?: RequestInit) => {
-    expect(JSON.parse(String(init?.body))).toMatchObject({
-      description: 'Updated campus welcome',
-    })
-    listed = [eventRequest({ ...draft, description: 'Updated campus welcome' })]
-    return json(listed[0])
-  })
-
-  renderSignedIn({
-    'GET /api/event-requests': () => json(listed),
-    'GET /api/event-requests/drafts': () => json(listed),
-    'GET /api/event-requests/req-1': () => json(draft),
-    'PATCH /api/event-requests/req-1': update,
-  })
-
-  fireEvent.click(await screen.findByLabelText('Edit draft Orientation Day'))
-
-  const form = await screen.findByRole('form', { name: 'Event request draft form' })
-  expect(within(form).getByDisplayValue('Orientation Day')).toBeInTheDocument()
-  expect(within(form).getByDisplayValue('Campus welcome')).toBeInTheDocument()
-
-  fireEvent.change(within(form).getByLabelText('Description'), {
-    target: { value: 'Updated campus welcome' },
-  })
-  fireEvent.click(within(form).getByRole('button', { name: 'Save Draft' }))
-
-  expect(await screen.findByRole('status')).toHaveTextContent(
-    '“Orientation Day” was saved as a Draft.',
-  )
-  expect(update).toHaveBeenCalledOnce()
-})
-
-test('draft editor selects equipment types from the catalogue', async () => {
-  renderSignedIn({
-    'GET /api/event-requests': () => json([draft]),
-    'GET /api/event-requests/req-1': () => json(draft),
-    'GET /api/event-requests/equipment-types': () => json(['Microphone', 'Projector']),
-    'GET /api/event-requests/venue-names': () => json(['Hall A']),
-  })
-
-  fireEvent.click(await screen.findByLabelText('Edit draft Orientation Day'))
-  const form = await screen.findByRole('form', { name: 'Event request draft form' })
-
-  expect(within(form).getByLabelText('Equipment requirement')).toHaveTextContent(
-    'Select equipmentMicrophoneProjector',
-  )
-  expect(within(form).getByLabelText('Venue requirement')).toHaveTextContent('Select a venueHall A')
-})
 
 test('submitting an incomplete draft names the fields to correct', async () => {
   renderSignedIn({
@@ -200,15 +126,14 @@ test('submitting an incomplete draft names the fields to correct', async () => {
       ),
   })
 
-  fireEvent.click(await screen.findByLabelText('Edit draft Orientation Day'))
-  const form = await screen.findByRole('form', { name: 'Event request draft form' })
-  fireEvent.click(within(form).getByRole('button', { name: 'Submit for review' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Submit for review' }))
 
   const alert = await screen.findByRole('alert')
   expect(alert).toHaveTextContent('“Orientation Day” cannot be submitted yet')
   expect(alert).toHaveTextContent('Description is required')
   expect(alert).toHaveTextContent('End date and time must be after the start')
-  expect(within(form).getByRole('button', { name: 'Submit for review' })).toBeInTheDocument()
+  // Still offered, so the organiser can fix the draft and try again.
+  expect(screen.getByRole('button', { name: 'Submit for review' })).toBeInTheDocument()
 })
 
 test('submitting a complete draft shows confirmation and the new status', async () => {
@@ -287,3 +212,36 @@ function eventRequest(overrides: Partial<EventRequest>): EventRequest {
     status_permits: overrides.status_permits ?? ['edit', 'submit'],
   }
 }
+
+
+test('choosing a draft hands the full request to the form above', async () => {
+  // The list carries a summary, so it fetches the whole request before handing it over.
+  // Editing happens in the one form on the page; this component no longer owns one.
+  const chosen: EventRequest[] = []
+  renderSignedIn(
+    {
+      'GET /api/event-requests': () => json([draft]),
+      'GET /api/event-requests/drafts': () => json([draft]),
+      'GET /api/event-requests/req-1': () => json(draft),
+    },
+    (request) => chosen.push(request),
+  )
+
+  fireEvent.click(await screen.findByLabelText('Edit draft Orientation Day'))
+
+  await waitFor(() => expect(chosen).toHaveLength(1))
+  expect(chosen[0].id).toBe('req-1')
+  expect(chosen[0].description).toBe('Campus welcome')
+  // No second form appears here.
+  expect(screen.queryByRole('form', { name: 'Event request draft form' })).toBeNull()
+})
+
+test('there is no New draft button, because the form above is always there', async () => {
+  renderSignedIn({
+    'GET /api/event-requests': () => json([draft]),
+    'GET /api/event-requests/drafts': () => json([draft]),
+  })
+
+  await screen.findByLabelText('Edit draft Orientation Day')
+  expect(screen.queryByRole('button', { name: 'New draft' })).toBeNull()
+})

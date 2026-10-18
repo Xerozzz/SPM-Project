@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 
 import { getHealth } from '../api/client'
+import type { EventRequest } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
 import MyEventRequests from '../components/MyEventRequests'
 import ActiveAssignments from '../components/ActiveAssignments'
@@ -21,6 +23,9 @@ import VenueSearch from '../components/VenueSearch'
  */
 export default function HomePage() {
   const { roles, signOut, hasRole } = useAuth()
+  // Held here because the form and the list are siblings: the list chooses a draft,
+  // the form edits it, and neither owns the other.
+  const [editingDraft, setEditingDraft] = useState<EventRequest | null>(null)
   const health = useQuery({ queryKey: ['health'], queryFn: getHealth })
 
   return (
@@ -42,8 +47,10 @@ export default function HomePage() {
       {hasRole('organiser') && (
         <>
           <OrganisationEventCalendar />
-          <EventRequestForm />
-          <MyEventRequests />
+          {/* One form. Choosing Edit draft in the list below fills in the form above
+              rather than opening a second one. */}
+          <EventRequestForm editing={editingDraft} onDone={() => setEditingDraft(null)} />
+          <MyEventRequests onEditDraft={setEditingDraft} />
         </>
       )}
 

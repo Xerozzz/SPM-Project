@@ -29,6 +29,10 @@ def _http_error(exc: Exception) -> HTTPException:
         return HTTPException(status.HTTP_404_NOT_FOUND, "Venue unavailability not found")
     if isinstance(exc, service.InactiveVenueError):
         return HTTPException(status.HTTP_409_CONFLICT, "Venue is not active")
+    # 409 rather than 422: the record is well formed, the world is in the way. Same
+    # status and shape booking approval answers for the mirror image of this clash.
+    if isinstance(exc, service.ConfirmedBookingInTheWayError):
+        return HTTPException(status.HTTP_409_CONFLICT, str(exc))
     assert isinstance(exc, service.InvalidVenueUnavailabilityError)
     return HTTPException(422, [problem.__dict__ for problem in exc.problems])
 

@@ -33,10 +33,12 @@ async function createCompleteDraft(page: Page, name: string) {
   await page.getByLabel('Equipment requirement *').selectOption('Projector')
   await page.getByLabel('Layout requirement *').fill('Theatre style')
   await page.getByLabel('Registration requirement *').fill('Open registration')
-  await page.getByRole('button', { name: 'Create event request' }).click()
+  // Save draft, not Create: creating sends the request for review in the same press,
+  // and this test needs a draft that nobody has looked at yet.
+  await page.getByRole('button', { name: 'Save draft' }).click()
 
-  await expect(page.getByRole('status').filter({ hasText: 'has been created' })).toContainText(
-    `“${name}” has been created.`,
+  await expect(page.getByRole('status').filter({ hasText: 'saved as a draft' })).toContainText(
+    `“${name}” has been saved as a draft.`,
   )
 }
 

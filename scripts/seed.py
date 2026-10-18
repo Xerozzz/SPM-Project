@@ -19,10 +19,16 @@ from core.database import Session, SessionLocal
 from core.security import hash_password
 from domain.roles import Role
 from models.equipment import Equipment
+from models.equipment_requirement_change import EquipmentRequirementChange
+from models.event_clarification import EventClarification
+from models.event_coordinator_assignment import EventCoordinatorAssignment
+from models.event_equipment_requirement import EventEquipmentRequirement
 from models.event_request import EventRequest
+from models.notification import Notification
 from models.organisation import Organisation
 from models.user import User
 from models.venue import Venue
+from models.venue_booking import VenueBooking
 from repositories import event_requests as event_requests_repo
 from repositories import users as users_repo
 from services import event_requests as event_requests_service
@@ -254,6 +260,7 @@ def _seed_event_requests(db: Session) -> None:
     for sample_id, fields in _sample_event_requests():
         existing = event_requests_repo.get(db, sample_id)
         if existing is not None:
+            _delete_dependents(db, sample_id)
             event_requests_repo.delete(db, existing)
             db.flush()
         event_requests_repo.add(
@@ -267,6 +274,33 @@ def _seed_event_requests(db: Session) -> None:
     db.flush()
     _approve_sample(db, organiser.id, _SAMPLE_IDS[2])
     event_requests_service.submit(db, _SAMPLE_IDS[3], organiser.id, datetime.now(UTC))
+
+
+# Everything that points at an event request. None of these foreign keys cascade, and
+# nothing in the application deletes an event request — only this seed does, to put the
+# samples back in Draft. So the seed is what has to clear up after itself.
+#
+# This is why a second `docker compose up` against an existing volume used to kill the
+# API on startup: approving a sample now creates an equipment requirement (SCRUM-43),
+# and deleting the sample on the next run hit that row's foreign key. CI never saw it
+# because a fresh runner always starts from an empty volume.
+_DEPENDENTS = (
+    EquipmentRequirementChange,
+    EventEquipmentRequirement,
+    EventClarification,
+    EventCoordinatorAssignment,
+    Notification,
+    VenueBooking,
+)
+
+
+def _delete_dependents(db: Session, request_id: uuid.UUID) -> None:
+    """Clear the rows that would otherwise refuse the delete, children first."""
+    for model in _DEPENDENTS:
+        db.query(model).filter(model.event_request_id == request_id).delete(
+            synchronize_session=False
+        )
+    db.flush()
 
 
 def _approve_sample(db: Session, organiser_id: uuid.UUID, request_id: uuid.UUID) -> None:
