@@ -13,6 +13,7 @@ import {
   VenueUnavailabilityRejectedError,
 } from '../api/venues'
 import { useAuth } from '../auth/useAuth'
+import { formatSingaporeTime } from '../api/venueCalendar'
 
 type FormValues = { startsAt: string; endsAt: string; reason: string }
 const emptyValues: FormValues = { startsAt: '', endsAt: '', reason: '' }
@@ -253,7 +254,11 @@ function localDateTime(value: string): string {
 }
 
 function display(value: string): string {
-  return new Date(value).toLocaleString()
+  // Singapore time. This list sits directly above the booking clashes on the same Venue
+  // Staff page, and those are in Singapore time (SCRUM-82). A closure shown in the
+  // reader's own timezone next to a clash judged against it is how you misread whether
+  // the two overlap, which is the mistake the rest of that change exists to prevent.
+  return formatSingaporeTime(value)
 }
 
 function closureDescription(record: VenueUnavailability): string {

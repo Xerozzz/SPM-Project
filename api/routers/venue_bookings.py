@@ -128,4 +128,9 @@ def approve_venue_booking(booking_id: uuid.UUID, user: VenueStaff, db: Db) -> Ve
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Venue booking not found") from exc
     except (BookingConflictError, InvalidBookingTransitionError) as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    return VenueBookingRead.model_validate(booking)
+    venue = venue_repo.get(db, booking.venue_id)
+    assert venue is not None  # a booking cannot exist without its venue.
+    # Through `_booking_read` like the listing, so `effective_*` means the same thing on
+    # both routes. `model_validate` alone would have returned the stored snapshot here
+    # and the derived period there, which is the field meaning two things at once.
+    return _booking_read(booking, venue, None)

@@ -505,3 +505,36 @@ async def test_a_closure_is_reported_at_its_own_width(
         == conflict["end_at"]
         == at(9).isoformat().replace("+00:00", "Z")
     )
+
+
+@pytest.mark.story("SCRUM-82")
+async def test_the_held_period_follows_the_venue_not_the_stored_snapshot(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """ADR-0019: the stored effective columns are a snapshot and may be stale.
+
+    They are written when a booking is submitted, approved or held, and a later buffer
+    change deliberately does not rewrite them. The clash shown beside them is computed
+    from the venue as it is now, so what the screen calls the held period has to be too,
+    or one card contradicts itself for exactly the bookings SCRUM-89 exists to flag.
+    """
+    venue = buffered_venue(db, setup_minutes=0, turnaround_minutes=0)
+    coordinator = make_user("coordinator")
+    booking = booking_for(db, coordinator, venue, at(10), at(12), status=BookingStatus.PENDING)
+    assert (booking.effective_start_at, booking.effective_end_at) == (at(10), at(12))
+
+    venue.setup_minutes, venue.turnaround_minutes = _SETUP, _TURNAROUND
+    db.flush()
+
+    async with make_client(coordinator) as client:
+        response = await client.get(
+            f"/api/event-requests/{booking.event_request_id}/venue-bookings"
+        )
+
+    assert response.status_code == 200, response.text
+    row = next(r for r in response.json() if r["id"] == str(booking.id))
+    assert row["effective_start_at"] == at(9.5).isoformat().replace("+00:00", "Z")
+    assert row["effective_end_at"] == at(12.75).isoformat().replace("+00:00", "Z")
+    # The row itself is untouched, which is the state SCRUM-89 reports on.
+    db.refresh(booking)
+    assert (booking.effective_start_at, booking.effective_end_at) == (at(10), at(12))
