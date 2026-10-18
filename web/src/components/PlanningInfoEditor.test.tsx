@@ -169,3 +169,21 @@ test.each([
     expect(screen.queryByRole('button', { name: 'Edit planning information' })).toBeNull(),
   )
 })
+
+test('SCRUM-36 AC5: a Confirmed event does not offer ordinary edits', async () => {
+  renderPanel({ ...submitted, status: 'confirmed', status_permits: [] })
+
+  await screen.findByRole('heading', { name: 'Orientation Day' })
+
+  await waitFor(() =>
+    expect(screen.queryByRole('button', { name: 'Edit planning information' })).toBeNull(),
+  )
+})
+
+test('SCRUM-36 AC1: an Approved event still offers ordinary edits', async () => {
+  renderPanel({ ...submitted, status: 'approved', status_permits: [] })
+
+  expect(
+    await screen.findByRole('button', { name: 'Edit planning information' }),
+  ).toBeInTheDocument()
+})

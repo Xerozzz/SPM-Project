@@ -2,7 +2,13 @@
 
 import pytest
 
-from domain.event_request import ORDINARY_FIELDS, field_names, validate_ordinary_update
+from domain.event_request import (
+    ORDINARY_FIELDS,
+    accepts_ordinary_update,
+    field_names,
+    validate_ordinary_update,
+)
+from domain.event_status import EventStatus
 
 
 @pytest.mark.story("SCRUM-36")
@@ -44,3 +50,23 @@ def test_an_ordinary_field_cannot_be_blanked_or_cleared() -> None:
 def test_fields_that_are_not_sent_are_not_checked() -> None:
     # Only what the coordinator changes is validated. An untouched field is left alone.
     assert validate_ordinary_update({"layout_requirement": "Banquet"}) == []
+
+
+@pytest.mark.story("SCRUM-36")
+@pytest.mark.parametrize("status", [EventStatus.SUBMITTED, EventStatus.APPROVED])
+def test_submitted_and_approved_events_accept_an_ordinary_update(status: EventStatus) -> None:
+    assert accepts_ordinary_update(status)
+
+
+@pytest.mark.story("SCRUM-36")
+@pytest.mark.parametrize("status", [EventStatus.CONFIRMED, EventStatus.DRAFT, EventStatus.REJECTED])
+def test_other_statuses_refuse_an_ordinary_update(status: EventStatus) -> None:
+    # AC1: Confirmed is changed through change control, Draft and Rejected by the organiser.
+    assert not accepts_ordinary_update(status)
+
+
+@pytest.mark.story("SCRUM-36")
+def test_every_status_is_decided() -> None:
+    # A status added later must be placed on purpose, not accepted by accident.
+    accepted = {status for status in EventStatus if accepts_ordinary_update(status)}
+    assert accepted == {EventStatus.SUBMITTED, EventStatus.APPROVED}

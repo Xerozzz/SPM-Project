@@ -10,6 +10,7 @@ import {
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
 import { hasReviewNote } from '../validation/eventRequestReview'
+import { acceptsOrdinaryUpdate } from '../validation/planningInfo'
 import ClarificationThread from './ClarificationThread'
 import PlanningInfoEditor from './PlanningInfoEditor'
 import VenueBookingRequest from './VenueBookingRequest'
@@ -192,7 +193,9 @@ function ReviewCard({
           </button>
         )}
       </div>
-      {assignment === 'mine' && <PlanningInfoEditor request={request} />}
+      {assignment === 'mine' && acceptsOrdinaryUpdate(request.status) && (
+        <PlanningInfoEditor request={request} />
+      )}
       <ClarificationThread
         eventRequestId={request.id}
         mode="coordinator"

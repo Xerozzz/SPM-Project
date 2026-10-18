@@ -12,6 +12,7 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass, fields
 from datetime import datetime
 
+from domain.event_status import EventStatus
 from domain.validation import FieldProblem as FieldProblem
 
 # Order matters only for how problems are reported: it matches the order on the ticket.
@@ -46,6 +47,19 @@ ORDINARY_FIELDS: tuple[str, ...] = (
     "layout_requirement",
     "registration_requirement",
 )
+
+# SCRUM-36 AC1: the statuses in which the assigned coordinator may make an ordinary update.
+# Submitted and Approved (the planning phase) only. A Confirmed event cannot be changed
+# directly (customer clarification), so its changes go through the significant-change
+# process (SCRUM-37/SCRUM-47). Draft and Rejected belong to the organiser (SCRUM-29).
+ORDINARY_UPDATE_STATUSES: frozenset[EventStatus] = frozenset(
+    {EventStatus.SUBMITTED, EventStatus.APPROVED}
+)
+
+
+def accepts_ordinary_update(status: EventStatus) -> bool:
+    """SCRUM-36 AC1: True when an event in `status` may take an ordinary planning update."""
+    return status in ORDINARY_UPDATE_STATUSES
 
 
 @dataclass(frozen=True)
