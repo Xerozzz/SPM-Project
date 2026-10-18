@@ -265,8 +265,25 @@ def assign_coordinator(
         raise InvalidAssigneeError
     request.coordinator_id = candidate.id
     request.assigned_at = now
+    # SCRUM-102 AC1/AC3/AC6: the new coordinator and the owning organiser each get
+    # one unread notification. The recipient set is built from the locked request
+    # (never browser input) and deduplicated by account id, so a multi-role account
+    # holding both roles gets one row. The history row is the source, so retrying
+    # the same assignment collides per recipient instead of duplicating (ADR-0022).
+    # Staged before the commit so owner, history and notifications land together.
     if acted_by_id is not None:
-        history_repo.append(db, request.id, None, candidate.id, acted_by_id, now)
+        entry = history_repo.append(db, request.id, None, candidate.id, acted_by_id, now)
+        db.flush()
+        for recipient_id in {candidate.id, request.organiser_id}:
+            notifications_repo.stage(
+                db,
+                recipient_id=recipient_id,
+                event_request_id=request.id,
+                type=NotificationType.COORDINATOR_ASSIGNED,
+                source_type=NotificationSource.COORDINATOR_ASSIGNMENT,
+                source_id=str(entry.id),
+                occurred_at=now,
+            )
     return repo.save(db, request)
 
 
@@ -308,7 +325,21 @@ def reassign_coordinator(
     previous = request.coordinator_id
     request.coordinator_id = candidate.id
     request.assigned_at = now
-    history_repo.append(db, request.id, previous, candidate.id, acted_by_id, now)
+    # SCRUM-102 AC2/AC3/AC6: incoming, outgoing and organiser each get one unread
+    # notification, deduplicated by account id. Staged only after every validation
+    # above passed, so a refused reassignment creates nothing (AC5).
+    entry = history_repo.append(db, request.id, previous, candidate.id, acted_by_id, now)
+    db.flush()
+    for recipient_id in {candidate.id, previous, request.organiser_id}:
+        notifications_repo.stage(
+            db,
+            recipient_id=recipient_id,
+            event_request_id=request.id,
+            type=NotificationType.COORDINATOR_REASSIGNED,
+            source_type=NotificationSource.COORDINATOR_ASSIGNMENT,
+            source_id=str(entry.id),
+            occurred_at=now,
+        )
     return repo.save(db, request)
 
 
