@@ -404,17 +404,47 @@ async def test_a_pending_request_does_not_stop_a_closure(
 
 
 @pytest.mark.story("SCRUM-62")
-async def test_editing_a_closure_is_not_a_clash_with_itself(
+async def test_a_closure_cannot_be_edited_onto_a_confirmed_booking(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
-    # The record being edited is excluded, so shrinking or re-saving one still works.
+    """Otherwise `update` is the way round `create`'s check.
+
+    Record a closure somewhere clear, then move it on top of a confirmed booking and the
+    venue ends up both promised and shut by the back door.
+    """
     venue = make_venue(db)
+    booking = confirm_booking(db, venue, make_user, hours_from_anchor=10)
+
+    async with make_client(make_user("venue_staff")) as client:
+        created = await client.post(f"/api/venues/{venue.id}/unavailabilities", json=body())
+        assert created.status_code == 201, created.text
+        edited = await client.put(
+            f"/api/venues/{venue.id}/unavailabilities/{created.json()['id']}",
+            json=body(starts_at=_utc(10), ends_at=_utc(12)),
+        )
+
+    assert edited.status_code == 409
+    assert str(booking.id) in edited.json()["detail"]
+    # Refused means unchanged, not partly applied.
+    db.expire_all()
+    stored = db.query(VenueUnavailability).one()
+    assert stored.starts_at == _ANCHOR
+
+
+@pytest.mark.story("SCRUM-62")
+async def test_a_closure_clear_of_every_booking_can_still_be_edited(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # The check must not be so eager that an ordinary edit stops working. The booking is
+    # ten hours away from both the old period and the new one.
+    venue = make_venue(db)
+    confirm_booking(db, venue, make_user, hours_from_anchor=10)
 
     async with make_client(make_user("venue_staff")) as client:
         created = await client.post(f"/api/venues/{venue.id}/unavailabilities", json=body())
         edited = await client.put(
             f"/api/venues/{venue.id}/unavailabilities/{created.json()['id']}",
-            json=body(reason="Rescheduled maintenance"),
+            json=body(ends_at=_utc(3), reason="Rescheduled maintenance"),
         )
 
     assert edited.status_code == 200, edited.text

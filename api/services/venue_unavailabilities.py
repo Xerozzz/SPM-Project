@@ -57,7 +57,7 @@ def create(
     if not venue.is_active:
         raise InactiveVenueError
     _ensure_valid(fields, now)
-    _ensure_no_confirmed_booking(db, venue, fields, excluding=None)
+    _ensure_no_confirmed_booking(db, venue, fields)
     return repo.save(db, VenueUnavailability(venue_id=venue_id, **_stored_values(fields)))
 
 
@@ -70,10 +70,10 @@ def update(
 ) -> VenueUnavailability:
     record = _get_for_venue(db, venue_id, unavailability_id)
     _ensure_valid(fields, now)
-    # Moving a closure is the same question as recording one: it must not land on top of
-    # a confirmed booking. The record itself is excluded so leaving it where it is, or
-    # shrinking it, is never read as a clash with itself.
-    _ensure_no_confirmed_booking(db, venues.get(db, venue_id), fields, excluding=record.id)
+    # Moving a closure asks the same question as recording one, against the period it
+    # would occupy afterwards. Without this, `update` is a way round `create`'s check:
+    # record a closure somewhere clear, then edit it on top of a confirmed booking.
+    _ensure_no_confirmed_booking(db, venues.get(db, venue_id), fields)
     for name, value in _stored_values(fields).items():
         setattr(record, name, value)
     return repo.save(db, record)
@@ -110,11 +110,7 @@ def _stored_values(fields: VenueUnavailabilityFields) -> dict[str, object]:
 
 
 def _ensure_no_confirmed_booking(
-    db: Session,
-    venue: Venue,
-    fields: VenueUnavailabilityFields,
-    *,
-    excluding: uuid.UUID | None,
+    db: Session, venue: Venue, fields: VenueUnavailabilityFields
 ) -> None:
     """Refuse a closure that would sit on top of a booking the venue is committed to.
 
@@ -131,8 +127,6 @@ def _ensure_no_confirmed_booking(
         setup_minutes=venue.setup_minutes, turnaround_minutes=venue.turnaround_minutes
     )
     for booking in booking_repo.confirmed_bookings_from(db, venue.id, fields.starts_at):
-        if excluding is not None and booking.id == excluding:
-            continue
         if booking_clashes_with_closure(
             booking.start_at, booking.end_at, fields.starts_at, fields.ends_at, buffers
         ):
