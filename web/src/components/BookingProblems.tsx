@@ -28,8 +28,9 @@ export default function BookingProblems() {
     <section className="mt-6 rounded-lg border border-slate-200 p-4">
       <h2 className="font-medium">Bookings needing attention</h2>
       <p className="mt-1 text-sm text-slate-500">
-        Confirmed bookings that no longer fit the setup and turnaround times their venue
-        needs. Nothing has been cancelled: the Coordinator decides what moves.
+        Confirmed bookings and tentative holds that no longer fit the setup and turnaround
+        times their venue needs. Nothing has been cancelled: the Coordinator decides what
+        moves.
       </p>
       {problems.isPending && <p className="mt-2 text-sm">Loading…</p>}
       {problems.isError && (
@@ -39,7 +40,7 @@ export default function BookingProblems() {
       )}
       {problems.isSuccess && problems.data.length === 0 && (
         <p className="mt-2 text-sm text-slate-500">
-          Nothing needs attention. Every confirmed booking fits its venue&apos;s buffers.
+          Nothing needs attention. Everything held at every venue fits its buffers.
         </p>
       )}
       {problems.data?.map((venue) => (
@@ -55,6 +56,11 @@ export default function BookingProblems() {
             {venue.problems.map((problem) => (
               <li key={problem.booking_id} className="rounded bg-amber-50 p-2 text-amber-800">
                 <span className="font-medium">{problem.event_name ?? 'Untitled event'}</span>
+                {problem.status === 'tentative' && (
+                  <span className="ml-2 rounded bg-violet-100 px-1.5 py-0.5 text-xs text-violet-800">
+                    Tentative hold
+                  </span>
+                )}
                 <br />
                 {singaporeTime(problem.start_at)} to {singaporeTime(problem.end_at)}
                 <br />

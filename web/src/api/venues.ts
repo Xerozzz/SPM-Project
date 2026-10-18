@@ -1,4 +1,4 @@
-import type { BookingConflict } from './venueBookingDecisions'
+import type { BookingConflict, BookingStatus } from './venueBookingDecisions'
 
 /**
  * Venue catalogue API calls (SCRUM-59). Mirrors api/schemas/venues.py.
@@ -308,6 +308,8 @@ export interface ProblemBooking {
   event_name: string | null
   start_at: string
   end_at: string
+  /** SCRUM-89: `tentative` when it is a hold rather than a confirmed booking. */
+  status: BookingStatus
   conflict: BookingConflict
 }
 

@@ -35,6 +35,7 @@ const PROBLEM: VenueProblems = {
       event_name: 'Orientation Day',
       start_at: '2030-03-04T02:00:00Z',
       end_at: '2030-03-04T04:00:00Z',
+      status: 'confirmed',
       conflict: {
         kind: 'booking',
         id: 'booking-2',
@@ -243,4 +244,27 @@ test('SCRUM-89 AC6: the save says what it did to existing bookings', async () =>
   expect(await screen.findByRole('status')).toHaveTextContent(
     '1 existing booking can no longer fit',
   )
+})
+
+test('SCRUM-89: a tentative hold needing attention is labelled as one', async () => {
+  // Holds are reviewed alongside confirmed bookings now. The two need different answers
+  // from the Coordinator - a hold can be left to expire, a confirmed booking cannot - so
+  // a panel that showed them identically would be asking for the wrong decision.
+  renderPanel(async () =>
+    json([
+      {
+        ...PROBLEM,
+        problems: [{ ...PROBLEM.problems[0], booking_id: 'hold-1', status: 'tentative' }],
+      },
+    ]),
+  )
+
+  expect(await screen.findByText('Tentative hold')).toBeInTheDocument()
+})
+
+test('SCRUM-89: a confirmed booking is not labelled as a hold', async () => {
+  renderPanel(async () => json([PROBLEM]))
+
+  await screen.findByText('Orientation Day')
+  expect(screen.queryByText('Tentative hold')).toBeNull()
 })

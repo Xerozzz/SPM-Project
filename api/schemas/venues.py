@@ -8,6 +8,7 @@ from datetime import datetime, time
 
 from pydantic import BaseModel, ConfigDict
 
+from domain.venue_booking import BookingStatus
 from schemas.venue_booking_decisions import ConflictRead
 
 
@@ -83,6 +84,10 @@ class ProblemBookingRead(BaseModel):
     event_name: str | None
     start_at: datetime
     end_at: datetime
+    # SCRUM-89: a tentative hold is reviewed alongside a confirmed booking, so the panel
+    # has to say which it is looking at. The two need different answers from the
+    # Coordinator: a hold can be left to expire, a confirmed booking cannot.
+    status: BookingStatus
     conflict: ConflictRead
 
 

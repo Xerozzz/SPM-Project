@@ -20,8 +20,9 @@ from models.venue import Venue
 from models.venue_booking import VenueBooking
 from models.venue_buffer_change import VenueBufferChange
 from tests.integration.test_submit_event_request import MakeClient, MakeUser
+from tests.integration.test_submit_venue_booking import approved_event
 from tests.integration.test_venue_buffer_conflicts import at, booking_for, closure_for
-from tests.integration.test_venue_search import make_venue
+from tests.integration.test_venue_search import effective_for, make_venue
 
 _SETUP, _TURNAROUND = 30, 45
 
@@ -518,3 +519,218 @@ async def test_a_booking_whose_turnaround_has_finished_is_left_out(
 
     assert flagged(response) == []
     assert follows.id is not None
+
+
+# ------------------------------------------------- AC1 and AC2: holds, not just bookings
+#
+# Reopened in Sprint 4. The reassessment only ever loaded confirmed bookings, so a
+# tentative hold was invisible to it twice over: a hold a buffer change caught out was
+# never reported, and a hold that something else now clashed with was never seen as being
+# in the way. A hold occupies the venue exactly as a booking does (SCRUM-83 AC3).
+
+
+def hold_for(
+    db: Session,
+    coordinator: User,
+    venue: Venue,
+    start_at: datetime,
+    end_at: datetime,
+    *,
+    expires_at: datetime | None = None,
+) -> VenueBooking:
+    """A tentative hold at this venue, as SCRUM-83 places one.
+
+    Built in one insert rather than by mutating a confirmed row afterwards: a tentative
+    hold without its expiry and holder is refused by the table's own check constraint,
+    which is what caught the first version of this helper.
+    """
+    event = approved_event(db, coordinator, coordinator, start_at=start_at, end_at=end_at)
+    effective_start, effective_end = effective_for(venue, start_at, end_at)
+    hold = VenueBooking(
+        venue_id=venue.id,
+        event_request_id=event.id,
+        requested_by_id=coordinator.id,
+        start_at=start_at,
+        end_at=end_at,
+        effective_start_at=effective_start,
+        effective_end_at=effective_end,
+        status=BookingStatus.TENTATIVE,
+        expires_at=expires_at if expires_at is not None else at(200),
+        held_by_id=coordinator.id,
+        held_at=at(0),
+    )
+    db.add(hold)
+    db.flush()
+    return hold
+
+
+@pytest.mark.story("SCRUM-89")
+async def test_a_hold_caught_out_by_a_buffer_change_is_reported(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # hold versus booking. The confirmed booking ends when the hold starts, so they are
+    # compatible until the venue needs turnaround.
+    venue = make_venue(db)
+    coordinator = make_user("coordinator")
+    booking = booking_for(db, coordinator, venue, at(10), at(12))
+    hold = hold_for(db, coordinator, venue, at(12), at(13))
+
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.patch(
+            f"/api/venues/{venue.id}", json={"turnaround_minutes": _TURNAROUND}
+        )
+
+    assert response.status_code == 200, response.text
+    assert set(flagged(response)) == {str(booking.id), str(hold.id)}
+
+
+@pytest.mark.story("SCRUM-89")
+async def test_two_holds_that_now_overlap_are_both_reported(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # hold versus hold. Neither is confirmed, so before this change the venue looked
+    # entirely clear however the buffers moved.
+    venue = make_venue(db)
+    coordinator = make_user("coordinator")
+    first = hold_for(db, coordinator, venue, at(10), at(12))
+    second = hold_for(db, coordinator, venue, at(12), at(13))
+
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.patch(
+            f"/api/venues/{venue.id}", json={"turnaround_minutes": _TURNAROUND}
+        )
+
+    assert set(flagged(response)) == {str(first.id), str(second.id)}
+
+
+@pytest.mark.story("SCRUM-89")
+async def test_a_hold_whose_setup_now_runs_into_a_closure_is_reported(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # hold versus unavailability.
+    venue = make_venue(db)
+    coordinator = make_user("coordinator")
+    hold = hold_for(db, coordinator, venue, at(10), at(12))
+    # The closure ends at 09:45 and the event starts at 10:00, so the event itself never
+    # touches it. Only the 30 minutes of setup, reaching back to 09:30, does.
+    closure_for(db, venue, at(8), at(9.75))
+
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.patch(f"/api/venues/{venue.id}", json={"setup_minutes": _SETUP})
+
+    assert flagged(response) == [str(hold.id)]
+
+
+@pytest.mark.story("SCRUM-89")
+async def test_a_hold_whose_setup_meets_a_closure_exactly_is_not_reported(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # The boundary, half-open as everywhere else: a closure ending exactly when setup
+    # begins is not an overlap.
+    venue = make_venue(db)
+    coordinator = make_user("coordinator")
+    hold_for(db, coordinator, venue, at(10), at(12))
+    closure_for(db, venue, at(8), at(9.5))
+
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.patch(f"/api/venues/{venue.id}", json={"setup_minutes": 30})
+
+    assert flagged(response) == []
+
+
+@pytest.mark.story("SCRUM-89")
+async def test_an_expired_hold_is_neither_reported_nor_in_anything_else_way(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """ADR-0030: expiry is a status, so an expired hold simply is not a candidate.
+
+    The clock is not compared here. A hold that has run out but has not been swept yet is
+    still `tentative` and still blocks, which is the lag ADR-0030 accepted for search, the
+    calendar and the availability check; this surface agrees with them rather than
+    inventing a second answer.
+    """
+    venue = make_venue(db)
+    coordinator = make_user("coordinator")
+    booking = booking_for(db, coordinator, venue, at(10), at(12))
+    expired = hold_for(db, coordinator, venue, at(12), at(13))
+    expired.status = BookingStatus.EXPIRED
+    db.flush()
+
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.patch(
+            f"/api/venues/{venue.id}", json={"turnaround_minutes": _TURNAROUND}
+        )
+
+    # The confirmed booking has nothing left to clash with, so nobody is reported.
+    assert flagged(response) == []
+    assert str(booking.id) not in flagged(response)
+
+
+@pytest.mark.story("SCRUM-89")
+@pytest.mark.parametrize(
+    "status", [BookingStatus.PENDING, BookingStatus.REJECTED, BookingStatus.CANCELLED]
+)
+async def test_a_request_that_holds_nothing_is_never_in_the_way(
+    db: Session, make_user: MakeUser, make_client: MakeClient, status: BookingStatus
+) -> None:
+    # Only a confirmed booking or a live hold occupies the venue. A pending request is
+    # not a commitment, and a rejected or cancelled one is not anything at all.
+    venue = make_venue(db)
+    coordinator = make_user("coordinator")
+    booking_for(db, coordinator, venue, at(10), at(12))
+    booking_for(db, coordinator, venue, at(12), at(13), status=status)
+
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.patch(
+            f"/api/venues/{venue.id}", json={"turnaround_minutes": _TURNAROUND}
+        )
+
+    assert flagged(response) == []
+
+
+@pytest.mark.story("SCRUM-89")
+async def test_the_audit_record_names_the_hold_it_caught_out(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # AC8: the stored snapshot is written from the same review, so a hold reaches it
+    # without a second code path.
+    venue = make_venue(db)
+    coordinator = make_user("coordinator")
+    booking = booking_for(db, coordinator, venue, at(10), at(12))
+    hold = hold_for(db, coordinator, venue, at(12), at(13))
+
+    async with make_client(make_user("venue_staff")) as client:
+        await client.patch(f"/api/venues/{venue.id}", json={"turnaround_minutes": _TURNAROUND})
+
+    rows = audit_rows(db)
+    assert len(rows) == 1
+    assert set(rows[0].flagged_booking_ids) == {booking.id, hold.id}
+
+
+@pytest.mark.story("SCRUM-89")
+async def test_the_problems_panel_says_which_rows_are_holds(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """AC4: a hold and a confirmed booking need different answers from the Coordinator.
+
+    A hold can be left to expire; a confirmed booking has to be moved. A panel that
+    showed the two identically would be asking for the wrong decision.
+    """
+    venue = make_venue(db)
+    coordinator = make_user("coordinator")
+    booking = booking_for(db, coordinator, venue, at(10), at(12))
+    hold = hold_for(db, coordinator, venue, at(12), at(13))
+    # Buffers raised afterwards, as they are in life. Creating the venue already needing
+    # turnaround would have the overlap constraint refuse the second row outright, which
+    # is the constraint working: this state only arises from a later change.
+    venue.turnaround_minutes = _TURNAROUND
+    db.flush()
+
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.get("/api/venues/booking-problems")
+
+    assert response.status_code == 200, response.text
+    rows = next(v for v in response.json() if v["venue_id"] == str(venue.id))["problems"]
+    by_id = {row["booking_id"]: row["status"] for row in rows}
+    assert by_id[str(hold.id)] == "tentative"
+    assert by_id[str(booking.id)] == "confirmed"
