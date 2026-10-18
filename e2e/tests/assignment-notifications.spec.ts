@@ -62,13 +62,11 @@ test('assignment and reassignment notify the affected inboxes only', async ({ pa
   await page.getByLabel('Layout requirement *').fill('Theatre style')
   await page.getByLabel('Registration requirement *').fill('Open registration')
   await page.getByRole('button', { name: 'Create event request' }).click()
-  await expect(page.getByRole('status').filter({ hasText: 'has been created' })).toContainText(
-    `“${name}” has been created.`,
-  )
-  await ownRow(page, name).getByRole('button', { name: 'Submit for review' }).click()
+  // Creating sends it for review in the same press, so there is no separate submit step.
   await expect(page.getByRole('status').filter({ hasText: 'submitted for review' })).toContainText(
     `“${name}” has been submitted for review.`,
   )
+  await expect(ownRow(page, name)).toContainText('Submitted')
   const eventId = await ownRequestId(page, name)
   expect(eventId).not.toBe('')
   await signOut(page)
