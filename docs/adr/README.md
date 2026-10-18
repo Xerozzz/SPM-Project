@@ -44,6 +44,7 @@ someone else made two weeks ago.
 | [0031](0031-catalogue-backed-venue-requirements.md) | Validate event venue requirements against the catalogue | Proposed |
 | [0032](0032-use-catalogue-equipment-type-names.md) | Use catalogue equipment type names in event requirements | Proposed |
 | [0033](0033-equipment-requirements-as-records.md) | Make an event's equipment requirements records, with the organiser's choice as the first one | Proposed |
+| [0034](0034-equipment-review-outside-the-change-history.md) | Keep equipment requirement reviews out of the change history | Proposed |
 
 ## When to write one
 

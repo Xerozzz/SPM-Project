@@ -1,4 +1,4 @@
-"""Equipment requirement persistence (SCRUM-43)."""
+"""Equipment requirement persistence (SCRUM-43, SCRUM-44)."""
 
 import uuid
 
@@ -6,8 +6,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from domain.event_status import EventStatus
 from models.equipment_requirement_change import EquipmentRequirementChange
 from models.event_equipment_requirement import EventEquipmentRequirement
+from models.event_request import EventRequest
 
 
 def list_for_event(
@@ -96,3 +98,26 @@ def changes_for_event(db: Session, event_request_id: uuid.UUID) -> list[Equipmen
         .order_by(EquipmentRequirementChange.changed_at, EquipmentRequirementChange.id)
     )
     return list(db.scalars(statement))
+
+
+def list_for_review(db: Session) -> list[tuple[EventEquipmentRequirement, EventRequest]]:
+    """SCRUM-44 AC1: every live requirement of an event in planning, with its event.
+
+    Soonest event first, so the one that has to be arranged first is at the top. Events
+    without a start time sort last rather than vanishing.
+    """
+    statement = (
+        select(EventEquipmentRequirement, EventRequest)
+        .join(EventRequest, EventRequest.id == EventEquipmentRequirement.event_request_id)
+        .where(
+            EventRequest.status == EventStatus.APPROVED,
+            EventEquipmentRequirement.removed_at.is_(None),
+        )
+        .order_by(
+            EventRequest.start_at.asc().nulls_last(),
+            EventRequest.id,
+            EventEquipmentRequirement.created_at,
+            EventEquipmentRequirement.id,
+        )
+    )
+    return [(requirement, event) for requirement, event in db.execute(statement).tuples()]

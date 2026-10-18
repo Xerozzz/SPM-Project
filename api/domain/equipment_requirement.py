@@ -13,6 +13,7 @@ covered by fast unit tests rather than by standing up an API.
 from dataclasses import dataclass
 from enum import StrEnum
 
+from domain.event_status import EventStatus
 from domain.validation import FieldProblem
 
 # The smallest useful quantity. Asking for none of something is not a requirement.
@@ -136,3 +137,28 @@ def review_after_change() -> RequirementReview:
     form, so keeping it would tell the Coordinator something untrue (SCRUM-44).
     """
     return RequirementReview.PENDING_REVIEW
+
+
+class ReviewRefusal(StrEnum):
+    """Why Technical Support Staff may not record a review outcome (SCRUM-44)."""
+
+    # A removed requirement no longer counts toward anything (SCRUM-43 AC7), so there is
+    # nothing left to assess.
+    REQUIREMENT_REMOVED = "requirement_removed"
+    # Reviews belong to planning, which this codebase calls APPROVED (ADR-0033). Before
+    # that the requirement is not the Coordinator's yet; after it, the event is committed.
+    EVENT_NOT_IN_PLANNING = "event_not_in_planning"
+
+
+def review_refusal(event_status: EventStatus, removed: bool) -> ReviewRefusal | None:
+    """SCRUM-44 AC2: whether a review outcome may be recorded; None means it may.
+
+    Any of the four outcomes may replace any other, including going back to
+    `PENDING_REVIEW`: the vocabulary is closed by `RequirementReview`, so the only thing
+    left to decide is whether the requirement and its event are in a state to be reviewed.
+    """
+    if removed:
+        return ReviewRefusal.REQUIREMENT_REMOVED
+    if event_status is not EventStatus.APPROVED:
+        return ReviewRefusal.EVENT_NOT_IN_PLANNING
+    return None

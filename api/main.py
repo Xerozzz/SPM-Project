@@ -78,6 +78,8 @@ def create_app() -> FastAPI:
     # not matter, because every template on that prefix has a distinct literal second
     # segment. The ordering that does matter is inside the router itself.
     app.include_router(equipment_requirements.router, prefix="/api")
+    # SCRUM-44: Technical Support Staff review requirements across events.
+    app.include_router(equipment_requirements.review_router, prefix="/api")
     app.include_router(event_clarifications.router, prefix="/api")
     app.include_router(notifications.router)
     app.include_router(event_requests.router, prefix="/api")

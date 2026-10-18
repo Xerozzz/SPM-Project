@@ -13,10 +13,13 @@ from domain.equipment_requirement import (
     MAX_TECHNICAL_REQUIREMENTS,
     RequirementFields,
     RequirementReview,
+    ReviewRefusal,
     review_after_change,
+    review_refusal,
     validate_change,
     validate_new_requirement,
 )
+from domain.event_status import EventStatus
 from domain.validation import FieldProblem
 
 _CATALOGUE = frozenset({"Projector", "Microphone"})
@@ -202,3 +205,28 @@ def test_a_change_respects_the_technical_text_limit() -> None:
     too_long = "x" * (MAX_TECHNICAL_REQUIREMENTS + 1)
 
     assert fields_blamed(validate_change(1, too_long)) == ["technical_requirements"]
+
+
+# --------------------------------------------------------------------------- SCRUM-44
+
+
+@pytest.mark.story("SCRUM-44")
+def test_a_live_requirement_of_an_event_in_planning_may_be_reviewed() -> None:
+    assert review_refusal(EventStatus.APPROVED, removed=False) is None
+
+
+@pytest.mark.story("SCRUM-44")
+@pytest.mark.parametrize("status", [s for s in EventStatus if s is not EventStatus.APPROVED])
+def test_a_requirement_outside_planning_may_not_be_reviewed(status: EventStatus) -> None:
+    # Boundary: APPROVED is the only status that passes, on either side of it.
+    assert review_refusal(status, removed=False) is ReviewRefusal.EVENT_NOT_IN_PLANNING
+
+
+@pytest.mark.story("SCRUM-44")
+@pytest.mark.parametrize("status", list(EventStatus))
+def test_a_removed_requirement_may_not_be_reviewed_whatever_the_event_status(
+    status: EventStatus,
+) -> None:
+    # Removal is checked first, so a removed line reads as missing rather than as a
+    # conflict about its event.
+    assert review_refusal(status, removed=True) is ReviewRefusal.REQUIREMENT_REMOVED

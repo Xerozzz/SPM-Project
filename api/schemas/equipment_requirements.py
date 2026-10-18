@@ -1,4 +1,4 @@
-"""API contracts for an event's equipment requirements (SCRUM-43).
+"""API contracts for an event's equipment requirements (SCRUM-43, SCRUM-44).
 
 Mirrors domain/equipment_requirement.py.
 """
@@ -51,6 +51,27 @@ class RequirementRead(BaseModel):
     removed_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class RequirementReviewUpdate(BaseModel):
+    """SCRUM-44 AC2: the outcome Technical Support Staff record. Anything outside the four
+    values is a 422 from validation, because the vocabulary is a closed enum."""
+
+    review_status: RequirementReview
+
+
+class RequirementForReview(BaseModel):
+    """SCRUM-44 AC1: one requirement with the event timing needed to assess it."""
+
+    id: uuid.UUID
+    event_request_id: uuid.UUID
+    event_name: str | None
+    event_start_at: datetime | None
+    event_end_at: datetime | None
+    equipment_type: str
+    quantity: int
+    technical_requirements: str | None
+    review_status: RequirementReview
 
 
 class RequirementChangeRead(BaseModel):
