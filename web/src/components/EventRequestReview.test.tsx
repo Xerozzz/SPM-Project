@@ -90,6 +90,9 @@ function renderReview(reviewable: unknown[], bookable: unknown[] = []) {
     if (key.startsWith('GET ') && key.endsWith('/venue-bookings')) return json([])
     if (key === 'GET /api/venues') return json([])
     if (key.endsWith('/clarifications')) return json([])
+    // SCRUM-43 put an equipment editor on this card; empty is enough for these tests.
+    if (key.endsWith('/equipment-requirements')) return json([])
+    if (key.endsWith('/catalogue-types')) return json([])
     if (key === 'POST /api/event-requests/req-1/approve') {
       return json({ ...submitted, status: 'approved' })
     }
@@ -115,6 +118,9 @@ function renderBookingReview(submission: unknown, status = 200, existingBookings
       return json([{ id: 'venue-1', name: 'Small Hall', is_active: true }])
     }
     if (key.endsWith('/clarifications')) return json([])
+    // SCRUM-43 put an equipment editor on this card; empty is enough for these tests.
+    if (key.endsWith('/equipment-requirements')) return json([])
+    if (key.endsWith('/catalogue-types')) return json([])
     if (key.includes('/venue-bookings/suitability?venue_id=venue-1')) return json(suitability)
     if (key === 'POST /api/event-requests/req-1/venue-bookings') {
       return submission instanceof Response ? submission : json(submission, status)
@@ -141,6 +147,9 @@ function renderExistingBookingReview(existingBookings: unknown[]) {
       return json([{ id: 'venue-1', name: 'Small Hall', is_active: true }])
     }
     if (key.endsWith('/clarifications')) return json([])
+    // SCRUM-43 put an equipment editor on this card; empty is enough for these tests.
+    if (key.endsWith('/equipment-requirements')) return json([])
+    if (key.endsWith('/catalogue-types')) return json([])
     throw new Error(`unexpected request ${key}`)
   })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -305,6 +314,9 @@ test('SCRUM-78: adds another venue, retains both records on reload and accepts a
       ])
     }
     if (key.endsWith('/clarifications')) return json([])
+    // SCRUM-43 put an equipment editor on this card; empty is enough for these tests.
+    if (key.endsWith('/equipment-requirements')) return json([])
+    if (key.endsWith('/catalogue-types')) return json([])
     if (key.includes('/venue-bookings/suitability?venue_id=')) {
       return json(key.endsWith('venue-2') ? suitable : suitability)
     }

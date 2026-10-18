@@ -24,6 +24,7 @@ from schemas.equipment_requirements import (
     RequirementUpdate,
 )
 from schemas.event_requests import FieldProblemRead
+from services import equipment as equipment_service
 from services import equipment_requirements as service
 
 router = APIRouter(prefix="/event-requests", tags=["equipment-requirements"])
@@ -65,6 +66,22 @@ def _validation_error(exc: service.InvalidRequirementError) -> HTTPException:
 def list_requirements(event: ViewableEvent, db: Db) -> list[RequirementRead]:
     """AC1: what this event needs, as records rather than a sentence."""
     return [RequirementRead.model_validate(row) for row in service.list_for_event(db, event)]
+
+
+@router.get("/{request_id}/equipment-requirements/catalogue-types", response_model=list[str])
+def list_catalogue_types(event: MaintainableEvent, db: Db) -> list[str]:
+    """AC3: the active types this event's Coordinator may choose from.
+
+    The organiser has `/event-requests/equipment-types` for the same list, but that route
+    is theirs: a Coordinator asking it is refused, which left AC3 with no way to offer the
+    catalogue on the screen they actually use.
+
+    Guarded by the same access as maintaining a requirement rather than by a role, so the
+    vocabulary is readable exactly when choosing from it is allowed (AC10), and a
+    reassignment moves it with everything else.
+    """
+    del event
+    return equipment_service.list_distinct_types(db)
 
 
 @router.get(

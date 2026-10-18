@@ -12,6 +12,7 @@ import { useAuth } from '../auth/useAuth'
 import { hasReviewNote } from '../validation/eventRequestReview'
 import { acceptsOrdinaryUpdate } from '../validation/planningInfo'
 import ClarificationThread from './ClarificationThread'
+import EventEquipmentRequirements from './EventEquipmentRequirements'
 import PlanningInfoEditor from './PlanningInfoEditor'
 import VenueBookingRequest from './VenueBookingRequest'
 
@@ -203,6 +204,12 @@ function ReviewCard({
       />
       {assignment === 'mine' && request.status === 'approved' && (
         <VenueBookingRequest event={request} />
+      )}
+      {/* SCRUM-43 AC2 and AC10: the assigned Coordinator, while the event is being
+          planned. The same rule `EventAccess.MAINTAIN_EQUIPMENT` applies on the API,
+          which is what actually refuses anyone else. */}
+      {assignment === 'mine' && request.status === 'approved' && (
+        <EventEquipmentRequirements event={request} />
       )}
     </article>
   )
