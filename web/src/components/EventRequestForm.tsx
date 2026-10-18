@@ -2,12 +2,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, type ReactNode, useState } from 'react'
 
 import {
+  createDraft,
   createEventRequest,
+  type EventRequest,
   EventRequestValidationError,
   listEquipmentRequirementTypes,
   listVenueRequirementNames,
   type EventRequestCreate,
+  type EventRequestDraftInput,
   FIELD_LABELS,
+  submitEventRequest,
+  updateDraft,
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
 import {
@@ -54,12 +59,29 @@ const textFields: Array<{
  * SCRUM-28: collect a new event request. Catalogue selections describe needs; they never
  * reserve resources.
  */
-export default function EventRequestForm() {
+export default function EventRequestForm({
+  editing = null,
+  onDone = () => {},
+}: {
+  /** A draft the organiser chose to edit, from the list below. Null means a new one. */
+  editing?: EventRequest | null
+  /** Called when the form has nothing left to show, so the list can clear its selection. */
+  onDone?: () => void
+} = {}) {
   const { token } = useAuth()
   const queryClient = useQueryClient()
   const [values, setValues] = useState<FormValues>(initialValues)
   const [errors, setErrors] = useState<FieldErrors>({})
   const [outcome, setOutcome] = useState<string | null>(null)
+  // Reloads the fields when a different draft is chosen. Keyed on the id rather than the
+  // object, so re-rendering the list does not throw away what is being typed.
+  const [loadedId, setLoadedId] = useState<string | null>(null)
+  if ((editing?.id ?? null) !== loadedId) {
+    setLoadedId(editing?.id ?? null)
+    setValues(editing ? formValuesOf(editing) : initialValues)
+    setErrors({})
+    setOutcome(null)
+  }
   const equipmentTypes = useQuery({
     queryKey: ['equipment-types', token],
     queryFn: () => listEquipmentRequirementTypes(token ?? ''),
@@ -71,24 +93,61 @@ export default function EventRequestForm() {
     enabled: token !== null,
   })
 
+  /** Everything a successful save has to refresh, wherever it came from. */
+  function refreshLists() {
+    void queryClient.invalidateQueries({ queryKey: ['event-requests', 'mine', token] })
+    void queryClient.invalidateQueries({ queryKey: ['event-requests', 'drafts', token] })
+    void queryClient.invalidateQueries({ queryKey: ['organisation-calendar', token] })
+  }
+
+  function showProblems(error: Error) {
+    if (error instanceof EventRequestValidationError) {
+      setErrors((current) => ({
+        ...current,
+        ...Object.fromEntries(error.problems.map((problem) => [problem.field, problem.reason])),
+      }))
+    }
+  }
+
+  /**
+   * The primary action: a request the organiser is finished with goes straight for
+   * review. Creating and submitting are two calls because the API keeps them separate,
+   * but there is no state in between that the organiser ever sees.
+   */
   const createRequest = useMutation({
-    mutationFn: (request: EventRequestCreate) => createEventRequest(token ?? '', request),
-    onError: (error) => {
-      if (error instanceof EventRequestValidationError) {
-        setErrors((current) => ({
-          ...current,
-          ...Object.fromEntries(
-            error.problems.map((problem) => [problem.field, problem.reason]),
-          ),
-        }))
-      }
+    mutationFn: async (request: EventRequestCreate) => {
+      const created = editing
+        ? await updateDraft(token ?? '', editing.id, request as EventRequestDraftInput)
+        : await createEventRequest(token ?? '', request)
+      return submitEventRequest(token ?? '', created.id)
     },
+    onError: showProblems,
     onSuccess: (request) => {
       setValues(initialValues)
       setErrors({})
-      void queryClient.invalidateQueries({ queryKey: ['event-requests', 'mine', token] })
-      void queryClient.invalidateQueries({ queryKey: ['organisation-calendar', token] })
-      setOutcome(`“${request.name}” has been created.`)
+      refreshLists()
+      setOutcome(`“${request.name}” has been submitted for review.`)
+      onDone()
+    },
+  })
+
+  /**
+   * The quieter action: keep what has been typed without asking anyone to look at it.
+   * Saved without the completeness check, because a draft is allowed to be unfinished;
+   * the check runs when it is submitted.
+   */
+  const saveDraft = useMutation({
+    mutationFn: (draft: EventRequestDraftInput) =>
+      editing
+        ? updateDraft(token ?? '', editing.id, draft)
+        : createDraft(token ?? '', draft),
+    onError: showProblems,
+    onSuccess: (request) => {
+      setValues(initialValues)
+      setErrors({})
+      refreshLists()
+      setOutcome(`“${request.name || 'Untitled request'}” has been saved as a draft.`)
+      onDone()
     },
   })
 
@@ -110,6 +169,26 @@ export default function EventRequestForm() {
       // the timezone-aware UTC value required by AGENTS.md.
       start_at: new Date(values.start_at).toISOString(),
       end_at: new Date(values.end_at).toISOString(),
+    }
+  }
+
+  function draftBody(): EventRequestDraftInput {
+    // A draft is allowed to be unfinished, so nothing is validated here and an empty
+    // field is sent as null rather than "": the API stores absence, not a blank string.
+    const text = (value: string) => (value.trim() === '' ? null : value)
+    return {
+      name: text(values.name),
+      purpose: text(values.purpose),
+      description: text(values.description),
+      start_at: values.start_at === '' ? null : new Date(values.start_at).toISOString(),
+      end_at: values.end_at === '' ? null : new Date(values.end_at).toISOString(),
+      expected_attendance:
+        values.expected_attendance === '' ? null : Number(values.expected_attendance),
+      venue_requirement: text(values.venue_requirement),
+      accessibility_requirement: text(values.accessibility_requirement),
+      equipment_requirement: text(values.equipment_requirement),
+      layout_requirement: text(values.layout_requirement),
+      registration_requirement: text(values.registration_requirement),
     }
   }
 
@@ -207,16 +286,66 @@ export default function EventRequestForm() {
             {outcome}
           </p>
         )}
-        <button
-          type="submit"
-          disabled={createRequest.isPending}
-          className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-        >
-          Create event request
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="submit"
+            disabled={createRequest.isPending || saveDraft.isPending}
+            className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+          >
+            {editing ? 'Submit for review' : 'Create event request'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const draft = draftBody()
+              saveDraft.mutate(draft)
+            }}
+            disabled={createRequest.isPending || saveDraft.isPending}
+            className="rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
+          >
+            Save draft
+          </button>
+          {editing && (
+            <button
+              type="button"
+              onClick={onDone}
+              className="rounded border border-slate-300 px-3 py-1.5 text-sm"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
       </form>
     </section>
   )
+}
+
+/** An existing draft as the form holds it. */
+function formValuesOf(request: EventRequest): FormValues {
+  return {
+    name: request.name ?? '',
+    purpose: request.purpose ?? '',
+    description: request.description ?? '',
+    start_at: toDateTimeLocal(request.start_at),
+    end_at: toDateTimeLocal(request.end_at),
+    expected_attendance: request.expected_attendance?.toString() ?? '',
+    venue_requirement: request.venue_requirement ?? '',
+    accessibility_requirement: request.accessibility_requirement ?? '',
+    equipment_requirement: request.equipment_requirement ?? '',
+    layout_requirement: request.layout_requirement ?? '',
+    registration_requirement: request.registration_requirement ?? '',
+  }
+}
+
+/**
+ * The stored UTC instant as a `datetime-local` input wants it: local wall clock, no
+ * offset, to the minute. `requestBody` converts it back at the same boundary.
+ */
+function toDateTimeLocal(value: string | null): string {
+  if (!value) return ''
+  const at = new Date(value)
+  const local = new Date(at.getTime() - at.getTimezoneOffset() * 60_000)
+  return local.toISOString().slice(0, 16)
 }
 
 function CatalogueRequirementField({

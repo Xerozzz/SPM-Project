@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { AuthProvider } from '../auth/context'
+import type { EventRequest } from '../api/eventRequests'
 import EventRequestForm from './EventRequestForm'
 
 afterEach(() => {
@@ -10,7 +11,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function renderForm() {
+function renderForm(props: { editing?: EventRequest | null } = {}) {
   localStorage.setItem(
     'connectsphere.token',
     JSON.stringify({ token: 'token', userId: 'user-1', roles: ['organiser'] }),
@@ -28,16 +29,23 @@ function renderForm() {
         headers: { 'Content-Type': 'application/json' },
       })
     }
-    return new Response(JSON.stringify({ id: 'request-1', name: 'Orientation Day', status: 'draft' }), {
-      status: 201,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    // Creating now submits, so the stub answers both calls. The submit response carries
+    // the status the organiser is told about.
+    const submitted = String(input).endsWith('/submit')
+    return new Response(
+      JSON.stringify({
+        id: 'request-1',
+        name: 'Orientation Day',
+        status: submitted ? 'submitted' : 'draft',
+      }),
+      { status: submitted ? 200 : 201, headers: { 'Content-Type': 'application/json' } },
+    )
   })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
       <AuthProvider>
-        <EventRequestForm />
+        <EventRequestForm editing={props.editing ?? null} />
       </AuthProvider>
     </QueryClientProvider>,
   )
@@ -117,10 +125,13 @@ test('rejects zero attendance and accepts the minimum value of one', async () =>
 
   fireEvent.change(attendance, { target: { value: '1' } })
   fireEvent.click(screen.getByRole('button', { name: 'Create event request' }))
-  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(fetchMock).toHaveBeenCalled())
 })
 
-test('creates a complete event request without submitting it', async () => {
+test('creating a complete event request sends it for review', async () => {
+  // The organiser presses one button and the request is with a coordinator. Creating and
+  // submitting are two API calls because the API keeps them apart, but there is no state
+  // in between that anyone sees. Saving without review is the other button.
   renderForm()
   await fillValidForm()
   const fetchMock = vi.mocked(globalThis.fetch)
@@ -128,14 +139,55 @@ test('creates a complete event request without submitting it', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Create event request' }))
 
   await waitFor(() => {
-    expect(screen.getByRole('status')).toHaveTextContent('has been created')
+    expect(screen.getByRole('status')).toHaveTextContent('has been submitted for review')
   })
   expect(fetchMock).toHaveBeenNthCalledWith(
     1,
     '/api/event-requests',
     expect.objectContaining({ method: 'POST' }),
   )
-  expect(fetchMock).toHaveBeenCalledTimes(1)
+  expect(fetchMock).toHaveBeenNthCalledWith(
+    2,
+    '/api/event-requests/request-1/submit',
+    expect.objectContaining({ method: 'POST' }),
+  )
+})
+
+test('an incomplete form can still be saved as a draft', async () => {
+  // A draft is allowed to be unfinished: the completeness check belongs to submission,
+  // which is why Save draft does not run it.
+  renderForm()
+  const fetchMock = vi.mocked(globalThis.fetch)
+  await waitFor(() => expect(screen.getByLabelText('Name *')).toBeInTheDocument())
+  fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'Half an idea' } })
+  fetchMock.mockClear()
+  fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+
+  await waitFor(() => {
+    expect(screen.getByRole('status')).toHaveTextContent('saved as a draft')
+  })
+  expect(fetchMock).toHaveBeenNthCalledWith(
+    1,
+    '/api/event-requests/drafts',
+    expect.objectContaining({ method: 'POST' }),
+  )
+})
+
+test('an empty field is saved as absent, not as an empty string', async () => {
+  // The API stores absence. Sending "" would make a blank purpose look like an answer.
+  renderForm()
+  const fetchMock = vi.mocked(globalThis.fetch)
+  await waitFor(() => expect(screen.getByLabelText('Name *')).toBeInTheDocument())
+  fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'Half an idea' } })
+  fetchMock.mockClear()
+  fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+
+  await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+  const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as Record<string, unknown>
+  expect(body.name).toBe('Half an idea')
+  expect(body.purpose).toBeNull()
+  expect(body.start_at).toBeNull()
+  expect(body.expected_attendance).toBeNull()
 })
 
 test('shows server validation errors beside the relevant fields', async () => {
@@ -203,4 +255,52 @@ test('shows venue names and equipment types loaded from the catalogues', async (
   expect(await screen.findByRole('option', { name: 'Hall A' })).toBeInTheDocument()
   expect(await screen.findByRole('option', { name: 'Projector' })).toBeInTheDocument()
   expect(screen.getAllByText(/does not reserve a specific resource/i)).toHaveLength(2)
+})
+
+
+const existingDraft = {
+  id: 'req-7',
+  name: 'Orientation Day',
+  purpose: 'Campus welcome',
+  description: 'A long description',
+  start_at: '2030-03-04T02:00:00Z',
+  end_at: '2030-03-04T04:00:00Z',
+  expected_attendance: 120,
+  venue_requirement: 'Hall A',
+  accessibility_requirement: 'Step-free access',
+  equipment_requirement: 'Projector',
+  layout_requirement: 'Theatre',
+  registration_requirement: 'None',
+  status: 'draft',
+  status_permits: ['edit', 'submit'],
+} as unknown as EventRequest
+
+test('a draft chosen in the list fills in this form rather than a second one', async () => {
+  // The whole point of the change: one form on the page. Editing arrives as a prop.
+  renderForm({ editing: existingDraft })
+
+  await waitFor(() => {
+    expect(screen.getByLabelText('Name *')).toHaveValue('Orientation Day')
+  })
+  expect(screen.getByLabelText('Purpose *')).toHaveValue('Campus welcome')
+  expect(screen.getByLabelText('Expected attendance *')).toHaveValue(120)
+  // Editing offers review rather than creation, because the request already exists.
+  expect(screen.getByRole('button', { name: 'Submit for review' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Create event request' })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+})
+
+test('editing a draft patches it rather than creating another', async () => {
+  renderForm({ editing: existingDraft })
+  const fetchMock = vi.mocked(globalThis.fetch)
+  await waitFor(() => expect(screen.getByLabelText('Name *')).toHaveValue('Orientation Day'))
+  fetchMock.mockClear()
+  fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+
+  await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+  expect(fetchMock).toHaveBeenNthCalledWith(
+    1,
+    '/api/event-requests/req-7',
+    expect.objectContaining({ method: 'PATCH' }),
+  )
 })
