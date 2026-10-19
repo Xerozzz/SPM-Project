@@ -28,6 +28,18 @@ import { useAuth } from '../auth/useAuth'
  * same rule `EventAccess.MAINTAIN_EQUIPMENT` applies on the API (AC2, AC10). The API is
  * what actually refuses anyone else; hiding it here is for the person, not for safety.
  */
+/**
+ * AC6: what a change did to anything already reserved against the requirement.
+ *
+ * Nothing is released. Saying only "removed" would let a Coordinator believe the matter
+ * is closed while Technical Support still hold equipment for a line that no longer says
+ * what it did.
+ */
+function reservationNote(requirement: EquipmentRequirement): string {
+  if (!requirement.has_flagged_reservation) return ''
+  return ' Technical Support have equipment reserved for it and will reconsider.'
+}
+
 export default function EventEquipmentRequirements({ event }: { event: EventRequest }) {
   const { token } = useAuth()
   const queryClient = useQueryClient()
@@ -95,7 +107,7 @@ export default function EventEquipmentRequirements({ event }: { event: EventRequ
       setOutcome(
         `${requirement.equipment_type} updated. It is back to ${REVIEW_LABELS[
           requirement.review_status
-        ].toLowerCase()}.`,
+        ].toLowerCase()}.${reservationNote(requirement)}`,
       )
       refresh()
     },
@@ -106,7 +118,10 @@ export default function EventEquipmentRequirements({ event }: { event: EventRequ
       removeEquipmentRequirement(token ?? '', event.id, requirement.id),
     onError: failed,
     onSuccess: (requirement) => {
-      setOutcome(`${requirement.equipment_type} removed. It stays in the event's history.`)
+      setOutcome(
+        `${requirement.equipment_type} removed. It stays in the event's history.` +
+          reservationNote(requirement),
+      )
       refresh()
     },
   })
@@ -161,6 +176,21 @@ export default function EventEquipmentRequirements({ event }: { event: EventRequ
               <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">
                 {REVIEW_LABELS[requirement.review_status]}
               </span>
+              {requirement.reserved_quantity > 0 && (
+                <span className="text-xs text-slate-500">
+                  {requirement.reserved_quantity} of {requirement.quantity} reserved
+                </span>
+              )}
+              {/* AC6: changing or removing a requirement does not release what was
+                  reserved against it. Technical Support reconsider it, and the AC says
+                  the Coordinator can see the flag, which is this. Without it a
+                  Coordinator changes a quantity and never learns a commitment is now in
+                  question. */}
+              {requirement.has_flagged_reservation && (
+                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-900">
+                  Reservation to reconsider
+                </span>
+              )}
               {requirement.technical_requirements && (
                 <span className="text-slate-500">{requirement.technical_requirements}</span>
               )}

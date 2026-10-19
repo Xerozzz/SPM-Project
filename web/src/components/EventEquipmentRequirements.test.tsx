@@ -33,6 +33,9 @@ const PROJECTOR = {
   quantity: 2,
   technical_requirements: 'Needs an HDMI cable',
   review_status: 'pending_review',
+  reserved_quantity: 0,
+  reservation_state: 'not_reserved',
+  has_flagged_reservation: false,
   removed_at: null,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
@@ -208,4 +211,54 @@ test('AC3: the catalogue comes from the route the Coordinator is allowed to read
   const asked = spy.mock.calls.map((call) => String(call[0]))
   expect(asked).toContain('/api/event-requests/event-1/equipment-requirements/catalogue-types')
   expect(asked).not.toContain('/api/event-requests/equipment-types')
+})
+
+// ------------------------------------------------- AC6: what a change did to a booking
+//
+// SCRUM-53 reserves equipment against a requirement. Changing or removing that
+// requirement does not release the reservation; Technical Support reconsider it. AC6
+// says the Coordinator can see the flag, and this is the screen where they would.
+
+test('AC6: a requirement with equipment reserved against it says how much', async () => {
+  renderEditor((key) =>
+    key === 'GET /api/event-requests/event-1/equipment-requirements'
+      ? json([{ ...PROJECTOR, quantity: 9, reserved_quantity: 2, reservation_state: 'partially_reserved' }])
+      : undefined,
+  )
+
+  expect(await screen.findByText('2 of 9 reserved')).toBeInTheDocument()
+})
+
+test('AC6: a flagged reservation is shown to the Coordinator', async () => {
+  renderEditor((key) =>
+    key === 'GET /api/event-requests/event-1/equipment-requirements'
+      ? json([{ ...PROJECTOR, reserved_quantity: 1, has_flagged_reservation: true }])
+      : undefined,
+  )
+
+  expect(await screen.findByText('Reservation to reconsider')).toBeInTheDocument()
+})
+
+test('AC6: nothing reserved means no flag and no count', async () => {
+  renderEditor()
+
+  await screen.findByLabelText('Quantity for Projector')
+  expect(screen.queryByText('Reservation to reconsider')).toBeNull()
+  expect(screen.queryByText(/reserved/)).toBeNull()
+})
+
+test('AC6: removing a requirement says the reservation is not simply gone', async () => {
+  // "Removed. It stays in the event's history." on its own lets a Coordinator believe
+  // the matter is closed while Technical Support still hold equipment for it.
+  renderEditor((key) =>
+    key === 'DELETE /api/event-requests/event-1/equipment-requirements/req-1'
+      ? json({ ...PROJECTOR, removed_at: '2026-02-01T00:00:00Z', has_flagged_reservation: true })
+      : undefined,
+  )
+  await screen.findByLabelText('Quantity for Projector')
+  fireEvent.click(screen.getByRole('button', { name: 'Remove Projector' }))
+
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    'Technical Support have equipment reserved for it and will reconsider',
+  )
 })
