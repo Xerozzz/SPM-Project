@@ -112,6 +112,26 @@ def test_evaluate_ignores_the_organisers_stale_string(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.story("SCRUM-43")
+def test_a_requirement_the_venue_already_provides_is_not_flagged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The positive half, which the other cases cannot show.
+
+    Every other test here uses a venue with no facilities at all, so each requirement is
+    missing whatever the mapping produced. This one gives the venue a projector, so a
+    wrong mapped value would show up as a projector the venue supposedly lacks.
+    """
+    monkeypatch.setattr(venue_repo, "get", lambda _db, _venue_id: _venue(facilities=["Projector"]))
+    _requires(monkeypatch, "Projector", "Microphone")
+
+    result = venue_bookings.evaluate(
+        cast(Session, object()), _event(), uuid.uuid4(), datetime(2029, 1, 1, tzinfo=UTC)
+    )
+
+    assert result.unavailable_facilities == ["Microphone"]
+
+
+@pytest.mark.story("SCRUM-43")
 def test_a_requirement_with_no_venue_counterpart_is_not_a_missing_facility(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
