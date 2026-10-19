@@ -26,9 +26,11 @@ async function signOut(page: Page) {
 // failures — a conflict here means the product code regressed, not the seed.)
 const VENUE_NAME = 'Hall A'
 
-test('approving a pending venue booking creates a tentative hold that survives reload', async ({
-  page,
-}) => {
+function singaporeDisplay(value: string) {
+  return new Date(value).toLocaleString('en-SG', { timeZone: 'Asia/Singapore' })
+}
+
+test('SCRUM-110 and SCRUM-121: approval and an expiry update survive reload', async ({ page }) => {
   await signIn(page, 'coordinator@example.com')
 
   // Find the seeded Approved event and request Hall A for it through the same
@@ -63,7 +65,9 @@ test('approving a pending venue booking creates a tentative hold that survives r
 
   // Venue Staff approve the Pending request with a hold expiry.
   await signIn(page, 'venue-staff@example.com')
-  const section = page.locator('main section', { has: page.getByRole('heading', { name: 'Venue booking requests' }) })
+  const section = page.locator('main section', {
+    has: page.getByRole('heading', { name: 'Venue booking requests' }),
+  })
   const card = section
     .getByRole('article')
     .filter({ hasText: 'Careers Fair' })
@@ -84,15 +88,27 @@ test('approving a pending venue booking creates a tentative hold that survives r
   await expect(heldCard.getByRole('button', { name: 'Approve' })).toHaveCount(0)
   await expect(section.getByRole('status')).toContainText('is on a tentative hold')
 
-  // A reload keeps the hold: approval persisted a Tentative booking, not a transient state.
+  // Venue Staff revise the active hold through SCRUM-121's control. The new current
+  // expiry is visible immediately and remains the only expiry after reload.
+  const revisedInput = '2026-12-02T10:00'
+  const revisedInstant = new Date(`${revisedInput}:00+08:00`).toISOString()
+  await heldCard.getByLabel('New expiry (Singapore time)').fill(revisedInput)
+  await heldCard.getByRole('button', { name: 'Update expiry' }).click()
+  await expect(section.getByRole('status')).toContainText('hold expiry')
+  await expect(heldCard).toContainText(`Tentative hold until ${singaporeDisplay(revisedInstant)}`)
+
+  // A reload keeps both the Tentative status and the revised current expiry.
   await page.reload()
-  const reloaded = page.locator('main section', { has: page.getByRole('heading', { name: 'Venue booking requests' }) })
-  await expect(
-    reloaded
-      .getByRole('article')
-      .filter({ hasText: 'Careers Fair' })
-      .filter({ hasText: setup.venueName })
-      .first(),
-  ).toContainText(/Tentative hold until/)
+  const reloaded = page.locator('main section', {
+    has: page.getByRole('heading', { name: 'Venue booking requests' }),
+  })
+  const reloadedHold = reloaded
+    .getByRole('article')
+    .filter({ hasText: 'Careers Fair' })
+    .filter({ hasText: setup.venueName })
+    .first()
+  await expect(reloadedHold).toContainText(
+    `Tentative hold until ${singaporeDisplay(revisedInstant)}`,
+  )
   await signOut(page)
 })

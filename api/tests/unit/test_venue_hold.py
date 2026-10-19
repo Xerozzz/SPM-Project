@@ -9,7 +9,14 @@ from domain.booking_conflict import BookedPeriod, ConflictingBookingError, ensur
 from domain.venue_booking import BookingStatus, InvalidBookingTransitionError, hold
 from domain.venue_buffer import NO_BUFFERS
 from domain.venue_calendar import BOOKING_LABELS, DETAILS_LABELS, entry_blocks
-from domain.venue_hold import confirm, expire, expiry_problems, is_due
+from domain.venue_hold import (
+    InactiveHoldError,
+    confirm,
+    ensure_active,
+    expire,
+    expiry_problems,
+    is_due,
+)
 from domain.venue_search import BLOCKING_STATUSES, booking_blocks_availability
 
 _NOW = datetime(2030, 3, 1, 9, 0, tzinfo=UTC)
@@ -188,3 +195,37 @@ def test_an_expired_hold_no_longer_blocks_and_is_not_on_the_calendar() -> None:
     assert not booking_blocks_availability(BookingStatus.EXPIRED)
     assert BookingStatus.EXPIRED not in BOOKING_LABELS
     assert DETAILS_LABELS[BookingStatus.EXPIRED] == "expired"
+
+
+# ------------------------------------------------------------------ SCRUM-121: revising expiry
+
+
+@pytest.mark.story("SCRUM-121")
+@pytest.mark.parametrize(
+    ("status", "expires_at"),
+    [
+        (BookingStatus.TENTATIVE, _NOW),
+        (BookingStatus.TENTATIVE, _NOW - timedelta(seconds=1)),
+        *[
+            (status, _EVENT_START)
+            for status in BookingStatus
+            if status is not BookingStatus.TENTATIVE
+        ],
+    ],
+)
+def test_only_an_active_tentative_hold_can_have_its_expiry_revised(
+    status: BookingStatus, expires_at: datetime
+) -> None:
+    with pytest.raises(InactiveHoldError):
+        ensure_active(status, expires_at, _NOW)
+
+    ensure_active(BookingStatus.TENTATIVE, _NOW + timedelta(seconds=1), _NOW)
+
+
+@pytest.mark.story("SCRUM-121")
+def test_a_revised_expiry_uses_the_existing_hold_boundaries() -> None:
+    assert expiry_problems(_NOW + timedelta(seconds=1), _NOW, _EVENT_START) == []
+    assert expiry_problems(_EVENT_START, _NOW, _EVENT_START) == []
+    assert expiry_problems(_NOW, _NOW, _EVENT_START)
+    assert expiry_problems(_EVENT_START + timedelta(seconds=1), _NOW, _EVENT_START)
+    assert expiry_problems(_EVENT_START.replace(tzinfo=None), _NOW, _EVENT_START)
