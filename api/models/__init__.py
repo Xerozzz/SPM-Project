@@ -14,6 +14,7 @@ from models.equipment import Equipment as Equipment
 from models.equipment_requirement_change import (
     EquipmentRequirementChange as EquipmentRequirementChange,
 )
+from models.equipment_reservation import EquipmentReservation as EquipmentReservation
 from models.event_clarification import EventClarification as EventClarification
 from models.event_coordinator_assignment import (
     EventCoordinatorAssignment as EventCoordinatorAssignment,

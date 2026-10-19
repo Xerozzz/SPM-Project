@@ -1,14 +1,15 @@
-"""Database access for equipment catalogue entries (SCRUM-84)."""
+"""Database access for equipment catalogue entries (SCRUM-84) and what is reserved (SCRUM-53)."""
 
 import uuid
 from collections.abc import Iterable
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models.equipment import Equipment
+from models.equipment_reservation import EquipmentReservation
 
 
 class DuplicateEquipmentConstraintError(Exception):
@@ -70,17 +71,21 @@ def reserved_quantity(
     end_at: datetime,
     excluding_event_id: uuid.UUID,
 ) -> int:
-    """SCRUM-52 AC2: how many of this type other events have reserved over this window.
+    """SCRUM-52 AC2, SCRUM-53 AC5: how many of this type other events hold over this window.
 
-    Always 0 for now, because nothing creates reservations yet. SCRUM-53 will replace this
-    body with a real query at this same call site, so the service does not change. It will
-    count a reservation when its window overlaps [start_at, end_at) by the half-open rule in
-    `domain.venue_search.intervals_overlap` (back-to-back events do not overlap), and leave
-    out `excluding_event_id` so an event is never short of equipment it holds itself.
+    Sums live (unreleased) reservations whose window overlaps [start_at, end_at) by the
+    half-open rule in `domain.venue_search.intervals_overlap`, so back-to-back events do
+    not overlap. `excluding_event_id` is left out so an event is never short of equipment
+    it holds itself.
     """
-    # Named so the signature is already the one SCRUM-53 fills in; unused until then.
-    del db, equipment_type, start_at, end_at, excluding_event_id
-    return 0
+    statement = select(func.coalesce(func.sum(EquipmentReservation.quantity), 0)).where(
+        EquipmentReservation.equipment_type == equipment_type,
+        EquipmentReservation.released_at.is_(None),
+        EquipmentReservation.event_request_id != excluding_event_id,
+        EquipmentReservation.starts_at < end_at,
+        EquipmentReservation.ends_at > start_at,
+    )
+    return int(db.scalar(statement) or 0)
 
 
 def save(db: Session, equipment: Equipment) -> Equipment:
