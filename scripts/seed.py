@@ -20,6 +20,7 @@ from core.security import hash_password
 from domain.roles import Role
 from models.equipment import Equipment
 from models.equipment_requirement_change import EquipmentRequirementChange
+from models.equipment_reservation import EquipmentReservation
 from models.event_clarification import EventClarification
 from models.event_coordinator_assignment import EventCoordinatorAssignment
 from models.event_equipment_requirement import EventEquipmentRequirement
@@ -286,6 +287,10 @@ def _seed_event_requests(db: Session) -> None:
 # because a fresh runner always starts from an empty volume.
 _DEPENDENTS = (
     EquipmentRequirementChange,
+    # Before the requirements themselves: a reservation points at the requirement row,
+    # so deleting that row first is refused (SCRUM-53). Order in this tuple is the
+    # delete order, children first.
+    EquipmentReservation,
     EventEquipmentRequirement,
     EventClarification,
     EventCoordinatorAssignment,
