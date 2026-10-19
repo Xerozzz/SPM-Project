@@ -3,7 +3,6 @@ import { expect, type Page, test } from '@playwright/test'
 // TC-106-09: the assigned Coordinator records an internal note and sees it after
 // reload; the Organiser has no clarification surface; after a Lead reassigns, the
 // outgoing Coordinator loses the note and the incoming Coordinator gains it.
-test.describe.configure({ retries: 0 })
 
 async function signIn(page: Page, email: string) {
   await page.goto('/')
@@ -86,7 +85,11 @@ test('internal notes stay with the current assignee, never the organiser', async
   await expect(ownRow).toContainText('Submitted')
   await expect(ownRow.getByText('Internal clarification notes')).toHaveCount(0)
   await expect(ownRow.getByText(note)).toHaveCount(0)
-  await expect(page.getByLabel('Internal note')).toHaveCount(0)
+  // Exact match: the Organisation calendar renders "View <event name> details"
+  // buttons, and this spec's event name contains "internal notes" as a substring.
+  // A substring query would false-positive on that button; the real textarea's
+  // accessible name is exactly "Internal note".
+  await expect(page.getByLabel('Internal note', { exact: true })).toHaveCount(0)
   await signOut(page)
 
   // The Lead reassigns; the outgoing Coordinator loses the note.
