@@ -6,7 +6,6 @@ import {
   approveVenueBookingRequest,
   describeConflict,
   holdHasExpired,
-  holdVenueBookingRequest,
   listVenueBookingRequests,
   MAX_REASON_LENGTH,
   rejectVenueBookingRequest,
@@ -18,7 +17,7 @@ import { useAuth } from '../auth/useAuth'
 
 /** SCRUM-40: Venue Staff review pending booking requests and reject them.
  * SCRUM-75: they also see any clash and approve requests that have none.
- * SCRUM-83: they can put a pending request on a tentative hold until an expiry. */
+ * SCRUM-110: approval creates a time-limited tentative hold, so it needs an expiry. */
 export default function VenueBookingDecisions() {
   const { token } = useAuth()
   const client = useQueryClient()
@@ -40,11 +39,11 @@ export default function VenueBookingDecisions() {
     },
   })
   const approve = useMutation({
-    mutationFn: (booking: VenueBookingDecision) =>
-      approveVenueBookingRequest(token ?? '', booking.id),
+    mutationFn: ({ booking, until }: { booking: VenueBookingDecision; until: string }) =>
+      approveVenueBookingRequest(token ?? '', booking.id, singaporeLocalToUtc(until)),
     // The approve response has no venue name, so it is read off the card that was clicked.
-    onSuccess: (_confirmed, booking) => {
-      setOutcome(`The request for ${booking.venue_name} has been approved.`)
+    onSuccess: (_held, { booking }) => {
+      setOutcome(`The request for ${booking.venue_name} is on a tentative hold.`)
       void client.invalidateQueries({ queryKey })
     },
     // A refusal usually means the list was out of date: a closure or another approval
@@ -53,19 +52,10 @@ export default function VenueBookingDecisions() {
       void client.invalidateQueries({ queryKey })
     },
   })
-  const hold = useMutation({
-    mutationFn: ({ booking, until }: { booking: VenueBookingDecision; until: string }) =>
-      holdVenueBookingRequest(token ?? '', booking.id, singaporeLocalToUtc(until)),
-    onSuccess: (held) => {
-      setOutcome(`The request for ${held.venue_name} is on a tentative hold.`)
-      void client.invalidateQueries({ queryKey })
-    },
-  })
-  const busy = reject.isPending || approve.isPending || hold.isPending
+  const busy = reject.isPending || approve.isPending
   const resetAll = () => {
     reject.reset()
     approve.reset()
-    hold.reset()
   }
   const pending = requests.data?.filter((booking) => booking.status === 'pending') ?? []
   const held = requests.data?.filter((booking) => booking.status === 'tentative') ?? []
@@ -109,17 +99,6 @@ export default function VenueBookingDecisions() {
               type="button"
               onClick={() => {
                 resetAll()
-                approve.mutate(booking)
-              }}
-              disabled={busy || booking.conflict !== null}
-              className="rounded bg-green-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-            >
-              Approve
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                resetAll()
                 reject.mutate({ id: booking.id, reason: reasons[booking.id] ?? '' })
               }}
               disabled={busy}
@@ -135,11 +114,8 @@ export default function VenueBookingDecisions() {
           )}
           {/* Once the reloaded card shows its clash, that line explains the refusal in
               Singapore time, so the raw API message (which only has an id) is not repeated. */}
-          {approve.isError && approve.variables?.id === booking.id && booking.conflict === null && (
-            <p role="alert" className="mt-2 text-sm text-red-600">
-              Could not approve: {approve.error.message}
-            </p>
-          )}
+          {/* SCRUM-110: approval creates a time-limited tentative hold, so the expiry
+              is required before the request can be approved. */}
           <label className="mt-3 block text-sm font-medium" htmlFor={`hold-${booking.id}`}>
             Hold until (Singapore time)
           </label>
@@ -155,19 +131,21 @@ export default function VenueBookingDecisions() {
               type="button"
               onClick={() => {
                 resetAll()
-                hold.mutate({ booking, until: holdUntil[booking.id] ?? '' })
+                approve.mutate({ booking, until: holdUntil[booking.id] ?? '' })
               }}
               disabled={busy || booking.conflict !== null || !holdUntil[booking.id]}
-              className="rounded border border-violet-700 px-3 py-1.5 text-sm text-violet-800 disabled:opacity-50"
+              className="rounded bg-green-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
             >
-              Place tentative hold
+              Approve
             </button>
           </div>
-          {hold.isError && hold.variables?.booking.id === booking.id && (
-            <p role="alert" className="mt-2 text-sm text-red-600">
-              Could not hold: {hold.error.message}
-            </p>
-          )}
+          {approve.isError &&
+            approve.variables?.booking.id === booking.id &&
+            booking.conflict === null && (
+              <p role="alert" className="mt-2 text-sm text-red-600">
+                Could not approve: {approve.error.message}
+              </p>
+            )}
         </article>
       ))}
       {held.length > 0 && (
@@ -180,35 +158,18 @@ export default function VenueBookingDecisions() {
                 {STATUS_LABELS.tentative}
                 {booking.expires_at && ` until ${formatSingaporeTime(booking.expires_at)}`}
               </p>
-              {/* SCRUM-107: confirm the hold through the normal approval, before it expires. */}
+              {/* SCRUM-110: a hold is terminal until it expires or is confirmed by the
+                  SCRUM-80 flow, so there is no approval control here. */}
               {holdHasExpired(booking, new Date()) ? (
                 <p className="mt-2 rounded bg-slate-100 p-2 text-sm text-slate-700">
-                  This hold has expired, so it cannot be approved.
+                  This hold has expired.
                 </p>
               ) : (
-                <>
-                  {booking.conflict && (
-                    <p className="mt-2 rounded bg-amber-50 p-2 text-sm text-amber-800">
-                      {describeConflict(booking.conflict)} It cannot be approved.
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      resetAll()
-                      approve.mutate(booking)
-                    }}
-                    disabled={busy || booking.conflict !== null}
-                    className="mt-2 rounded bg-green-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-                  >
-                    Approve
-                  </button>
-                </>
-              )}
-              {approve.isError && approve.variables?.id === booking.id && (
-                <p role="alert" className="mt-2 text-sm text-red-600">
-                  Could not approve: {approve.error.message}
-                </p>
+                booking.conflict && (
+                  <p className="mt-2 rounded bg-amber-50 p-2 text-sm text-amber-800">
+                    {describeConflict(booking.conflict)}
+                  </p>
+                )
               )}
             </article>
           ))}

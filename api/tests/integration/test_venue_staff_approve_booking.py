@@ -1,10 +1,11 @@
 """SCRUM-75: Venue Staff see what blocks a request and approve it.
 
-The approve route itself is SCRUM-74's. These tests cover what SCRUM-75 adds on top:
-the clash shown before approving, and who approved and when being stored.
+The approve route itself is SCRUM-110's (approval creates a time-limited Tentative
+hold). These tests cover what SCRUM-75 adds on top: the clash shown before approving,
+and who approved and when being stored.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
@@ -51,7 +52,13 @@ def closure(db: Session, booking: VenueBooking) -> VenueUnavailability:
 
 
 async def approve(client: httpx.AsyncClient, booking: VenueBooking) -> httpx.Response:
-    return await client.post(f"/api/venue-bookings/{booking.id}/approve")
+    """SCRUM-110: approval needs an expiry. A day before the booking start is safely
+    after now (the helper's events start 30 days out) and before the start (AC1)."""
+    assert booking.start_at is not None
+    expires_at = (booking.start_at - timedelta(days=1)).isoformat()
+    return await client.post(
+        f"/api/venue-bookings/{booking.id}/approve", json={"expires_at": expires_at}
+    )
 
 
 # --------------------------------------------------------------------------- AC1
@@ -110,6 +117,7 @@ async def test_another_pending_request_is_not_a_clash(
 async def test_approving_records_who_approved_and_when(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
+    """SCRUM-110: approval records the hold — who placed it, when, and its expiry."""
     booking = pending_booking(db, make_user)
     staff = make_user("venue_staff")
     before = datetime.now(UTC)
@@ -119,14 +127,15 @@ async def test_approving_records_who_approved_and_when(
         listing = await client.get("/api/venue-bookings")
 
     assert response.status_code == 200
-    assert response.json()["status"] == "confirmed"
+    assert response.json()["status"] == "tentative"
     row = listed(listing, booking)
-    assert row["status"] == "confirmed"
-    assert row["decided_by_id"] == str(staff.id)
+    assert row["status"] == "tentative"
+    assert row["held_by_id"] == str(staff.id)
     assert row["decision_reason"] is None
-    decided_at = datetime.fromisoformat(str(row["decided_at"]))
-    assert decided_at.utcoffset() is not None
-    assert before <= decided_at <= datetime.now(UTC)
+    held_at = datetime.fromisoformat(str(row["held_at"]))
+    assert held_at.utcoffset() is not None
+    assert before <= held_at <= datetime.now(UTC)
+    assert row["expires_at"] is not None
 
 
 # --------------------------------------------------------------------------- AC3
@@ -146,8 +155,8 @@ async def test_approving_over_a_clash_is_refused_and_names_it(
     assert str(confirmed.id) in response.json()["detail"]
     db.refresh(booking)
     assert booking.status is BookingStatus.PENDING
-    assert booking.decided_by_id is None
-    assert booking.decided_at is None
+    assert booking.held_by_id is None
+    assert booking.held_at is None
 
 
 # --------------------------------------------------------------------------- AC4
@@ -166,7 +175,7 @@ async def test_only_venue_staff_may_approve(
     assert response.status_code == 403
     db.refresh(booking)
     assert booking.status is BookingStatus.PENDING
-    assert booking.decided_by_id is None
+    assert booking.held_by_id is None
 
 
 # --------------------------------------------------------------------------- AC5

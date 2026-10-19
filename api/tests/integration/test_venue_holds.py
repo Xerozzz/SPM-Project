@@ -338,7 +338,9 @@ async def test_a_hold_blocks_approving_an_overlapping_request(
 
     async with make_client(staff) as client:
         listed = await client.get("/api/venue-bookings")
-        approval = await client.post(f"/api/venue-bookings/{other.id}/approve")
+        approval = await client.post(
+            f"/api/venue-bookings/{other.id}/approve", json={"expires_at": _expiry()}
+        )
 
     # The pending card already says why it cannot be approved, and names the hold.
     row = next(item for item in listed.json() if item["id"] == str(other.id))
@@ -415,7 +417,9 @@ async def test_a_hold_does_not_block_a_request_that_only_touches_it(
     after = _request(db, make_user("coordinator"), venue, _END, _END + _HOUR)
 
     async with make_client(staff) as client:
-        approval = await client.post(f"/api/venue-bookings/{after.id}/approve")
+        approval = await client.post(
+            f"/api/venue-bookings/{after.id}/approve", json={"expires_at": _expiry()}
+        )
 
     # Half-open, as for confirmed bookings: ending exactly as the next starts is no clash.
     assert approval.status_code == 200
@@ -432,7 +436,9 @@ async def test_a_hold_keeps_the_venues_turnaround(
     soon_after = _request(db, make_user("coordinator"), venue, _END + _HOUR / 2, _END + 2 * _HOUR)
 
     async with make_client(staff) as client:
-        approval = await client.post(f"/api/venue-bookings/{soon_after.id}/approve")
+        approval = await client.post(
+            f"/api/venue-bookings/{soon_after.id}/approve", json={"expires_at": _expiry()}
+        )
 
     assert approval.status_code == 409
 

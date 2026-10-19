@@ -9,7 +9,7 @@ from domain.booking_conflict import BookedPeriod, ConflictingBookingError, ensur
 from domain.venue_booking import BookingStatus, InvalidBookingTransitionError, hold
 from domain.venue_buffer import NO_BUFFERS
 from domain.venue_calendar import BOOKING_LABELS, DETAILS_LABELS, entry_blocks
-from domain.venue_hold import HoldExpiredError, confirm, expire, expiry_problems, is_due
+from domain.venue_hold import confirm, expire, expiry_problems, is_due
 from domain.venue_search import BLOCKING_STATUSES, booking_blocks_availability
 
 _NOW = datetime(2030, 3, 1, 9, 0, tzinfo=UTC)
@@ -124,38 +124,26 @@ def test_a_hold_ending_exactly_when_a_request_starts_does_not_block() -> None:
     ensure_no_conflict(_EVENT_START, _EVENT_END, [held], [], NO_BUFFERS)
 
 
-# ------------------------------------------------------------------ SCRUM-107: confirming
+# ------------------------------------------------------------------ SCRUM-110: no confirmation
 
 
-@pytest.mark.story("SCRUM-107")
-def test_an_active_hold_is_confirmed() -> None:
-    assert confirm(BookingStatus.TENTATIVE, _NOW + timedelta(hours=1), _NOW) is (
-        BookingStatus.CONFIRMED
-    )
+@pytest.mark.story("SCRUM-110")
+def test_a_hold_cannot_be_confirmed_through_approval() -> None:
+    """TC-110-03 at the domain level: SCRUM-107's confirm is removed. Venue Staff
+    approval creates a hold; SCRUM-80 owns the later event-confirmation step."""
+    with pytest.raises(InvalidBookingTransitionError) as raised:
+        confirm()
 
-
-@pytest.mark.story("SCRUM-107")
-@pytest.mark.parametrize("expires_at", [_NOW, _NOW - timedelta(minutes=1), None])
-def test_an_expired_hold_cannot_be_confirmed(expires_at: datetime | None) -> None:
-    with pytest.raises(HoldExpiredError) as raised:
-        confirm(BookingStatus.TENTATIVE, expires_at, _NOW)
-
-    # Reported like any refused decision: a transition from tentative to confirmed.
-    assert isinstance(raised.value, InvalidBookingTransitionError)
     assert (raised.value.current, raised.value.target) == (
         BookingStatus.TENTATIVE,
         BookingStatus.CONFIRMED,
     )
-    assert str(raised.value) == f"the tentative hold expired at {expires_at}"
 
 
-@pytest.mark.story("SCRUM-107")
-@pytest.mark.parametrize("status", [s for s in BookingStatus if s is not BookingStatus.TENTATIVE])
-def test_only_a_tentative_hold_goes_through_hold_confirmation(status: BookingStatus) -> None:
-    with pytest.raises(InvalidBookingTransitionError) as raised:
-        confirm(status, _NOW + timedelta(hours=1), _NOW)
-
-    assert not isinstance(raised.value, HoldExpiredError)
+@pytest.mark.story("SCRUM-110")
+def test_nothing_goes_through_hold_confirmation() -> None:
+    with pytest.raises(InvalidBookingTransitionError):
+        confirm()
 
 
 # ------------------------------------------------------------------ SCRUM-108: expiring

@@ -386,9 +386,13 @@ async def test_approving_refreshes_the_stored_interval_from_the_current_buffers(
     db.flush()
     # decided_by_id has a foreign key to users, so it cannot be an arbitrary uuid.
     staff = make_user("venue_staff")
-    approved = booking_service.approve(db, request.id, staff.id, datetime.now(UTC))
+    # SCRUM-110: approval creates a hold, so it needs an expiry before the start (AC1).
+    approved = booking_service.approve(
+        db, request.id, staff.id, datetime.now(UTC), at(10) - timedelta(days=1)
+    )
 
     assert (approved.effective_start_at, approved.effective_end_at) == (at(9.5), at(12.75))
+    assert approved.status is BookingStatus.TENTATIVE
 
 
 @pytest.mark.story("SCRUM-82")
