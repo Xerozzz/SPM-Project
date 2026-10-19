@@ -28,6 +28,9 @@ class CalendarEntryRead(BaseModel):
     effective_end_at: datetime
     # SCRUM-83 AC2: when a tentative hold ends.
     expires_at: datetime | None = None
+    # SCRUM-111: which session of the parent event a booking entry is for.
+    # None for a closure, which belongs to no session.
+    session_label: str | None = None
 
 
 class AvailabilityRead(BaseModel):
@@ -64,3 +67,5 @@ class CalendarEntryDetailsRead(BaseModel):
     reason: str | None
     event_request_id: uuid.UUID | None
     expires_at: datetime | None = None
+    # SCRUM-111: which session of the parent event a booking entry is for.
+    session_label: str | None = None

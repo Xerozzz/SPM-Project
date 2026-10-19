@@ -149,6 +149,7 @@ def _make_booking(
             event_request_id=event.id,
             venue_id=venue.id,
             requested_by_id=coordinator.id,
+            session_label="Opening keynote",
             start_at=_sgt(day, start),
             end_at=_sgt(day, end),
             effective_start_at=effective_for(venue, _sgt(day, start), _sgt(day, end))[0],

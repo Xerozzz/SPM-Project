@@ -202,9 +202,16 @@ async def test_the_coordinator_can_request_the_venue_again_after_expiry(
     expire_due_holds(db, _after_expiry(held))
 
     async with make_client(coordinator) as client:
+        event = db.get(EventRequest, held.event_request_id)
+        assert event is not None and event.start_at is not None and event.end_at is not None
         response = await client.post(
             f"/api/event-requests/{held.event_request_id}/venue-bookings",
-            json={"venue_id": str(venue.id)},
+            json={
+                "venue_id": str(venue.id),
+                "session_label": "Follow-up session",
+                "start_at": event.start_at.isoformat(),
+                "end_at": event.end_at.isoformat(),
+            },
         )
 
     assert response.status_code == 201
