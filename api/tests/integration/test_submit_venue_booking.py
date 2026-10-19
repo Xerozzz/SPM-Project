@@ -13,6 +13,7 @@ from domain.venue_booking import BookingStatus
 from models.event_request import EventRequest
 from models.user import User
 from models.venue_booking import VenueBooking
+from services import equipment_requirements
 from tests.integration.test_submit_event_request import MakeClient, MakeUser, make_draft
 from tests.integration.test_venue_search import make_venue
 
@@ -25,6 +26,20 @@ def approved_event(
     event.coordinator_id = coordinator.id
     db.flush()
     return event
+
+
+def seed_equipment(db: Session, event: EventRequest) -> None:
+    """Give the event the requirement row approval would have created (ADR-0033).
+
+    `approved_event` sets the status directly rather than going through
+    `services.event_requests.approve`, so it produces an event with the organiser's
+    equipment string and no requirement rows, which approval never does. Tests that care
+    what the event *needs* opt into the seeding; doing it in the helper itself would hand
+    a live "Projector" to all 43 call sites, several of which then add their own and hit
+    the one-live-line-per-type index.
+    """
+    equipment_requirements.seed_from_event(db, event, datetime.now(UTC))
+    db.flush()
 
 
 async def submit(
@@ -157,6 +172,9 @@ async def test_suitability_warning_remains_advisory(
 ) -> None:
     coordinator = make_user("coordinator")
     event = approved_event(db, make_user("organiser"), coordinator, expected_attendance=250)
+    # SCRUM-43: suitability reads the maintained requirements, so the event needs the row
+    # approval would have given it rather than only the organiser's string.
+    seed_equipment(db, event)
     venue = make_venue(
         db,
         maximum_capacity=100,

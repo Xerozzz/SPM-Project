@@ -47,6 +47,7 @@ someone else made two weeks ago.
 | [0034](0034-equipment-review-outside-the-change-history.md) | Keep equipment requirement reviews out of the change history | Proposed |
 | [0035](0035-coordinator-assigned-event-access.md) | Scope coordinator event access to the current assignment | Proposed |
 | [0036](0036-internal-clarification-notes.md) | Treat clarification comments as internal Coordinator notes | Proposed |
+| [0037](0037-plan-from-maintained-equipment-requirements.md) | Plan from the maintained equipment requirements, not the organiser's string | Proposed |
 | [0038](0038-equipment-reservations-by-type-with-row-locks.md) | Reserve equipment by type, serialised with catalogue row locks | Proposed |
 
 ## When to write one
