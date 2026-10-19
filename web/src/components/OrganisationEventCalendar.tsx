@@ -1,10 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 
-import { type EventRequest, getEventRequest, listOrganisationCalendar } from '../api/eventRequests'
+import { type EventCalendarEntry, listOrganisationCalendar } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
 
-/** SCRUM-87: organisation planning visibility with a read-only request detail view. */
+/**
+ * SCRUM-87: organisation planning visibility. SCRUM-112 (ADR-0039): selecting an entry shows
+ * only the calendar fields already loaded, and never fetches the full request, which the API
+ * refuses to anyone but its owner.
+ */
 export default function OrganisationEventCalendar() {
   const { token } = useAuth()
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -13,11 +17,7 @@ export default function OrganisationEventCalendar() {
     queryFn: () => listOrganisationCalendar(token ?? ''),
     enabled: token !== null,
   })
-  const detail = useQuery({
-    queryKey: ['organisation-calendar', 'detail', token, selectedId],
-    queryFn: () => getEventRequest(token ?? '', selectedId ?? ''),
-    enabled: token !== null && selectedId !== null,
-  })
+  const selected = calendar.data?.find((event) => event.id === selectedId)
 
   return (
     <section aria-labelledby="organisation-calendar-heading" className="mt-6 border-t pt-4">
@@ -51,48 +51,31 @@ export default function OrganisationEventCalendar() {
           )
         })}
       </ol>
-      {selectedId && detail.isPending && <p role="status">Loading event details...</p>}
-      {selectedId && detail.isError && <p role="alert">{detail.error.message}</p>}
-      {detail.data && <ReadOnlyDetails request={detail.data} />}
+      {selected && <CalendarEntryDetails entry={selected} />}
     </section>
   )
 }
 
-function ReadOnlyDetails({ request }: { request: EventRequest }) {
+function CalendarEntryDetails({ entry }: { entry: EventCalendarEntry }) {
   return (
-    <article aria-label="Event request details" className="mt-4 border-t border-slate-200 pt-4">
+    <article aria-label="Event calendar details" className="mt-4 border-t border-slate-200 pt-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="font-medium">{request.name ?? 'Untitled event'}</h3>
-        <span className="text-sm capitalize text-slate-500">{request.status}</span>
+        <h3 className="font-medium">{entry.name || 'Untitled event'}</h3>
+        <span className="text-sm capitalize text-slate-500">{entry.status}</span>
       </div>
       <dl className="mt-3 space-y-2 text-sm">
-        <Detail label="Purpose" value={request.purpose} />
-        <Detail label="Description" value={request.description} />
-        <Detail label="Start date and time" value={formatOptionalDateTime(request.start_at)} />
-        <Detail label="End date and time" value={formatOptionalDateTime(request.end_at)} />
-        <Detail label="Expected attendance" value={request.expected_attendance?.toString()} />
-        <Detail label="Venue requirement" value={request.venue_requirement} />
-        <Detail label="Accessibility requirement" value={request.accessibility_requirement} />
-        <Detail label="Equipment requirement" value={request.equipment_requirement} />
-        <Detail label="Layout requirement" value={request.layout_requirement} />
-        <Detail label="Registration requirement" value={request.registration_requirement} />
+        <div>
+          <dt className="font-medium text-slate-600">Start date and time</dt>
+          <dd>{formatDateTime(entry.start_at)}</dd>
+        </div>
+        <div>
+          <dt className="font-medium text-slate-600">End date and time</dt>
+          <dd>{formatDateTime(entry.end_at)}</dd>
+        </div>
       </dl>
-      <p className="mt-3 text-sm text-slate-500">Read-only organisation view</p>
+      <p className="mt-3 text-sm text-slate-500">Calendar details only</p>
     </article>
   )
-}
-
-function Detail({ label, value }: { label: string; value: string | null | undefined }) {
-  return (
-    <div>
-      <dt className="font-medium text-slate-600">{label}</dt>
-      <dd className="break-words">{value || 'Not provided'}</dd>
-    </div>
-  )
-}
-
-function formatOptionalDateTime(value: string | null): string {
-  return value === null ? 'Not provided' : formatDateTime(value)
 }
 
 function formatDateTime(value: string): string {

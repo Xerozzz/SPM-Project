@@ -1,4 +1,7 @@
-"""SCRUM-87: organisation calendar visibility never grants ownership."""
+"""SCRUM-87: organisation calendar visibility never grants ownership.
+
+SCRUM-112 (ADR-0039): the calendar entry is all a peer gets; the full request is 403.
+"""
 
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -18,6 +21,7 @@ START = datetime(2026, 11, 1, 9, tzinfo=UTC)
 
 
 @pytest.mark.story("SCRUM-87")
+@pytest.mark.story("SCRUM-112")
 @pytest.mark.parametrize("event_status", list(EventStatus))
 async def test_own_and_colleague_events_are_separate_ordered_entries(
     db: Session, make_user: MakeUser, make_client: MakeClient, event_status: EventStatus
@@ -49,7 +53,9 @@ async def test_own_and_colleague_events_are_separate_ordered_entries(
             assert datetime.fromisoformat(entry["end_at"]) > datetime.fromisoformat(
                 entry["start_at"]
             )
-            assert (await client.get(f"/api/event-requests/{entry['id']}")).status_code == 200
+        # SCRUM-112: listed on the calendar, but only the owner may open the request.
+        assert (await client.get(f"/api/event-requests/{rows[0].id}")).status_code == 200
+        assert (await client.get(f"/api/event-requests/{rows[1].id}")).status_code == 403
         assert (await client.get(f"/api/event-requests/{rows[2].id}")).status_code == 403
         edit = await client.patch(f"/api/event-requests/{rows[1].id}", json={"name": "Changed"})
         assert edit.status_code == 403
@@ -83,6 +89,7 @@ async def test_unusable_draft_dates_are_excluded(
 
 
 @pytest.mark.story("SCRUM-87")
+@pytest.mark.story("SCRUM-112")
 async def test_draft_owner_can_edit_but_colleague_cannot_edit_or_submit(
     make_user: MakeUser,
     make_client: MakeClient,
@@ -105,11 +112,14 @@ async def test_draft_owner_can_edit_but_colleague_cannot_edit_or_submit(
         assert (await client.get(URL)).json()[0]["name"] == "Updated"
         assert (await client.patch(path, json={"name": "Forbidden"})).status_code == 403
         assert (await client.post(f"{path}/submit")).status_code == 403
+        assert (await client.get(path)).status_code == 403
+    async with make_client(owner) as client:
         assert (await client.get(path)).json()["name"] == "Updated"
 
 
 @pytest.mark.story("SCRUM-87")
-async def test_same_organisation_calendar_entry_opens_with_read_only_details(
+@pytest.mark.story("SCRUM-112")
+async def test_same_organisation_calendar_entry_shows_only_calendar_fields(
     db: Session,
     make_user: MakeUser,
     make_client: MakeClient,
@@ -134,12 +144,20 @@ async def test_same_organisation_calendar_entry_opens_with_read_only_details(
             f"/api/event-requests/{request.id}", json={"description": "Not allowed"}
         )
 
-    assert [row["id"] for row in calendar.json()] == [str(request.id)]
-    assert detail.status_code == 200
-    assert detail.json()["name"] == "Colleague conference"
-    assert detail.json()["purpose"] == "Shared planning"
-    assert detail.json()["description"] == "Details visible to the organisation."
+    [entry] = calendar.json()
+    assert set(entry) == {"id", "name", "start_at", "end_at", "status"}
+    assert (entry["id"], entry["name"], entry["status"]) == (
+        str(request.id),
+        "Colleague conference",
+        "draft",
+    )
+    assert datetime.fromisoformat(entry["start_at"]) == START
+    assert datetime.fromisoformat(entry["end_at"]) == START + timedelta(hours=2)
+    assert detail.status_code == 403
+    assert detail.json() == {"detail": "Forbidden"}
     assert edit.status_code == 403
+    db.refresh(request)
+    assert request.description == "Details visible to the organisation."
 
 
 @pytest.mark.story("SCRUM-87")

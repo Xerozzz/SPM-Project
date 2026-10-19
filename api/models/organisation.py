@@ -1,4 +1,4 @@
-"""Client organisation used to scope draft event visibility (SCRUM-29)."""
+"""Client organisation that scopes the organisation calendar (SCRUM-87, ADR-0039)."""
 
 import uuid
 from datetime import UTC, datetime
@@ -11,7 +11,7 @@ from core.database import Base
 
 
 class Organisation(Base):
-    """A client organisation whose organisers may see each other's draft requests."""
+    """A client organisation whose organisers share calendar fields only (SCRUM-112)."""
 
     __tablename__ = "organisations"
 

@@ -6,7 +6,6 @@ import {
   FIELD_LABELS,
   type FieldProblem,
   getEventRequest,
-  listDraftEventRequests,
   listMyEventRequests,
   submitEventRequest,
   SubmissionRejectedError,
@@ -24,6 +23,8 @@ import { useAuth } from '../auth/useAuth'
  * permissions, so the locked message keys off `edit`, not off the absence of `submit`.
  * SCRUM-46/SCRUM-29: an organiser's event requests. Draft completeness and submission
  * rules live in the API; this component only sends organiser actions and shows outcomes.
+ * SCRUM-112 (ADR-0039): drafts are no longer shared within an organisation, so there is no
+ * separate organisation drafts list; the organiser's own drafts are listed here.
  */
 export default function MyEventRequests({
   onEditDraft = () => {},
@@ -39,19 +40,11 @@ export default function MyEventRequests({
   // sign-in as someone else on the same tab could briefly show the previous user's data
   // from the cache.
   const queryKey = ['event-requests', 'mine', token]
-  const draftsQueryKey = ['event-requests', 'drafts', token]
   const requests = useQuery({
     queryKey,
     queryFn: () => listMyEventRequests(token ?? ''),
     enabled: token !== null,
   })
-  const visibleDrafts = useQuery({
-    queryKey: draftsQueryKey,
-    queryFn: () => listDraftEventRequests(token ?? ''),
-    enabled: token !== null,
-  })
-
-  const ownIds = new Set(requests.data?.map((request) => request.id) ?? [])
 
   // The mutation variable carries the request id plus its current name, so validation
   // feedback can name the request even when the API refuses submission.
@@ -60,7 +53,6 @@ export default function MyEventRequests({
     onSuccess: (request) => {
       setOutcome({ kind: 'submitted', request })
       void queryClient.invalidateQueries({ queryKey })
-      void queryClient.invalidateQueries({ queryKey: draftsQueryKey })
       void queryClient.invalidateQueries({ queryKey: ['organisation-calendar', token] })
     },
     onError: (error, request) => {
@@ -152,40 +144,6 @@ export default function MyEventRequests({
           </ul>
         )}
       </div>
-
-      <section className="rounded-lg border border-slate-200 p-4">
-        <h2 className="font-medium">Organisation drafts</h2>
-        {visibleDrafts.isPending && <p className="mt-2 text-sm">Loading...</p>}
-        {visibleDrafts.isError && (
-          <p className="mt-2 text-sm text-red-600" role="alert">
-            Could not load organisation drafts: {visibleDrafts.error.message}
-          </p>
-        )}
-        {visibleDrafts.data && visibleDrafts.data.length === 0 && (
-          <p className="mt-2 text-sm text-slate-500">No organisation drafts are visible.</p>
-        )}
-        {visibleDrafts.data && visibleDrafts.data.length > 0 && (
-          <ul className="mt-3 divide-y divide-slate-200">
-            {visibleDrafts.data.map((request) => (
-              <li
-                key={request.id}
-                className="flex flex-wrap items-center justify-between gap-4 py-3"
-              >
-                <div>
-                  <p className="font-medium">{titleOf(request)}</p>
-                  <p className="text-sm text-slate-500">
-                    <StatusLabel status={request.status} />
-                    {ownIds.has(request.id) ? ' - Your draft' : ' - Shared draft'}
-                  </p>
-                </div>
-                {!ownIds.has(request.id) && (
-                  <span className="text-sm text-slate-500">Read-only</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
 
       {outcome && <OutcomeMessage outcome={outcome} />}
     </section>

@@ -17,7 +17,6 @@ from domain.event_status import EventStatus
 from domain.roles import Role
 from models.event_request import EventRequest
 from repositories import event_requests as event_request_repo
-from repositories import users as users_repo
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -80,8 +79,8 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
     clarification exchange.
 
     Draft visibility is deliberately narrower than submitted visibility: coordinators may
-    see submitted requests, but not drafts before submission. Organisers in the same
-    organisation may see each other's requests in any status.
+    see submitted requests, but not drafts before submission. An Organiser sees only their
+    own requests (SCRUM-112, ADR-0039); same-organisation peers get no access here.
     """
 
     def check(
@@ -161,12 +160,10 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
+        # SCRUM-112 (ADR-0039): organisation membership grants no view of a peer's
+        # request. Peers see only the organisation calendar's fields, through its own
+        # route; an Organiser who also holds a staff role falls through to it below.
         if is_owner:
-            return request
-
-        if Role.ORGANISER.value in roles and _same_organisation(
-            db, viewer_id, request.organiser_id
-        ):
             return request
 
         if request.status is EventStatus.DRAFT:
@@ -203,13 +200,3 @@ def _user_id(user: dict[str, object]) -> uuid.UUID:
         return uuid.UUID(str(user["sub"]))
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
-
-
-def _same_organisation(db: Session, viewer_id: uuid.UUID, organiser_id: uuid.UUID) -> bool:
-    viewer = users_repo.get(db, viewer_id)
-    organiser = users_repo.get(db, organiser_id)
-    return (
-        viewer is not None
-        and organiser is not None
-        and viewer.organisation_id == organiser.organisation_id
-    )

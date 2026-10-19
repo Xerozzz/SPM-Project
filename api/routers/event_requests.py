@@ -203,11 +203,8 @@ def create_draft(body: EventRequestDraftCreate, user: Organiser, db: Db) -> Even
 
 @router.get("/drafts", response_model=list[EventRequestRead])
 def list_drafts(user: Organiser, db: Db) -> list[EventRequestRead]:
-    """Drafts visible to the signed-in organiser."""
-    try:
-        rows = service.list_visible_drafts_for_organiser(db, _organiser_id(user))
-    except _REFUSALS as exc:
-        raise _http_error(exc) from exc
+    """SCRUM-112: the signed-in organiser's own drafts."""
+    rows = service.list_drafts_for_organiser(db, _organiser_id(user))
     return [EventRequestRead.model_validate(row) for row in rows]
 
 

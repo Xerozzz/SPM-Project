@@ -104,10 +104,9 @@ def create(
     return repo.save(db, repo.add(db, request))
 
 
-def list_visible_drafts_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventRequest]:
-    """Drafts visible to this organiser through their organisation membership."""
-    organiser = _user_or_forbidden(db, organiser_id)
-    return repo.list_drafts_for_organisation(db, organiser.organisation_id)
+def list_drafts_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventRequest]:
+    """SCRUM-112: only this organiser's own drafts; peers' drafts are not shared."""
+    return repo.list_drafts_for_organiser(db, organiser_id)
 
 
 def list_organisation_calendar(db: Session, organiser_id: uuid.UUID) -> list[EventRequest]:

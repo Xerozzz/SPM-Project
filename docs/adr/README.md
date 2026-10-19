@@ -19,7 +19,7 @@ someone else made two weeks ago.
 | [0006](0006-event-request-status-machine.md) | Event request storage, and status as a transition table in the domain layer | Proposed |
 | [0007](0007-bcrypt-directly-not-passlib.md) | Hash passwords with bcrypt directly, not through passlib | Proposed |
 | [0008](0008-coordinator-round-robin-assignment.md) | Derive round-robin coordinator assignment from assignment history | Superseded by ADR-0019 |
-| [0009](0009-organisation-scoped-drafts.md) | Derive draft visibility from organiser organisation membership | Proposed |
+| [0009](0009-organisation-scoped-drafts.md) | Derive draft visibility from organiser organisation membership | Proposed — visibility rule superseded by ADR-0039 |
 | [0010](0010-event-clarification-history.md) | Retain event clarification as a message history | Proposed — access rule superseded by ADR-0035, two-sided rule superseded by ADR-0036 |
 | [0011](0011-event-request-review-decisions.md) | Store the current event-request review decision on the request | Proposed |
 | [0012](0012-venue-soft-deactivation.md) | Deactivate venues instead of deleting them | Proposed |
@@ -49,6 +49,7 @@ someone else made two weeks ago.
 | [0036](0036-internal-clarification-notes.md) | Treat clarification comments as internal Coordinator notes | Proposed |
 | [0037](0037-plan-from-maintained-equipment-requirements.md) | Plan from the maintained equipment requirements, not the organiser's string | Proposed |
 | [0038](0038-equipment-reservations-by-type-with-row-locks.md) | Reserve equipment by type, serialised with catalogue row locks | Proposed |
+| [0039](0039-peer-organisers-see-calendar-projection-only.md) | Limit peer Organisers to the organisation-calendar projection | Proposed |
 
 ## When to write one
 

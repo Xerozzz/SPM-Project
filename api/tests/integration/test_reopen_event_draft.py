@@ -143,7 +143,8 @@ async def test_creator_can_continue_editing_with_existing_draft_edit_flow(
 
 
 @pytest.mark.story("SCRUM-29")
-async def test_shared_event_access_allows_same_org_view_but_not_edit(
+@pytest.mark.story("SCRUM-112")
+async def test_shared_event_access_refuses_same_org_view_and_edit(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     creator = make_user("organiser")
@@ -153,16 +154,20 @@ async def test_shared_event_access_allows_same_org_view_but_not_edit(
         draft = await create_draft(creator_client)
 
     request_id = uuid.UUID(str(draft["id"]))
-    viewed = require_event_access(EventAccess.VIEW)(request_id, claims_for(colleague), db)
 
-    assert viewed.id == request_id
-    with pytest.raises(HTTPException) as exc:
-        require_event_access(EventAccess.EDIT)(request_id, claims_for(colleague), db)
-    assert exc.value.status_code == 403
+    # SCRUM-112 (ADR-0039): organisation membership no longer grants VIEW.
+    for permission in (EventAccess.VIEW, EventAccess.EDIT):
+        with pytest.raises(HTTPException) as exc:
+            require_event_access(permission)(request_id, claims_for(colleague), db)
+        assert exc.value.status_code == 403
+    assert require_event_access(EventAccess.VIEW)(request_id, claims_for(creator), db).id == (
+        request_id
+    )
 
 
 @pytest.mark.story("SCRUM-29")
-async def test_same_organisation_organiser_can_view_the_creators_draft(
+@pytest.mark.story("SCRUM-112")
+async def test_same_organisation_organiser_cannot_view_the_creators_draft(
     make_user: MakeUser, make_client: MakeClient
 ) -> None:
     creator = make_user("organiser")
@@ -175,15 +180,14 @@ async def test_same_organisation_organiser_can_view_the_creators_draft(
         response = await colleague_client.get(f"/api/event-requests/{draft['id']}")
         drafts = await colleague_client.get("/api/event-requests/drafts")
 
-    assert response.status_code == 200
-    assert response.json()["id"] == draft["id"]
-    assert response.json()["status"] == "draft"
+    assert response.status_code == 403
     assert drafts.status_code == 200
-    assert [row["id"] for row in drafts.json()] == [draft["id"]]
+    assert drafts.json() == []
 
 
 @pytest.mark.story("SCRUM-29")
-async def test_same_organisation_organiser_can_view_after_submission(
+@pytest.mark.story("SCRUM-112")
+async def test_same_organisation_organiser_cannot_view_after_submission(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     creator = make_user("organiser")
@@ -198,9 +202,7 @@ async def test_same_organisation_organiser_can_view_after_submission(
         response = await colleague_client.get(f"/api/event-requests/{draft['id']}")
 
     assert submitted.status_code == 200
-    assert response.status_code == 200
-    assert response.json()["id"] == draft["id"]
-    assert response.json()["status"] == "submitted"
+    assert response.status_code == 403
 
 
 @pytest.mark.story("SCRUM-29")

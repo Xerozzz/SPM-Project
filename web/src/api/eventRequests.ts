@@ -378,14 +378,6 @@ export async function createEventRequest(
   return (await response.json()) as EventRequest
 }
 
-export async function listDraftEventRequests(token: string): Promise<EventRequest[]> {
-  const response = await fetch('/api/event-requests/drafts', { headers: authHeaders(token) })
-  if (!response.ok) {
-    throw new Error(`/api/event-requests/drafts responded ${response.status}`)
-  }
-  return (await response.json()) as EventRequest[]
-}
-
 export async function getEventRequest(token: string, id: string): Promise<EventRequest> {
   const response = await fetch(`/api/event-requests/${id}`, { headers: authHeaders(token) })
   if (!response.ok) {

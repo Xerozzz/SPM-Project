@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import type { EventRequest } from '../api/eventRequests'
 import { AuthProvider } from '../auth/context'
@@ -13,8 +13,9 @@ import MyEventRequests from './MyEventRequests'
 // SCRUM-35: the API also says what each status permits, and the component offers only
 // those. These fixtures carry the same `status_permits` the real API returns.
 // SCRUM-46 keeps submit behaviour visible. SCRUM-29 adds the draft save/reopen path:
-// incomplete drafts can be saved, reopened with persisted values, edited, submitted with
-// API validation feedback, and organisation-visible non-owned drafts stay read-only.
+// incomplete drafts can be saved, reopened with persisted values, edited, and submitted with
+// API validation feedback. SCRUM-112 removes the organisation drafts list: drafts are no
+// longer shared, so only the organiser's own requests are shown.
 
 afterEach(() => {
   localStorage.clear()
@@ -80,7 +81,6 @@ function renderSignedIn(
 }
 
 function defaultHandler(key: string): Handler | null {
-  if (key === 'GET /api/event-requests/drafts') return () => json([])
   if (key === 'GET /api/event-requests/equipment-types') return () => json(['Projector'])
   if (key === 'GET /api/event-requests/venue-names') return () => json(['Hall A'])
   // SCRUM-106: the organiser view renders no clarification surface at all — the
@@ -107,13 +107,9 @@ test('shows a rejection reason to the organiser', async () => {
   ).toBeInTheDocument()
 })
 
-
-
-
 test('submitting an incomplete draft names the fields to correct', async () => {
   renderSignedIn({
     'GET /api/event-requests': () => json([draft]),
-    'GET /api/event-requests/drafts': () => json([draft]),
     'GET /api/event-requests/req-1': () => json(draft),
     'POST /api/event-requests/req-1/submit': () =>
       json(
@@ -141,7 +137,6 @@ test('submitting a complete draft shows confirmation and the new status', async 
   let listed = [draft]
   renderSignedIn({
     'GET /api/event-requests': () => json(listed),
-    'GET /api/event-requests/drafts': () => json(listed),
     'POST /api/event-requests/req-1/submit': () => {
       listed = [
         { ...draft, status: 'submitted', submitted_at: '2026-09-12T09:00:00Z', status_permits: [] },
@@ -158,16 +153,16 @@ test('submitting a complete draft shows confirmation and the new status', async 
   expect(await screen.findByText(/Locked/)).toBeInTheDocument()
 })
 
-test('same-organisation non-owner draft is visible without edit controls', async () => {
-  const shared = eventRequest({ id: 'req-shared', name: 'Shared Planning', status: 'draft' })
-  renderSignedIn({
-    'GET /api/event-requests': () => json([]),
-    'GET /api/event-requests/drafts': () => json([shared]),
-  })
+describe('SCRUM-112 own drafts only (frontend unit)', () => {
+  test('shows no organisation drafts section and never requests the drafts list', async () => {
+    renderSignedIn({ 'GET /api/event-requests': () => json([draft]) })
 
-  expect(await screen.findByText('Shared Planning')).toBeInTheDocument()
-  expect(screen.getByText('Read-only')).toBeInTheDocument()
-  expect(screen.queryByLabelText('Edit draft Shared Planning')).not.toBeInTheDocument()
+    expect(await screen.findByLabelText('Edit draft Orientation Day')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Organisation drafts' })).toBeNull()
+    expect(screen.queryByText(/Shared draft|Read-only/)).toBeNull()
+    const urls = vi.mocked(globalThis.fetch).mock.calls.map(([input]) => String(input))
+    expect(urls).not.toContain('/api/event-requests/drafts')
+  })
 })
 
 test('shows an error when the list cannot be loaded', async () => {
@@ -214,7 +209,6 @@ function eventRequest(overrides: Partial<EventRequest>): EventRequest {
   }
 }
 
-
 test('choosing a draft hands the full request to the form above', async () => {
   // The list carries a summary, so it fetches the whole request before handing it over.
   // Editing happens in the one form on the page; this component no longer owns one.
@@ -222,7 +216,6 @@ test('choosing a draft hands the full request to the form above', async () => {
   renderSignedIn(
     {
       'GET /api/event-requests': () => json([draft]),
-      'GET /api/event-requests/drafts': () => json([draft]),
       'GET /api/event-requests/req-1': () => json(draft),
     },
     (request) => chosen.push(request),
@@ -240,7 +233,6 @@ test('choosing a draft hands the full request to the form above', async () => {
 test('there is no New draft button, because the form above is always there', async () => {
   renderSignedIn({
     'GET /api/event-requests': () => json([draft]),
-    'GET /api/event-requests/drafts': () => json([draft]),
   })
 
   await screen.findByLabelText('Edit draft Orientation Day')
