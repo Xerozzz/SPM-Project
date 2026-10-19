@@ -1,4 +1,9 @@
-"""HTTP endpoints for event-review clarification messages (SCRUM-30)."""
+"""HTTP endpoints for internal coordinator clarification notes (SCRUM-106).
+
+SCRUM-106 supersedes SCRUM-30's two-sided exchange: notes are written and read only
+by the currently assigned coordinator. There is no organiser list or response
+endpoint; the organiser's unrelated event permissions are untouched.
+"""
 
 import uuid
 from datetime import UTC, datetime
@@ -21,12 +26,11 @@ router = APIRouter(prefix="/event-requests", tags=["event-clarifications"])
 
 AuthenticatedUser = Annotated[dict[str, object], Depends(get_current_user)]
 Coordinator = Annotated[dict[str, object], Depends(require_role(Role.COORDINATOR))]
-ViewableEvent = Annotated[EventRequest, Depends(require_event_access(EventAccess.VIEW))]
+ReadableEvent = Annotated[
+    EventRequest, Depends(require_event_access(EventAccess.READ_CLARIFICATIONS))
+]
 ClarifiableEvent = Annotated[
     EventRequest, Depends(require_event_access(EventAccess.REQUEST_CLARIFICATION))
-]
-RespondableEvent = Annotated[
-    EventRequest, Depends(require_event_access(EventAccess.RESPOND_TO_CLARIFICATION))
 ]
 Db = Annotated[Session, Depends(get_db)]
 
@@ -36,15 +40,15 @@ def _user_id(user: dict[str, object]) -> uuid.UUID:
 
 
 @router.get("/reviewable", response_model=list[EventRequestRead])
-def list_reviewable_events(_user: Coordinator, db: Db) -> list[EventRequestRead]:
-    """Return submitted requests available for coordinator review."""
-    rows = event_request_service.list_for_review(db)
+def list_reviewable_events(user: Coordinator, db: Db) -> list[EventRequestRead]:
+    """SCRUM-104: Submitted requests currently assigned to the signed-in coordinator."""
+    rows = event_request_service.list_for_review(db, _user_id(user))
     return [EventRequestRead.model_validate(row) for row in rows]
 
 
 @router.get("/{request_id}/clarifications", response_model=list[EventClarificationRead])
-def list_clarifications(event: ViewableEvent, db: Db) -> list[EventClarificationRead]:
-    """Return clarification requests and responses visible to this participant."""
+def list_clarifications(event: ReadableEvent, db: Db) -> list[EventClarificationRead]:
+    """Return the internal notes visible only to the currently assigned coordinator."""
     rows = clarification_service.list_for_event(db, event.id)
     return [EventClarificationRead.model_validate(row) for row in rows]
 
@@ -60,26 +64,8 @@ def request_clarification(
     user: AuthenticatedUser,
     db: Db,
 ) -> EventClarificationRead:
-    """Record a coordinator's clarification request without changing event status."""
+    """Record an internal coordinator note without changing event status."""
     row = clarification_service.create_message(
         db, event.id, _user_id(user), ClarificationKind.REQUEST, body.message, datetime.now(UTC)
-    )
-    return EventClarificationRead.model_validate(row)
-
-
-@router.post(
-    "/{request_id}/clarifications/responses",
-    response_model=EventClarificationRead,
-    status_code=status.HTTP_201_CREATED,
-)
-def respond_to_clarification(
-    event: RespondableEvent,
-    body: EventClarificationCreate,
-    user: AuthenticatedUser,
-    db: Db,
-) -> EventClarificationRead:
-    """Record the creating organiser's response without unlocking the submitted event."""
-    row = clarification_service.create_message(
-        db, event.id, _user_id(user), ClarificationKind.RESPONSE, body.message, datetime.now(UTC)
     )
     return EventClarificationRead.model_validate(row)

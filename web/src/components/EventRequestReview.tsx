@@ -17,20 +17,14 @@ import PlanningInfoEditor from './PlanningInfoEditor'
 import VenueBookingRequest from './VenueBookingRequest'
 
 /**
- * Whose request this is, from the viewer's side. `status_permits` cannot answer it: it
- * describes the status and says so in its own docstring, while the API additionally requires
- * the assigned coordinator (require_event_access(DECIDE)).
+ * SCRUM-104: the Coordinator list holds only events currently assigned to the viewer.
+ * The API scopes `/reviewable` by the authenticated Coordinator ID and refuses
+ * unassigned or other Coordinators' events, so every card here is actionable — there
+ * is no read-only state for someone else's event. `status_permits` still decides which
+ * buttons the status allows; assignment is settled before the response arrives.
  */
-type Assignment = 'mine' | 'someone-else' | 'unassigned'
-
-function assignmentOf(request: EventRequest, userId: string | null): Assignment {
-  if (request.coordinator_id === null) return 'unassigned'
-  return request.coordinator_id === userId ? 'mine' : 'someone-else'
-}
-
-/** SCRUM-31: coordinator review is a decision only; it does not start planning work. */
 export default function EventRequestReview() {
-  const { token, userId } = useAuth()
+  const { token } = useAuth()
   const client = useQueryClient()
   const [reason, setReason] = useState<Record<string, string>>({})
   const [outcome, setOutcome] = useState<string | null>(null)
@@ -84,7 +78,6 @@ export default function EventRequestReview() {
           onApprove={() => approve.mutate(request.id)}
           onReject={() => reject.mutate({ id: request.id, reason: reason[request.id] ?? '' })}
           pending={approve.isPending || reject.isPending}
-          assignment={assignmentOf(request, userId)}
         />
       ))}
       {outcome && (
@@ -108,7 +101,6 @@ function ReviewCard({
   onApprove,
   onReject,
   pending,
-  assignment,
 }: {
   request: EventRequest
   reason: string
@@ -116,8 +108,6 @@ function ReviewCard({
   onApprove: () => void
   onReject: () => void
   pending: boolean
-  /** Who may decide this request, from the viewer's point of view. */
-  assignment: Assignment
 }) {
   return (
     <article className="mt-4 rounded border border-slate-200 p-3">
@@ -166,14 +156,7 @@ function ReviewCard({
         className="mt-1 w-full rounded border border-slate-300 p-2 text-sm"
       />
       <div className="mt-3 flex gap-2">
-        {assignment !== 'mine' && (
-          <p className="text-sm text-slate-500">
-            {assignment === 'someone-else'
-              ? 'Assigned to another coordinator, so this one is yours to read, not to decide.'
-              : 'Not assigned to a coordinator yet, so there is nobody to decide it.'}
-          </p>
-        )}
-        {assignment === 'mine' && request.status_permits.includes('approve') && (
+        {request.status_permits.includes('approve') && (
           <button
             type="button"
             onClick={onApprove}
@@ -183,7 +166,7 @@ function ReviewCard({
             Approve
           </button>
         )}
-        {assignment === 'mine' && request.status_permits.includes('reject') && (
+        {request.status_permits.includes('reject') && (
           <button
             type="button"
             onClick={onReject}
@@ -194,23 +177,17 @@ function ReviewCard({
           </button>
         )}
       </div>
-      {assignment === 'mine' && acceptsOrdinaryUpdate(request.status) && (
-        <PlanningInfoEditor request={request} />
-      )}
+      {acceptsOrdinaryUpdate(request.status) && <PlanningInfoEditor request={request} />}
       <ClarificationThread
         eventRequestId={request.id}
-        mode="coordinator"
-        canRequest={assignment === 'mine' && request.status === 'submitted'}
+        canRequest={request.status === 'submitted'}
       />
-      {assignment === 'mine' && request.status === 'approved' && (
-        <VenueBookingRequest event={request} />
-      )}
-      {/* SCRUM-43 AC2 and AC10: the assigned Coordinator, while the event is being
-          planned. The same rule `EventAccess.MAINTAIN_EQUIPMENT` applies on the API,
-          which is what actually refuses anyone else. */}
-      {assignment === 'mine' && request.status === 'approved' && (
-        <EventEquipmentRequirements event={request} />
-      )}
+      {request.status === 'approved' && <VenueBookingRequest event={request} />}
+      {/* SCRUM-43 AC2: while the event is being planned. The assignment half of AC10 is
+          no longer checked here: SCRUM-104 made this list hold only events assigned to
+          the viewer, and `EventAccess.MAINTAIN_EQUIPMENT` is what actually refuses
+          anyone else on the API. */}
+      {request.status === 'approved' && <EventEquipmentRequirements event={request} />}
     </article>
   )
 }

@@ -1,4 +1,4 @@
-"""Persistence for event-review clarification messages (SCRUM-30)."""
+"""Persistence for internal coordinator clarification notes (SCRUM-106)."""
 
 import uuid
 

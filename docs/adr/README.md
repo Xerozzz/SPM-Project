@@ -20,7 +20,7 @@ someone else made two weeks ago.
 | [0007](0007-bcrypt-directly-not-passlib.md) | Hash passwords with bcrypt directly, not through passlib | Proposed |
 | [0008](0008-coordinator-round-robin-assignment.md) | Derive round-robin coordinator assignment from assignment history | Superseded by ADR-0019 |
 | [0009](0009-organisation-scoped-drafts.md) | Derive draft visibility from organiser organisation membership | Proposed |
-| [0010](0010-event-clarification-history.md) | Retain event clarification as a message history | Proposed |
+| [0010](0010-event-clarification-history.md) | Retain event clarification as a message history | Proposed — access rule superseded by ADR-0035, two-sided rule superseded by ADR-0036 |
 | [0011](0011-event-request-review-decisions.md) | Store the current event-request review decision on the request | Proposed |
 | [0012](0012-venue-soft-deactivation.md) | Deactivate venues instead of deleting them | Proposed |
 | [0013](0013-venue-unavailability-before-booking.md) | Record venue unavailability before booking allocation exists | Proposed |
@@ -45,6 +45,9 @@ someone else made two weeks ago.
 | [0032](0032-use-catalogue-equipment-type-names.md) | Use catalogue equipment type names in event requirements | Proposed |
 | [0033](0033-equipment-requirements-as-records.md) | Make an event's equipment requirements records, with the organiser's choice as the first one | Proposed |
 | [0034](0034-equipment-review-outside-the-change-history.md) | Keep equipment requirement reviews out of the change history | Proposed |
+| [0035](0035-coordinator-assigned-event-access.md) | Scope coordinator event access to the current assignment | Proposed |
+| [0036](0036-internal-clarification-notes.md) | Treat clarification comments as internal Coordinator notes | Proposed |
+| [0038](0038-equipment-reservations-by-type-with-row-locks.md) | Reserve equipment by type, serialised with catalogue row locks | Proposed |
 
 ## When to write one
 

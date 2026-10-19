@@ -157,17 +157,33 @@ test('SCRUM-36: cancelling discards the edits', async () => {
   expect(within(reopened).getByLabelText('Name')).toHaveValue('Orientation Day')
 })
 
-test.each([
-  ['another coordinator', 'user-2'],
-  ['nobody yet', null],
-])('SCRUM-36 AC1: no edit control when the request is assigned to %s', async (_, owner) => {
-  renderPanel({ ...submitted, coordinator_id: owner })
-
-  await screen.findByRole('heading', { name: 'Orientation Day' })
-
-  await waitFor(() =>
-    expect(screen.queryByRole('button', { name: 'Edit planning information' })).toBeNull(),
+test('SCRUM-104: someone else\u2019s event never reaches the coordinator list', async () => {
+  // SCRUM-104 scopes /reviewable to the signed-in coordinator, so an event assigned
+  // to another coordinator (or to nobody yet) is refused before it renders — there is
+  // no card, and therefore no edit control, to assert on.
+  localStorage.setItem(
+    'connectsphere.token',
+    JSON.stringify({ token: 'token', userId: 'user-1', roles: ['coordinator'] }),
   )
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const key = `${init?.method ?? 'GET'} ${String(input)}`
+    if (key === 'GET /api/event-requests/reviewable') return json([])
+    if (key === 'GET /api/event-requests/bookable') return json([])
+    throw new Error(`unexpected request ${key}`)
+  })
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={client}>
+      <AuthProvider>
+        <EventRequestReview />
+      </AuthProvider>
+    </QueryClientProvider>,
+  )
+
+  expect(await screen.findByText('No coordinator events are available.')).toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Edit planning information' }),
+  ).not.toBeInTheDocument()
 })
 
 test('SCRUM-36 AC5: a Confirmed event does not offer ordinary edits', async () => {

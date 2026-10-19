@@ -307,7 +307,7 @@ async def test_coordinator_cannot_view_a_draft(
 
 
 @pytest.mark.story("SCRUM-29")
-async def test_coordinator_can_view_a_submitted_request(
+async def test_unassigned_coordinator_is_refused_a_submitted_request(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     creator = make_user("organiser")
@@ -320,10 +320,11 @@ async def test_coordinator_can_view_a_submitted_request(
     async with make_client(coordinator) as coordinator_client:
         response = await coordinator_client.get(f"/api/event-requests/{draft['id']}")
 
+    # SCRUM-104: the submission waits in the Lead queue, so an ordinary coordinator
+    # without the assignment is refused without disclosure.
     assert submitted.status_code == 200
-    assert response.status_code == 200
-    assert response.json()["id"] == draft["id"]
-    assert response.json()["status"] == "submitted"
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Forbidden"}
 
 
 @pytest.mark.story("SCRUM-29")

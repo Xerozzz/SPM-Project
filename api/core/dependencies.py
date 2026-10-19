@@ -25,10 +25,11 @@ _bearer = HTTPBearer(auto_error=False)
 class EventAccess(StrEnum):
     """The event-request access modes routes may ask for.
 
-    VIEW and EDIT cover the request itself (SCRUM-29). The two clarification modes
-    (SCRUM-30) are narrower: only the assigned coordinator may ask, only the owning
-    organiser may answer, and both only while the request is under review. Reading the
-    clarification history uses VIEW, so whoever may see the request may see its thread.
+    VIEW and EDIT cover the request itself (SCRUM-29). Clarification notes (SCRUM-106)
+    are internal to the assigned coordinator: only they may list or record them, and
+    recording is pinned to review (SUBMITTED). Reading the notes needs no status pin —
+    the assignee keeps their notes after a decision — but it still needs the current
+    assignment, so reassignment transfers access immediately.
     """
 
     VIEW = "view"
@@ -38,7 +39,7 @@ class EventAccess(StrEnum):
     MAINTAIN_EQUIPMENT = "maintain_equipment"
     CHECK_EQUIPMENT_AVAILABILITY = "check_equipment_availability"
     REQUEST_CLARIFICATION = "request_clarification"
-    RESPOND_TO_CLARIFICATION = "respond_to_clarification"
+    READ_CLARIFICATIONS = "read_clarifications"
     UPDATE_PLANNING_INFO = "update_planning_info"
 
 
@@ -104,16 +105,19 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
-        # Clarification is part of review (clarification sheet row 101), so both sides of
-        # the exchange are pinned to SUBMITTED. Reading the history is not: it uses VIEW.
+        # Clarification notes are internal to the assigned coordinator (SCRUM-106):
+        # recording is part of review, so it is pinned to SUBMITTED; reading keeps no
+        # status pin so the assignee keeps their notes after a decision. Both refuse
+        # without disclosure when the caller is not the current assignee.
         if permission is EventAccess.REQUEST_CLARIFICATION:
             is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
             if is_assigned and request.status is EventStatus.SUBMITTED:
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
-        if permission is EventAccess.RESPOND_TO_CLARIFICATION:
-            if is_owner and request.status is EventStatus.SUBMITTED:
+        if permission is EventAccess.READ_CLARIFICATIONS:
+            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+            if is_assigned:
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
@@ -166,6 +170,15 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
             return request
 
         if request.status is EventStatus.DRAFT:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        # SCRUM-104: an ordinary Coordinator sees only the event currently assigned to
+        # them. A Lead keeps allocation visibility for every event, including through a
+        # dual Lead+Coordinator account, so the Lead check comes first.
+        if Role.COORDINATOR_LEAD.value in roles:
+            return request
+
+        if Role.COORDINATOR.value in roles and request.coordinator_id != viewer_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
         if Role.COORDINATOR.value in roles:

@@ -1,9 +1,10 @@
-"""Clarification message vocabulary (SCRUM-30).
+"""Clarification note vocabulary (SCRUM-106).
 
-A clarification thread is a sequence of messages on one event request. Each message is
-either the assigned coordinator asking, or the owning organiser answering. The kind is
-recorded when the message is written, by the endpoint that only that side can call, so
-the history can be read without guessing from who the author was.
+An event's clarification thread is a sequence of internal notes written by whoever is
+currently the assigned coordinator. Each note keeps the REQUEST kind recorded when it
+is written, by the endpoint only the assignee can call. RESPONSE stays in the enum so
+rows written by the superseded SCRUM-30 exchange still read back; no endpoint writes
+it anymore.
 """
 
 from enum import StrEnum
