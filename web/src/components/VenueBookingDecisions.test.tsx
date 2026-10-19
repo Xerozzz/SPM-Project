@@ -34,7 +34,7 @@ const PENDING: VenueBookingDecision = {
   expected_attendance: 150,
   venue_requirement: 'Hall A',
   accessibility_requirement: 'Step-free access',
-  equipment_requirement: 'Projector',
+  equipment_requirements: ['Projector x1'],
   layout_requirement: 'Theatre style',
   requested_by_id: 'coordinator-1',
   decided_by_id: null,
@@ -376,4 +376,30 @@ test('SCRUM-82 AC7: a venue with no buffers has no held line to show', async () 
   await screen.findByText('Orientation Day')
   // Absent, not shown empty: the row renders "Not given" for a null value.
   expect(screen.queryByText('Venue held:')).toBeNull()
+})
+
+// ------------------------------------- SCRUM-43: what the event needs now, not then
+//
+// Venue Staff decide whether their venue suits an event. They were shown
+// `equipment_requirement`, the single string the organiser submitted, which nothing
+// writes back to (ADR-0033). The moment a Coordinator changed anything, the queue was
+// asking for a decision on a stale answer.
+
+test('SCRUM-43: the queue lists every requirement the event currently has', async () => {
+  renderPanel(async () =>
+    json([{ ...PENDING, equipment_requirements: ['Projector x2', 'Microphone x3'] }]),
+  )
+
+  await screen.findByText('Orientation Day')
+  expect(screen.getByText('Projector x2, Microphone x3')).toBeInTheDocument()
+})
+
+test('SCRUM-43: an event needing nothing says so rather than looking unanswered', async () => {
+  // The row renders "Not given" for a null, which reads as missing information. The
+  // Coordinator recording nothing is an answer, not a gap.
+  renderPanel(async () => json([{ ...PENDING, equipment_requirements: [] }]))
+
+  await screen.findByText('Orientation Day')
+  expect(screen.getByText('None recorded')).toBeInTheDocument()
+  expect(screen.queryByText('Not given')).toBeNull()
 })

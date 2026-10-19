@@ -17,6 +17,7 @@ from core.dependencies import require_role
 from domain.booking_conflict import BookingConflictError
 from domain.roles import Role
 from domain.venue_booking import InvalidBookingTransitionError
+from repositories import equipment_requirements as requirement_repo
 from schemas.venue_booking_decisions import (
     VenueBookingDecisionRead,
     VenueBookingHold,
@@ -39,7 +40,15 @@ def _user_id(user: dict[str, object]) -> uuid.UUID:
 def list_booking_requests(user: VenueStaff, db: Db) -> list[VenueBookingDecisionRead]:
     del user
     items = service.list_requests(db)
-    return [VenueBookingDecisionRead.from_context(*row, conflict) for row, conflict in items]
+    # One lookup for the whole queue rather than one per row: this lists every pending
+    # booking at every venue, so a query per booking would grow with the backlog.
+    requirements = requirement_repo.live_for_events(
+        db, {event.id for (_booking, event, _venue), _conflict in items}
+    )
+    return [
+        VenueBookingDecisionRead.from_context(*row, conflict, requirements.get(row[1].id, []))
+        for row, conflict in items
+    ]
 
 
 @router.post("/{booking_id}/hold", response_model=VenueBookingDecisionRead)
@@ -57,7 +66,10 @@ def hold_booking_request(
         raise HTTPException(422, problems) from exc
     except (BookingConflictError, InvalidBookingTransitionError) as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    return VenueBookingDecisionRead.from_context(*service.get(db, booking_id))
+    context = service.get(db, booking_id)
+    return VenueBookingDecisionRead.from_context(
+        *context, None, requirement_repo.list_for_event(db, context[1].id)
+    )
 
 
 @router.post("/{booking_id}/reject", response_model=VenueBookingDecisionRead)
@@ -70,4 +82,6 @@ def reject_booking_request(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Venue booking request not found") from exc
     except InvalidBookingTransitionError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    return VenueBookingDecisionRead.from_context(*row)
+    return VenueBookingDecisionRead.from_context(
+        *row, None, requirement_repo.list_for_event(db, row[1].id)
+    )
