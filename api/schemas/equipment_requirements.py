@@ -38,8 +38,8 @@ class RequirementUpdate(BaseModel):
     technical_requirements: str | None = None
 
 
-class RequirementRead(BaseModel):
-    """One requirement as the Coordinator and Technical Support Staff see it."""
+class RequirementRecordRead(BaseModel):
+    """The requirement's own columns, read straight off the row."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -53,6 +53,18 @@ class RequirementRead(BaseModel):
     removed_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class RequirementRead(RequirementRecordRead):
+    """One requirement as the Coordinator and Technical Support Staff see it.
+
+    SCRUM-53 AC6: with what is reserved against it, which is not a column on the row.
+    """
+
+    reserved_quantity: int
+    reservation_state: ReservationState
+    # ADR-0033 AC6: the requirement changed or was removed after something was reserved.
+    has_flagged_reservation: bool
 
 
 class RequirementReviewUpdate(BaseModel):
@@ -74,6 +86,9 @@ class RequirementForReview(BaseModel):
     quantity: int
     technical_requirements: str | None
     review_status: RequirementReview
+    reserved_quantity: int
+    reservation_state: ReservationState
+    has_flagged_reservation: bool
 
 
 class RequirementAvailabilityRead(BaseModel):
