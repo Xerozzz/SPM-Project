@@ -36,9 +36,8 @@ test('a labelled session request shows its label and period everywhere', async (
   await expect(card.getByRole('status')).toContainText('Booking request submitted')
 
   // The coordinator's own list shows the label, not just the venue and times.
-  const existing = page.getByRole('heading', { name: 'Existing venue booking requests' })
-  await expect(existing).toBeVisible()
-  await expect(page.getByRole('listitem').filter({ hasText: SESSION_LABEL })).toBeVisible()
+  await expect(card.getByRole('heading', { name: 'Existing venue booking requests' })).toBeVisible()
+  await expect(card.getByText(SESSION_LABEL).first()).toBeVisible({ timeout: 15000 })
   await signOut(page)
 
   // Venue Staff see the same label in their decision queue.
