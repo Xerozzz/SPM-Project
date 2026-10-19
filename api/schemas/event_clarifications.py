@@ -1,4 +1,4 @@
-"""API contracts for event-review clarification messages (SCRUM-30)."""
+"""API contracts for internal coordinator clarification notes (SCRUM-106)."""
 
 import uuid
 from datetime import datetime

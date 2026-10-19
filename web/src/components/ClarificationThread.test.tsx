@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { AuthProvider } from '../auth/context'
@@ -17,91 +17,77 @@ function json(body: unknown, status = 200) {
   })
 }
 
-function clarification(id: string, message: string, kind: 'request' | 'response' = 'request') {
+function note(id: string, message: string) {
   return {
     id,
     event_request_id: 'req-1',
     author_id: 'user-1',
-    kind,
+    kind: 'request',
     message,
     created_at: '2026-09-17T09:00:00Z',
   }
 }
 
-function renderThread(mode: 'coordinator' | 'organiser', fetcher: typeof fetch) {
+function renderThread(fetcher: typeof fetch, canRequest = true) {
   localStorage.setItem(
     'connectsphere.token',
-    JSON.stringify({ token: 'token', userId: 'user-1', roles: [mode] }),
+    JSON.stringify({ token: 'token', userId: 'user-1', roles: ['coordinator'] }),
   )
   vi.spyOn(globalThis, 'fetch').mockImplementation(fetcher)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
       <AuthProvider>
-        <ClarificationThread eventRequestId="req-1" mode={mode} canRequest />
+        <ClarificationThread eventRequestId="req-1" canRequest={canRequest} />
       </AuthProvider>
     </QueryClientProvider>,
   )
 }
 
-test('coordinator sees history and cannot submit a blank clarification', async () => {
-  renderThread('coordinator', async () => json([clarification('msg-1', 'Please clarify layout')]))
+// TC-106-08: the assigned Coordinator sees internal notes and cannot record a blank one.
+test('coordinator sees internal notes and cannot record a blank note', async () => {
+  renderThread(async () => json([note('msg-1', 'Called the venue; layout TBC')]))
 
-  expect(await screen.findByText('Please clarify layout')).toBeInTheDocument()
-  const button = screen.getByRole('button', { name: 'Request clarification' })
+  expect(await screen.findByText('Internal clarification notes')).toBeInTheDocument()
+  expect(await screen.findByText('Called the venue; layout TBC')).toBeInTheDocument()
+  expect(screen.getByText('Coordinator note')).toBeInTheDocument()
+  const button = screen.getByRole('button', { name: 'Record internal note' })
   expect(button).toBeDisabled()
-  fireEvent.change(screen.getByLabelText('Clarification request'), {
+  fireEvent.change(screen.getByLabelText('Internal note'), {
     target: { value: '   ' },
   })
   expect(button).toBeDisabled()
 })
 
-test('coordinator submits a clarification through the request endpoint', async () => {
+// TC-106-08: recording posts to the internal-note endpoint, never a response endpoint.
+test('coordinator records a note through the internal-note endpoint', async () => {
+  let postedUrl = ''
   let postedBody: unknown
-  renderThread('coordinator', async (input, init) => {
+  renderThread(async (input, init) => {
     if ((init?.method ?? 'GET') === 'GET') return json([])
-    expect(String(input)).toBe('/api/event-requests/req-1/clarifications')
+    postedUrl = String(input)
     postedBody = JSON.parse(String(init?.body)) as unknown
-    return json(clarification('msg-1', 'Please clarify layout'), 201)
+    return json(note('msg-1', 'Called the venue'), 201)
   })
 
-  fireEvent.change(await screen.findByLabelText('Clarification request'), {
-    target: { value: 'Please clarify layout' },
+  fireEvent.change(await screen.findByLabelText('Internal note'), {
+    target: { value: 'Called the venue' },
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Request clarification' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Record internal note' }))
 
   expect(await screen.findByRole('status')).toHaveTextContent('Message sent')
-  expect(postedBody).toEqual({ message: 'Please clarify layout' })
+  expect(postedUrl).toBe('/api/event-requests/req-1/clarifications')
+  expect(postedBody).toEqual({ message: 'Called the venue' })
 })
 
-test('organiser sees persisted history and responds through the response endpoint', async () => {
-  let responseUrl = ''
-  renderThread('organiser', async (input, init) => {
-    if ((init?.method ?? 'GET') === 'GET') {
-      return json([
-        clarification('msg-1', 'Which layout should we use?'),
-        clarification('msg-0', 'Earlier answer', 'response'),
-      ])
-    }
-    responseUrl = String(input)
-    return json(clarification('msg-2', 'Use classroom layout', 'response'), 201)
-  })
+// TC-106-08: without record permission the thread shows notes but no form — there is
+// no response control anywhere, because the Organiser surface was removed (SCRUM-106).
+test('read-only thread shows notes with no record or response controls', async () => {
+  renderThread(async () => json([note('msg-1', 'Called the venue')]), false)
 
-  expect(await screen.findByText('Which layout should we use?')).toBeInTheDocument()
-  // Each side of the exchange is labelled from `kind`, not guessed from the author.
-  expect(screen.getByText('Coordinator asked')).toBeInTheDocument()
-  expect(screen.getByText('Organiser replied')).toBeInTheDocument()
-  const send = screen.getByRole('button', { name: 'Send response' })
-  expect(send).toBeDisabled()
-  fireEvent.change(screen.getByLabelText('Response'), { target: { value: '   ' } })
-  expect(send).toBeDisabled()
-  fireEvent.change(screen.getByLabelText('Response'), {
-    target: { value: 'Use classroom layout' },
-  })
-  fireEvent.click(send)
-
-  await waitFor(() => {
-    expect(responseUrl).toBe('/api/event-requests/req-1/clarifications/responses')
-  })
-  expect(await screen.findByRole('status')).toHaveTextContent('Message sent')
+  expect(await screen.findByText('Called the venue')).toBeInTheDocument()
+  expect(screen.queryByLabelText('Internal note')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Record internal note' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Send response' })).not.toBeInTheDocument()
+  expect(screen.queryByText('Organiser replied')).not.toBeInTheDocument()
 })

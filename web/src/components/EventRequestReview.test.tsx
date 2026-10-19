@@ -159,7 +159,7 @@ test('coordinator reviews a request assigned to them and approves it', async () 
 
   expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
   expect(screen.getByText('Auditorium')).toBeInTheDocument()
-  expect(screen.getByLabelText('Clarification request')).toBeInTheDocument()
+  expect(screen.getByLabelText('Internal note')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
   expect(await screen.findByRole('status')).toHaveTextContent(
     '“Orientation Day” has been approved.',
@@ -372,7 +372,7 @@ test('SCRUM-104: another coordinator\u2019s approved event never reaches the boo
 
   expect(await screen.findByText('No coordinator events are available.')).toBeInTheDocument()
   expect(screen.queryByRole('heading', { name: 'Venue booking request' })).not.toBeInTheDocument()
-  expect(screen.queryByLabelText('Clarification request')).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('Internal note')).not.toBeInTheDocument()
 })
 
 test('approved event previews advisory warnings and submits a pending booking request', async () => {

@@ -179,7 +179,6 @@ function ReviewCard({
       {acceptsOrdinaryUpdate(request.status) && <PlanningInfoEditor request={request} />}
       <ClarificationThread
         eventRequestId={request.id}
-        mode="coordinator"
         canRequest={request.status === 'submitted'}
       />
       {request.status === 'approved' && <VenueBookingRequest event={request} />}
