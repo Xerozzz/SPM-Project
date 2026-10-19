@@ -3,6 +3,7 @@ Technical Support Staff review them (SCRUM-44), both can check availability (SCR
 and Technical Support Staff reserve against them (SCRUM-53)."""
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Annotated
@@ -15,6 +16,7 @@ from core.dependencies import EventAccess, get_current_user, require_event_acces
 from domain.equipment_requirement import RequirementFields
 from domain.equipment_reservation import ReservationRefusal
 from domain.roles import Role
+from models.event_equipment_requirement import EventEquipmentRequirement
 from models.event_request import EventRequest
 from schemas.equipment_requirements import (
     RequirementAvailabilityRead,
@@ -22,6 +24,7 @@ from schemas.equipment_requirements import (
     RequirementCreate,
     RequirementForReview,
     RequirementRead,
+    RequirementRecordRead,
     RequirementReviewUpdate,
     RequirementUpdate,
     ReservationCreate,
@@ -76,10 +79,18 @@ def _validation_error(exc: service.InvalidRequirementError) -> HTTPException:
     return HTTPException(422, [p.model_dump() for p in problems])
 
 
+def _reads(db: Session, rows: Sequence[EventEquipmentRequirement]) -> list[RequirementRead]:
+    """SCRUM-53 AC6: each requirement with what is reserved against it."""
+    return [
+        RequirementRead(**RequirementRecordRead.model_validate(row).model_dump(), **asdict(held))
+        for row, held in zip(rows, service.reservation_summaries(db, rows), strict=True)
+    ]
+
+
 @router.get("/{request_id}/equipment-requirements", response_model=list[RequirementRead])
 def list_requirements(event: ViewableEvent, db: Db) -> list[RequirementRead]:
     """AC1: what this event needs, as records rather than a sentence."""
-    return [RequirementRead.model_validate(row) for row in service.list_for_event(db, event)]
+    return _reads(db, service.list_for_event(db, event))
 
 
 @router.get("/{request_id}/equipment-requirements/catalogue-types", response_model=list[str])
@@ -119,7 +130,7 @@ def equipment_availability(event: CheckableEvent, db: Db) -> list[RequirementAva
         raise HTTPException(status.HTTP_409_CONFLICT, "Event is not in planning") from exc
     return [
         RequirementAvailabilityRead(
-            **RequirementRead.model_validate(row).model_dump(include=_AVAILABILITY_FIELDS),
+            **RequirementRecordRead.model_validate(row).model_dump(include=_AVAILABILITY_FIELDS),
             event_start_at=event.start_at,
             event_end_at=event.end_at,
             **asdict(availability),
@@ -143,7 +154,7 @@ def add_requirement(
         )
     except service.InvalidRequirementError as exc:
         raise _validation_error(exc) from exc
-    return RequirementRead.model_validate(added)
+    return _reads(db, [added])[0]
 
 
 @router.patch(
@@ -175,7 +186,7 @@ def update_requirement(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipment requirement not found") from exc
     except service.InvalidRequirementError as exc:
         raise _validation_error(exc) from exc
-    return RequirementRead.model_validate(changed)
+    return _reads(db, [changed])[0]
 
 
 @router.delete(
@@ -189,20 +200,22 @@ def remove_requirement(
         removed = service.remove(db, event, requirement_id, _user_id(user), datetime.now(UTC))
     except service.RequirementNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipment requirement not found") from exc
-    return RequirementRead.model_validate(removed)
+    return _reads(db, [removed])[0]
 
 
 @review_router.get("/review", response_model=list[RequirementForReview])
 def list_for_review(_: TechSupport, db: Db) -> list[RequirementForReview]:
     """SCRUM-44 AC1: every live requirement of an event in planning, with its timing."""
+    pairs = service.list_for_review(db)
+    reads = _reads(db, [row for row, _ in pairs])
     return [
         RequirementForReview(
-            **RequirementRead.model_validate(row).model_dump(),
+            **read.model_dump(),
             event_name=event.name,
             event_start_at=event.start_at,
             event_end_at=event.end_at,
         )
-        for row, event in service.list_for_review(db)
+        for read, (_, event) in zip(reads, pairs, strict=True)
     ]
 
 
@@ -217,7 +230,7 @@ def review_requirement(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipment requirement not found") from exc
     except service.ReviewNotAllowedError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, "Event is not in planning") from exc
-    return RequirementRead.model_validate(reviewed)
+    return _reads(db, [reviewed])[0]
 
 
 @router.post(

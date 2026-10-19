@@ -5,8 +5,10 @@ availability check already calls; this module answers what one event or requirem
 """
 
 import uuid
+from collections.abc import Collection
+from datetime import datetime
 
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import ColumnElement, func, select, update
 from sqlalchemy.orm import Session
 
 from models.equipment_reservation import EquipmentReservation
@@ -27,6 +29,50 @@ def held_by_event(db: Session, event_request_id: uuid.UUID, equipment_type: str)
         db,
         EquipmentReservation.event_request_id == event_request_id,
         EquipmentReservation.equipment_type == equipment_type,
+    )
+
+
+def live_totals(
+    db: Session, requirement_ids: Collection[uuid.UUID]
+) -> dict[uuid.UUID, tuple[int, bool]]:
+    """AC6: for each requirement, how much it holds and whether any of that is flagged.
+
+    One query for a whole list. A requirement with nothing live is absent from the result.
+    """
+    statement = (
+        select(
+            EquipmentReservation.requirement_id,
+            func.sum(EquipmentReservation.quantity),
+            func.bool_or(EquipmentReservation.flagged_at.is_not(None)),
+        )
+        .where(
+            EquipmentReservation.released_at.is_(None),
+            EquipmentReservation.requirement_id.in_(requirement_ids),
+        )
+        .group_by(EquipmentReservation.requirement_id)
+        .order_by(EquipmentReservation.requirement_id)
+    )
+    return {
+        requirement_id: (int(total), bool(flagged))
+        for requirement_id, total, flagged in db.execute(statement).tuples()
+    }
+
+
+def flag_live(db: Session, requirement_id: uuid.UUID, now: datetime) -> None:
+    """ADR-0033 AC6: mark a changed requirement's live reservations, without committing.
+
+    The caller's save commits this with the change, so a change that fails flags nothing.
+    A reservation flagged earlier keeps its first time, which is when it first stopped
+    matching what was asked for. Released ones are left alone: they hold nothing.
+    """
+    db.execute(
+        update(EquipmentReservation)
+        .where(
+            EquipmentReservation.requirement_id == requirement_id,
+            EquipmentReservation.released_at.is_(None),
+            EquipmentReservation.flagged_at.is_(None),
+        )
+        .values(flagged_at=now)
     )
 
 
