@@ -19,7 +19,7 @@ from models.venue import Venue
 from models.venue_booking import VenueBooking
 from repositories import venues as venue_repo
 from schemas.event_requests import FieldProblemRead
-from schemas.venue_booking_decisions import ConflictRead
+from schemas.venue_booking_decisions import ConflictRead, VenueBookingHold
 from schemas.venue_bookings import (
     SuitabilityRead,
     VenueBookingCreate,
@@ -119,13 +119,21 @@ def submit_venue_booking(
 
 
 @decisions.post("/{booking_id}/approve", response_model=VenueBookingRead)
-def approve_venue_booking(booking_id: uuid.UUID, user: VenueStaff, db: Db) -> VenueBookingRead:
-    """SCRUM-74 AC1/AC2: venue staff only; an overlapping or non-pending request is 409.
-    SCRUM-75 AC2: records which staff member approved, and when."""
+def approve_venue_booking(
+    booking_id: uuid.UUID, body: VenueBookingHold, user: VenueStaff, db: Db
+) -> VenueBookingRead:
+    """SCRUM-110: approval creates a time-limited tentative hold (AC1/AC2), never a
+    confirmation. A bad expiry is 422, an overlapping or non-pending request 409.
+    Records which staff member approved, and when, as the hold's actor and time."""
     try:
-        booking = service.approve(db, booking_id, _user_id(user), datetime.now(UTC))
+        booking = service.approve(
+            db, booking_id, _user_id(user), datetime.now(UTC), body.expires_at
+        )
     except service.BookingNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Venue booking not found") from exc
+    except service.InvalidHoldError as exc:
+        problems = [FieldProblemRead(field=p.field, reason=p.reason) for p in exc.problems]
+        raise HTTPException(422, [p.model_dump() for p in problems]) from exc
     except (BookingConflictError, InvalidBookingTransitionError) as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     venue = venue_repo.get(db, booking.venue_id)

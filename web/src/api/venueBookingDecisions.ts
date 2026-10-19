@@ -129,17 +129,30 @@ export async function rejectVenueBookingRequest(
   )
 }
 
-/** SCRUM-75: approve through the SCRUM-74 route. The list is reloaded afterwards. */
+/** SCRUM-110: approval creates a time-limited tentative hold, so it takes the same
+ * expiry the hold route takes. The list is reloaded afterwards. */
 export async function approveVenueBookingRequest(
   token: string,
   id: string,
-): Promise<{ id: string; status: BookingStatus }> {
-  return readDecisionResponse(
-    await fetch(`/api/venue-bookings/${id}/approve`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    }),
-  )
+  expiresAt: string,
+): Promise<VenueBookingDecision> {
+  const response = await fetch(`/api/venue-bookings/${id}/approve`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expires_at: expiresAt }),
+  })
+  if (response.status === 422) {
+    const body: unknown = await response.json().catch(() => null)
+    if (body && typeof body === 'object' && 'detail' in body && Array.isArray(body.detail)) {
+      const reasons = body.detail.flatMap((problem: unknown) =>
+        problem && typeof problem === 'object' && 'reason' in problem
+          ? [`Expiry ${String(problem.reason)}`]
+          : [],
+      )
+      if (reasons.length > 0) throw new Error(reasons.join(', '))
+    }
+  }
+  return readDecisionResponse(response)
 }
 
 /**

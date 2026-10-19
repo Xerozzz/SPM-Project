@@ -1,6 +1,11 @@
-"""SCRUM-78: sibling venue requests have independent suitability and lifecycles."""
+"""SCRUM-78: sibling venue requests have independent suitability and lifecycles.
+
+SCRUM-110: Venue Staff approval creates a time-limited Tentative hold, never a
+confirmation, so the approve legs below send an expiry and expect Tentative.
+"""
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy.orm import Session
@@ -18,6 +23,11 @@ from tests.integration.test_submit_venue_booking import (
 )
 from tests.integration.test_venue_availability import check
 from tests.integration.test_venue_search import make_venue
+
+
+def _expiry() -> str:
+    """An expiry after now and before any booking start in this file."""
+    return (datetime.now(UTC) + timedelta(hours=1)).isoformat()
 
 
 def snapshot(db: Session, booking: VenueBooking) -> tuple[object, ...]:
@@ -143,12 +153,17 @@ async def test_deciding_one_booking_keeps_its_sibling_unchanged(
     before = snapshot(db, sibling)
 
     async with make_client(make_user("venue_staff")) as client:
-        response = await client.post(f"/api/venue-bookings/{target.id}/{action}", json={})
+        if action == "approve":
+            response = await client.post(
+                f"/api/venue-bookings/{target.id}/{action}", json={"expires_at": _expiry()}
+            )
+        else:
+            response = await client.post(f"/api/venue-bookings/{target.id}/{action}", json={})
 
     assert response.status_code == 200
     db.refresh(target)
     assert target.status == (
-        BookingStatus.CONFIRMED if action == "approve" else BookingStatus.REJECTED
+        BookingStatus.TENTATIVE if action == "approve" else BookingStatus.REJECTED
     )
     assert snapshot(db, sibling) == before
     assert bookings(db) == [target, sibling]
@@ -181,23 +196,33 @@ async def test_conflict_on_one_venue_does_not_block_or_mutate_its_sibling(
     assert busy.json()["available"] is False
     assert free.json()["available"] is True
     async with make_client(make_user("venue_staff")) as client:
-        refused = await client.post(f"/api/venue-bookings/{target.id}/approve")
+        refused = await client.post(
+            f"/api/venue-bookings/{target.id}/approve", json={"expires_at": _expiry()}
+        )
         assert refused.status_code == 409
         assert snapshot(db, target) == target_before
         assert snapshot(db, sibling) == sibling_before
-        approved = await client.post(f"/api/venue-bookings/{sibling.id}/approve")
+        approved = await client.post(
+            f"/api/venue-bookings/{sibling.id}/approve", json={"expires_at": _expiry()}
+        )
 
     assert approved.status_code == 200
     assert snapshot(db, target) == target_before
     db.refresh(sibling)
-    assert sibling.status is BookingStatus.CONFIRMED
+    assert sibling.status is BookingStatus.TENTATIVE
+
+    assert approved.status_code == 200
+    assert snapshot(db, target) == target_before
+    db.refresh(sibling)
+    assert sibling.status is BookingStatus.TENTATIVE
 
 
 @pytest.mark.story("SCRUM-78")
 async def test_pending_same_venue_requests_remain_nonblocking_until_one_is_confirmed(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
-    """Current PENDING is a request, not a tentative hold; preserve confirmation rules."""
+    """SCRUM-110: approval creates a hold, so the second overlapping request is refused
+    while the first is Tentative — pending requests stay non-blocking until one holds."""
     coordinator = make_user("coordinator")
     event = approved_event(db, make_user("organiser"), coordinator)
     venue = make_venue(db)
@@ -209,9 +234,17 @@ async def test_pending_same_venue_requests_remain_nonblocking_until_one_is_confi
     assert available.json()["available"] is True
     second_before = snapshot(db, second)
     async with make_client(make_user("venue_staff")) as client:
-        assert (await client.post(f"/api/venue-bookings/{first.id}/approve")).status_code == 200
+        assert (
+            await client.post(
+                f"/api/venue-bookings/{first.id}/approve", json={"expires_at": _expiry()}
+            )
+        ).status_code == 200
         assert snapshot(db, second) == second_before
-        assert (await client.post(f"/api/venue-bookings/{second.id}/approve")).status_code == 409
+        assert (
+            await client.post(
+                f"/api/venue-bookings/{second.id}/approve", json={"expires_at": _expiry()}
+            )
+        ).status_code == 409
     assert snapshot(db, second) == second_before
     db.refresh(first)
-    assert first.status is BookingStatus.CONFIRMED
+    assert first.status is BookingStatus.TENTATIVE

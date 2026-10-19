@@ -35,12 +35,13 @@ class InvalidBookingTransitionError(Exception):
 
 
 def approve(current: BookingStatus) -> BookingStatus:
-    """SCRUM-74 (absorbing SCRUM-40's approve action): only a pending request can be
-    confirmed. A second approval of the same booking, after the row lock has made it wait
-    for the first, sees CONFIRMED here and is refused."""
+    """SCRUM-110 (superseding SCRUM-74's direct confirmation): approving a pending
+    request creates a time-limited tentative hold, never a confirmation. The expiry is
+    validated separately by `domain.venue_hold.expiry_problems`; this only moves the
+    status, so a second approval of the same row is refused after the row lock."""
     if current is not BookingStatus.PENDING:
-        raise InvalidBookingTransitionError(current, BookingStatus.CONFIRMED)
-    return BookingStatus.CONFIRMED
+        raise InvalidBookingTransitionError(current, BookingStatus.TENTATIVE)
+    return BookingStatus.TENTATIVE
 
 
 def hold(current: BookingStatus) -> BookingStatus:

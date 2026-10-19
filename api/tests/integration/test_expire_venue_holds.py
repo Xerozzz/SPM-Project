@@ -125,7 +125,10 @@ async def test_an_expired_hold_no_longer_blocks_the_venue(
             },
         )
     async with make_client(staff) as client:
-        approval = await client.post(f"/api/venue-bookings/{other.id}/approve")
+        approval = await client.post(
+            f"/api/venue-bookings/{other.id}/approve",
+            json={"expires_at": (datetime.now(UTC) + timedelta(days=1)).isoformat()},
+        )
 
     assert availability.json()["available"] is True
     # Like a rejected request, it no longer holds anything, so the calendar leaves it out.
@@ -174,7 +177,10 @@ async def test_an_expired_hold_cannot_be_approved_or_held_again(
     expire_due_holds(db, _after_expiry(held))
 
     async with make_client(staff) as client:
-        approval = await client.post(f"/api/venue-bookings/{held.id}/approve")
+        approval = await client.post(
+            f"/api/venue-bookings/{held.id}/approve",
+            json={"expires_at": (datetime.now(UTC) + timedelta(days=1)).isoformat()},
+        )
         again = await client.post(
             f"/api/venue-bookings/{held.id}/hold",
             json={"expires_at": (datetime.now(UTC) + timedelta(days=1)).isoformat()},
@@ -312,8 +318,39 @@ async def test_approving_first_expires_holds_that_ran_out(
     other = _request(db, make_user("coordinator"), venue)
 
     async with make_client(staff) as client:
-        response = await client.post(f"/api/venue-bookings/{other.id}/approve")
+        response = await client.post(
+            f"/api/venue-bookings/{other.id}/approve",
+            json={"expires_at": (datetime.now(UTC) + timedelta(days=1)).isoformat()},
+        )
 
     assert response.status_code == 200
     db.refresh(old)
     assert old.status is BookingStatus.EXPIRED
+
+
+@pytest.mark.story("SCRUM-110")
+async def test_an_approval_made_hold_expires_like_any_hold(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """TC-110-05: approval IS the hold, so the SCRUM-108 worker expires it and notifies
+    the assigned Coordinator exactly once."""
+    coordinator = make_user("coordinator")
+    venue = make_venue(db)
+    request = _request(db, coordinator, venue)
+    staff = make_user("venue_staff")
+
+    async with make_client(staff) as client:
+        approval = await client.post(
+            f"/api/venue-bookings/{request.id}/approve",
+            json={"expires_at": (datetime.now(UTC) + timedelta(days=1)).isoformat()},
+        )
+    assert approval.status_code == 200
+    db.refresh(request)
+    assert request.status is BookingStatus.TENTATIVE
+    expiry = request.expires_at
+    assert expiry is not None
+
+    assert expire_due_holds(db, expiry + timedelta(seconds=1)) == [request.id]
+    expired = db.get(VenueBooking, request.id)
+    assert expired is not None and expired.status == BookingStatus.EXPIRED
+    assert len(_notifications(db, request)) == 1

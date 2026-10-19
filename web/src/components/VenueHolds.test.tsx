@@ -15,6 +15,7 @@ import VenueBookingDecisions from './VenueBookingDecisions'
 import VenueCalendar from './VenueCalendar'
 
 // SCRUM-83: Venue Staff place tentative holds, and holds are shown as Tentative.
+// SCRUM-110: approval creates the hold, so the pending card approves with an expiry.
 
 beforeEach(() => {
   localStorage.setItem(
@@ -94,7 +95,7 @@ test('SCRUM-83: a Singapore wall-clock expiry is sent as the same instant in UTC
   expect(singaporeLocalToUtc('2030-01-05T17:00')).toBe('2030-01-05T09:00:00.000Z')
 })
 
-test('SCRUM-83 AC1: Venue Staff place a hold and it moves to Tentative holds', async () => {
+test('SCRUM-110: Venue Staff approve with an expiry and it moves to Tentative holds', async () => {
   let rows: VenueBookingDecision[] = [PENDING]
   const spy = renderWith(<VenueBookingDecisions />, async (_input, init) => {
     if (init?.method === 'POST') {
@@ -108,19 +109,19 @@ test('SCRUM-83 AC1: Venue Staff place a hold and it moves to Tentative holds', a
   fireEvent.change(within(card).getByLabelText('Hold until (Singapore time)'), {
     target: { value: '2030-01-05T17:00' },
   })
-  fireEvent.click(within(card).getByRole('button', { name: 'Place tentative hold' }))
+  fireEvent.click(within(card).getByRole('button', { name: 'Approve' }))
 
   expect(
     await screen.findByText('The request for Hall A is on a tentative hold.'),
   ).toBeInTheDocument()
   const post = spy.mock.calls.find(([, init]) => init?.method === 'POST')
-  expect(String(post?.[0])).toBe('/api/venue-bookings/booking-1/hold')
+  expect(String(post?.[0])).toBe('/api/venue-bookings/booking-1/approve')
   expect(JSON.parse(String(post?.[1]?.body))).toEqual({ expires_at: '2030-01-05T09:00:00.000Z' })
   expect(await screen.findByRole('heading', { name: 'Tentative holds' })).toBeInTheDocument()
   expect(screen.getByText(`Tentative hold until ${sgt(HELD.expires_at ?? '')}`)).toBeInTheDocument()
 })
 
-test('SCRUM-83: Place tentative hold waits for an expiry and is off when there is a clash', async () => {
+test('SCRUM-110: Approve waits for an expiry and is off when there is a clash', async () => {
   renderWith(<VenueBookingDecisions />, async () =>
     json([
       PENDING,
@@ -141,7 +142,7 @@ test('SCRUM-83: Place tentative hold waits for an expiry and is off when there i
 
   const free = (await screen.findByText('Orientation Day')).closest('article') as HTMLElement
   const clashing = screen.getByText('Careers Fair').closest('article') as HTMLElement
-  expect(within(free).getByRole('button', { name: 'Place tentative hold' })).toBeDisabled()
+  expect(within(free).getByRole('button', { name: 'Approve' })).toBeDisabled()
 
   fireEvent.change(within(free).getByLabelText('Hold until (Singapore time)'), {
     target: { value: '2030-01-05T17:00' },
@@ -150,11 +151,11 @@ test('SCRUM-83: Place tentative hold waits for an expiry and is off when there i
     target: { value: '2030-01-05T17:00' },
   })
 
-  expect(within(free).getByRole('button', { name: 'Place tentative hold' })).toBeEnabled()
-  expect(within(clashing).getByRole('button', { name: 'Place tentative hold' })).toBeDisabled()
+  expect(within(free).getByRole('button', { name: 'Approve' })).toBeEnabled()
+  expect(within(clashing).getByRole('button', { name: 'Approve' })).toBeDisabled()
 })
 
-test('SCRUM-83: a refused hold shows why, on the card it belongs to', async () => {
+test('SCRUM-110: a refused approval shows why, on the card it belongs to', async () => {
   renderWith(<VenueBookingDecisions />, async (_input, init) =>
     init?.method === 'POST'
       ? json({ detail: [{ field: 'expires_at', reason: 'must be in the future' }] }, 422)
@@ -166,15 +167,15 @@ test('SCRUM-83: a refused hold shows why, on the card it belongs to', async () =
   fireEvent.change(within(card).getByLabelText('Hold until (Singapore time)'), {
     target: { value: '2020-01-05T17:00' },
   })
-  fireEvent.click(within(card).getByRole('button', { name: 'Place tentative hold' }))
+  fireEvent.click(within(card).getByRole('button', { name: 'Approve' }))
 
   expect(await within(card).findByRole('alert')).toHaveTextContent(
-    'Could not hold: Expiry must be in the future',
+    'Could not approve: Expiry must be in the future',
   )
   expect(within(other).queryByRole('alert')).toBeNull()
 })
 
-test('SCRUM-83: a clash with another request shows the API message', async () => {
+test('SCRUM-110: a clash with another request shows the API message', async () => {
   renderWith(<VenueBookingDecisions />, async (_input, init) =>
     init?.method === 'POST'
       ? json({ detail: 'conflicts with tentative hold b-7' }, 409)
@@ -185,23 +186,23 @@ test('SCRUM-83: a clash with another request shows the API message', async () =>
   fireEvent.change(within(card).getByLabelText('Hold until (Singapore time)'), {
     target: { value: '2030-01-05T17:00' },
   })
-  fireEvent.click(within(card).getByRole('button', { name: 'Place tentative hold' }))
+  fireEvent.click(within(card).getByRole('button', { name: 'Approve' }))
 
   expect(await within(card).findByRole('alert')).toHaveTextContent(
-    'Could not hold: conflicts with tentative hold b-7',
+    'Could not approve: conflicts with tentative hold b-7',
   )
 })
 
 // ------------------------------------------------------------------ AC2: shown as Tentative
 
-test('SCRUM-83 AC2: a held request is shown apart, without rejection or another hold', async () => {
+test('SCRUM-83 AC2: a held request is shown apart, without rejection or approval', async () => {
   renderWith(<VenueBookingDecisions />, async () => json([HELD]))
 
   const section = await screen.findByRole('heading', { name: 'Tentative holds' })
   expect(section).toBeInTheDocument()
-  // SCRUM-107 adds Approve to a hold. Reject and another hold are still not offered.
+  // SCRUM-110: a hold is terminal until it expires, so neither Reject nor Approve is offered.
   expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull()
-  expect(screen.queryByRole('button', { name: 'Place tentative hold' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
   expect(screen.queryByRole('heading', { name: 'Decided' })).toBeNull()
 })
 
@@ -319,39 +320,34 @@ test('SCRUM-83 AC2: the Coordinator sees their request is on a tentative hold', 
   ).toBeInTheDocument()
 })
 
-// ------------------------------------------------------------------ SCRUM-107
+// ------------------------------------------------------------------ SCRUM-110
+//
+// Approval creates the hold, so a hold is never offered for approval: it is terminal
+// until it expires (SCRUM-108) or is confirmed by the SCRUM-80 flow.
 
-test('SCRUM-107 AC1: approving a hold before it expires confirms it', async () => {
-  let rows: VenueBookingDecision[] = [{ ...HELD, expires_at: '2099-01-01T00:00:00Z' }]
-  const spy = renderWith(<VenueBookingDecisions />, async (_input, init) => {
-    if (init?.method === 'POST') {
-      rows = [{ ...rows[0], status: 'confirmed', decided_at: '2030-01-02T00:00:00Z' }]
-      return json({ id: HELD.id, status: 'confirmed' })
-    }
-    return json(rows)
-  })
+test('SCRUM-110: an active hold is shown with its expiry and no approval control', async () => {
+  renderWith(<VenueBookingDecisions />, async () =>
+    json([{ ...HELD, expires_at: '2099-01-01T00:00:00Z' }]),
+  )
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
-
-  expect(await screen.findByText('The request for Hall A has been approved.')).toBeInTheDocument()
-  const post = spy.mock.calls.find(([, init]) => init?.method === 'POST')
-  expect(String(post?.[0])).toBe(`/api/venue-bookings/${HELD.id}/approve`)
-  expect(await screen.findByRole('heading', { name: 'Decided' })).toBeInTheDocument()
-  expect(screen.queryByRole('heading', { name: 'Tentative holds' })).toBeNull()
+  expect(await screen.findByRole('heading', { name: 'Tentative holds' })).toBeInTheDocument()
+  expect(
+    screen.getByText(`Tentative hold until ${sgt('2099-01-01T00:00:00Z')}`),
+  ).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
+  expect(screen.queryByRole('heading', { name: 'Decided' })).toBeNull()
 })
 
-test('SCRUM-107 AC2: an expired hold is not offered for approval', async () => {
+test('SCRUM-110: an expired hold says so and offers no approval', async () => {
   renderWith(<VenueBookingDecisions />, async () =>
     json([{ ...HELD, expires_at: '2020-01-01T00:00:00Z' }]),
   )
 
-  expect(
-    await screen.findByText('This hold has expired, so it cannot be approved.'),
-  ).toBeInTheDocument()
+  expect(await screen.findByText('This hold has expired.')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
 })
 
-test('SCRUM-107: a hold with a clash cannot be approved and says why', async () => {
+test('SCRUM-110: a hold with a clash names it and offers no approval', async () => {
   renderWith(<VenueBookingDecisions />, async () =>
     json([
       {
@@ -369,21 +365,7 @@ test('SCRUM-107: a hold with a clash cannot be approved and says why', async () 
   )
 
   expect(await screen.findByText(/The venue is closed from/)).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled()
-})
-
-test('SCRUM-107: a refused approval of a hold shows why on its card', async () => {
-  renderWith(<VenueBookingDecisions />, async (_input, init) =>
-    init?.method === 'POST'
-      ? json({ detail: 'the tentative hold expired at 2030-01-05 09:00:00+00:00' }, 409)
-      : json([{ ...HELD, expires_at: '2099-01-01T00:00:00Z' }]),
-  )
-
-  fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
-
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Could not approve: the tentative hold expired at 2030-01-05 09:00:00+00:00',
-  )
+  expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
 })
 
 // ------------------------------------------------------------------ SCRUM-108

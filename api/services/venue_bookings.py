@@ -139,43 +139,17 @@ def approve(
     booking_id: uuid.UUID,
     decided_by_id: uuid.UUID,
     decided_at: datetime,
+    expires_at: datetime,
 ) -> VenueBooking:
-    """SCRUM-74 (absorbs SCRUM-40's approve action): confirm a pending booking request,
-    or since SCRUM-107 a tentative hold that has not expired.
-    SCRUM-75 AC2: who approved and when are stored with the confirmation in the same
-    commit (ADR-0018). Both are required, so no approve path can leave them empty.
-
-    1. Lock the booking row, so two staff approving the same request take turns and the
-       second is refused by the status transition (checked first, so a booking that is
-       not pending is reported as such rather than as a conflict).
-    2. Run the SCRUM-73 check, for a named, friendly refusal in the common case.
-    3. Refresh the stored effective interval from the venue's buffers as they are now
-       (SCRUM-82 AC4), because they may have changed since the request was submitted and
-       the constraint in step 4 reads these columns.
-    4. Commit. If an overlapping request was approved concurrently and the check raced,
-       the exclusion constraint refuses the commit (ConcurrentBookingConflictError).
-    """
-    # SCRUM-108: holds that ran out, this one included, are Expired before deciding.
-    venue_hold_expiry.expire_due_holds(db, decided_at)
-    booking = booking_repo.get_booking_for_update(db, booking_id)
-    if booking is None:
-        raise BookingNotFoundError
-    # SCRUM-107: a tentative hold is confirmed through this same approval, but only
-    # before it expires. Its hold columns are left as they are, so its history is kept.
-    if booking.status is BookingStatus.TENTATIVE:
-        confirmed = venue_hold.confirm(booking.status, booking.expires_at, decided_at)
-    else:
-        confirmed = venue_booking.approve(booking.status)
-    _ensure_no_conflict(db, booking)
-    venue = venue_repo.get(db, booking.venue_id)
-    assert venue is not None
-    booking.effective_start_at, booking.effective_end_at = effective_interval(
-        booking.start_at, booking.end_at, _buffers(venue)
-    )
-    booking.status = confirmed
-    booking.decided_by_id = decided_by_id
-    booking.decided_at = decided_at
-    return booking_repo.save_confirmed_booking(db, booking)
+    """SCRUM-110 (superseding SCRUM-74's direct confirmation and SCRUM-107's
+    hold confirmation): approving a pending request places the SCRUM-83 tentative hold
+    until `expires_at`, never a confirmation. Approval IS the hold, so this delegates
+    to `hold()`: the same row lock, expiry validation, SCRUM-73 check, effective
+    interval refresh and exclusion-constraint commit. Neither a Pending nor a Tentative
+    row can become Confirmed through Venue Staff approval (AC4); SCRUM-80 owns the
+    later event-confirmation step. SCRUM-75 AC2: the approving staff and UTC action
+    time are stored as the hold's `held_by_id`/`held_at` in the same commit."""
+    return hold(db, booking_id, decided_by_id, expires_at, decided_at)
 
 
 def hold(

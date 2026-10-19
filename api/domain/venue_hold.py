@@ -11,16 +11,6 @@ from domain.validation import FieldProblem
 from domain.venue_booking import BookingStatus, InvalidBookingTransitionError
 
 
-class HoldExpiredError(InvalidBookingTransitionError):
-    """SCRUM-107 AC2: the hold ran out before it was approved, so it cannot be confirmed.
-    A transition error like any other refused decision, so it is answered with 409."""
-
-    def __init__(self, expires_at: datetime | None) -> None:
-        super().__init__(BookingStatus.TENTATIVE, BookingStatus.CONFIRMED)
-        self.args = (f"the tentative hold expired at {expires_at}",)
-        self.expires_at = expires_at
-
-
 def expiry_problems(
     expires_at: datetime, now: datetime, event_start: datetime
 ) -> list[FieldProblem]:
@@ -40,19 +30,12 @@ def expiry_problems(
     return []
 
 
-def confirm(current: BookingStatus, expires_at: datetime | None, now: datetime) -> BookingStatus:
-    """SCRUM-107 AC1: approving a tentative hold before it expires confirms it. The rest of
-    the approval (row lock, conflict check, overlap constraint) is the normal one in
-    services.venue_bookings.approve.
-
-    Only a tentative hold goes through here. A pending request still uses
-    domain.venue_booking.approve, so the SCRUM-74 rule for requests is unchanged.
-    """
-    if current is not BookingStatus.TENTATIVE:
-        raise InvalidBookingTransitionError(current, BookingStatus.CONFIRMED)
-    if expires_at is None or expires_at <= now:
-        raise HoldExpiredError(expires_at)
-    return BookingStatus.CONFIRMED
+def confirm() -> BookingStatus:
+    """SCRUM-110: removed. Venue Staff approval creates a tentative hold (AC4); no
+    Pending or Tentative row may become Confirmed through staff approval. SCRUM-80 owns
+    the later event-confirmation step. Kept as a refused transition so any leftover
+    caller fails loudly instead of confirming."""
+    raise InvalidBookingTransitionError(BookingStatus.TENTATIVE, BookingStatus.CONFIRMED)
 
 
 def is_due(status: BookingStatus, expires_at: datetime | None, now: datetime) -> bool:
