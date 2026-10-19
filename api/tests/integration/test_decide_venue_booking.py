@@ -7,19 +7,34 @@ import httpx
 import pytest
 from sqlalchemy.orm import Session
 
+from domain.equipment_requirement import RequirementFields
 from domain.venue_booking import BookingStatus
 from models.event_request import EventRequest
 from models.user import User
 from models.venue_booking import VenueBooking
+from repositories import equipment_requirements as requirement_repo
+from repositories import event_requests as event_repo
+from services import equipment_requirements
+from tests.integration.test_equipment_requirements import catalogue
 from tests.integration.test_submit_event_request import MakeClient, MakeUser
-from tests.integration.test_submit_venue_booking import approved_event, submit
+from tests.integration.test_submit_venue_booking import (
+    approved_event,
+    seed_equipment,
+    submit,
+)
 from tests.integration.test_venue_search import effective_for, make_venue
+
+_NOW = datetime(2030, 1, 1, tzinfo=UTC)
 
 
 def pending_booking(db: Session, make_user: MakeUser, **event_changes: object) -> VenueBooking:
     """A pending request from an assigned coordinator for an approved event."""
     coordinator = make_user("coordinator")
     event = approved_event(db, make_user("organiser"), coordinator, **event_changes)
+    # SCRUM-43: the queue now shows the maintained requirements, which approval creates.
+    # Without this the event has an equipment string and no rows, which approval never
+    # produces, and the assertion below would be about an empty list.
+    seed_equipment(db, event)
     venue = make_venue(db, name=f"Hall {uuid.uuid4()}")
     assert event.start_at is not None and event.end_at is not None
     effective_start, effective_end = effective_for(venue, event.start_at, event.end_at)
@@ -73,7 +88,9 @@ async def test_venue_staff_see_a_pending_request_with_its_context(
     assert row["expected_attendance"] == 150
     assert row["venue_requirement"] == "Event Submission Test Hall"
     assert row["accessibility_requirement"] == "Step-free access and hearing loop"
-    assert row["equipment_requirement"] == "Projector"
+    # SCRUM-43: what the Coordinator maintains, with quantities, not the organiser's
+    # single captured string.
+    assert row["equipment_requirements"] == ["Projector x1"]
     assert row["layout_requirement"] == "Theatre style"
     assert row["decided_by_id"] is None and row["decided_at"] is None
 
@@ -264,3 +281,51 @@ async def test_an_unknown_request_is_not_found(
         response = await client.post(f"/api/venue-bookings/{uuid.uuid4()}/reject", json={})
 
     assert response.status_code == 404
+
+
+@pytest.mark.story("SCRUM-43")
+async def test_the_queue_shows_what_the_coordinator_maintains_not_the_submission(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """Venue Staff decide whether their venue suits the event, so they need what it needs.
+
+    Nothing writes back to `equipment_requirement` (ADR-0033), so once a Coordinator
+    changes anything the organiser's string is stale. The queue was asking for a decision
+    on that string.
+    """
+    # AC3: only an active catalogue type can be asked for, so it has to exist first.
+    catalogue(db, "Microphone")
+    booking = pending_booking(db, make_user, name="Orientation Day")
+    event = event_repo.get(db, booking.event_request_id)
+    assert event is not None
+    # The Coordinator drops what the organiser asked for and needs something else.
+    seeded = requirement_repo.list_for_event(db, event.id)
+    equipment_requirements.remove(db, event, seeded[0].id, booking.requested_by_id, _NOW)
+    equipment_requirements.add(
+        db,
+        event,
+        RequirementFields(equipment_type="Microphone", quantity=3),
+        booking.requested_by_id,
+        _NOW,
+    )
+
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.get("/api/venue-bookings")
+
+    row = listed(response, booking)
+    assert row["equipment_requirements"] == ["Microphone x3"]
+    assert event.equipment_requirement == "Projector"  # the submission is untouched
+
+
+@pytest.mark.story("SCRUM-43")
+async def test_an_event_needing_nothing_lists_nothing(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # An organiser who asked for no equipment has no rows to seed, so the queue reports
+    # an empty list rather than inventing one.
+    booking = pending_booking(db, make_user, equipment_requirement=None)
+
+    async with make_client(make_user("venue_staff")) as client:
+        response = await client.get("/api/venue-bookings")
+
+    assert listed(response, booking)["equipment_requirements"] == []
