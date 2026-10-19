@@ -138,6 +138,12 @@ export default function VenueCalendar() {
               <span className="font-medium">{CALENDAR_LABELS[entry.status]}</span>
               {' · '}
               {entry.venue_name}
+              {entry.session_label && (
+                <>
+                  {' · '}
+                  {entry.session_label}
+                </>
+              )}
               <br />
               {formatSingaporeTime(entry.start_at)} to {formatSingaporeTime(entry.end_at)}
               {entry.expires_at && (
@@ -210,6 +216,12 @@ function EntryDetails({ entry }: { entry: CalendarEntry }) {
             <dt className="inline font-medium">Status: </dt>
             <dd className="inline">{DETAILS_LABELS[details.data.status]}</dd>
           </div>
+          {details.data.session_label && (
+            <div>
+              <dt className="inline font-medium">Session: </dt>
+              <dd className="inline">{details.data.session_label}</dd>
+            </div>
+          )}
           {details.data.expires_at && (
             <div>
               <dt className="inline font-medium">Held until: </dt>

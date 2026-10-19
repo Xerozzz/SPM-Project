@@ -12,6 +12,8 @@ export interface CalendarEntry {
   id: string
   venue_id: string
   venue_name: string
+  /** SCRUM-111: which session the booking is for; null for a closure. */
+  session_label?: string | null
   start_at: string
   end_at: string
   status: CalendarStatus
@@ -132,6 +134,8 @@ export interface CalendarEntryDetails {
   venue_id: string
   venue_name: string
   venue_location: string
+  /** SCRUM-111: which session the booking is for; null for a closure. */
+  session_label?: string | null
   start_at: string
   end_at: string
   status: DetailsStatus

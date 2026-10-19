@@ -214,6 +214,7 @@ function BookingDetails({ booking }: { booking: VenueBookingDecision }) {
       : null
   const rows: [string, string | number | null][] = [
     ['Venue', `${booking.venue_name}, ${booking.venue_location}`],
+    ['Session', booking.session_label],
     [
       'When',
       `${formatSingaporeTime(booking.start_at)} to ${formatSingaporeTime(booking.end_at)}`,
