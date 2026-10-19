@@ -30,6 +30,9 @@ export const REVIEW_LABELS: Record<RequirementReview, string> = {
   unavailable: 'Unavailable',
 }
 
+/** SCRUM-53: how much of a requirement's quantity is reserved. Derived, never stored. */
+export type ReservationState = 'not_reserved' | 'partially_reserved' | 'reserved'
+
 export interface EquipmentRequirement {
   id: string
   event_request_id: string
@@ -40,6 +43,15 @@ export interface EquipmentRequirement {
   removed_at: string | null
   created_at: string
   updated_at: string
+  /** SCRUM-53: how many of this type Technical Support have committed. */
+  reserved_quantity: number
+  reservation_state: ReservationState
+  /**
+   * SCRUM-43 AC6: this requirement changed or was removed after something was reserved
+   * against it. The reservation is not released; Technical Support reconsider it, and
+   * the AC says the Coordinator can see the flag, which is what this is for.
+   */
+  has_flagged_reservation: boolean
 }
 
 export interface RequirementInput {
