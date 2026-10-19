@@ -1,6 +1,7 @@
 """Venue Staff booking decision contracts (SCRUM-40, SCRUM-75)."""
 
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Literal, Self
 
@@ -14,6 +15,7 @@ from domain.booking_conflict import (
 from domain.venue_booking import BookingStatus
 from domain.venue_booking_decision import MAX_REASON_LENGTH
 from domain.venue_buffer import VenueBuffers, effective_interval
+from models.event_equipment_requirement import EventEquipmentRequirement
 from models.event_request import EventRequest
 from models.venue import Venue
 from models.venue_booking import VenueBooking
@@ -109,7 +111,11 @@ class VenueBookingDecisionRead(BaseModel):
     expected_attendance: int | None
     venue_requirement: str | None
     accessibility_requirement: str | None
-    equipment_requirement: str | None
+    # SCRUM-43: what the event needs now, from the records the Coordinator maintains,
+    # not the single string the organiser submitted. Nothing writes back to that string
+    # (ADR-0033), so it goes stale the moment a requirement is added, changed or removed,
+    # and Venue Staff were deciding on a stale answer. Each entry reads "Projector x2".
+    equipment_requirements: list[str]
     layout_requirement: str | None
     requested_by_id: uuid.UUID
     decided_by_id: uuid.UUID | None
@@ -129,7 +135,8 @@ class VenueBookingDecisionRead(BaseModel):
         booking: VenueBooking,
         event: EventRequest,
         venue: Venue,
-        conflict: BookingConflictError | None = None,
+        conflict: BookingConflictError | None,
+        requirements: Sequence[EventEquipmentRequirement],
     ) -> Self:
         buffers = VenueBuffers(
             setup_minutes=venue.setup_minutes, turnaround_minutes=venue.turnaround_minutes
@@ -155,7 +162,7 @@ class VenueBookingDecisionRead(BaseModel):
             expected_attendance=event.expected_attendance,
             venue_requirement=event.venue_requirement,
             accessibility_requirement=event.accessibility_requirement,
-            equipment_requirement=event.equipment_requirement,
+            equipment_requirements=[_describe(row) for row in requirements],
             layout_requirement=event.layout_requirement,
             requested_by_id=booking.requested_by_id,
             decided_by_id=booking.decided_by_id,
@@ -167,6 +174,11 @@ class VenueBookingDecisionRead(BaseModel):
             coordinator_id=event.coordinator_id,
             conflict=_conflict_read(conflict, venue),
         )
+
+
+def _describe(requirement: EventEquipmentRequirement) -> str:
+    """One requirement as a line Venue Staff can read: the type and how many."""
+    return f"{requirement.equipment_type} x{requirement.quantity}"
 
 
 def _conflict_read(exc: BookingConflictError | None, venue: Venue) -> ConflictRead | None:

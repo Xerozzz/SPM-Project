@@ -1,6 +1,7 @@
 """Equipment requirement persistence (SCRUM-43, SCRUM-44)."""
 
 import uuid
+from collections.abc import Collection
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -30,6 +31,32 @@ def list_for_event(
             statement.order_by(EventEquipmentRequirement.created_at, EventEquipmentRequirement.id)
         )
     )
+
+
+def live_for_events(
+    db: Session, event_request_ids: Collection[uuid.UUID]
+) -> dict[uuid.UUID, list[EventEquipmentRequirement]]:
+    """The live requirements of several events at once, keyed by event, oldest first.
+
+    One query rather than one per event: the Venue Staff queue lists every pending
+    booking at every venue, so asking per row would be an N+1 that grows with the
+    backlog. Events with nothing required are absent from the result, so callers use
+    `.get(id, [])` rather than expecting a key.
+    """
+    if not event_request_ids:
+        return {}
+    statement = (
+        select(EventEquipmentRequirement)
+        .where(
+            EventEquipmentRequirement.event_request_id.in_(event_request_ids),
+            EventEquipmentRequirement.removed_at.is_(None),
+        )
+        .order_by(EventEquipmentRequirement.created_at, EventEquipmentRequirement.id)
+    )
+    found: dict[uuid.UUID, list[EventEquipmentRequirement]] = {}
+    for row in db.scalars(statement):
+        found.setdefault(row.event_request_id, []).append(row)
+    return found
 
 
 def get(db: Session, requirement_id: uuid.UUID) -> EventEquipmentRequirement | None:

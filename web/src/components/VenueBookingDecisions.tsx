@@ -263,7 +263,16 @@ function BookingDetails({ booking }: { booking: VenueBookingDecision }) {
     ['Attendance', booking.expected_attendance],
     ['Venue type', booking.venue_requirement],
     ['Accessibility', booking.accessibility_requirement],
-    ['Equipment', booking.equipment_requirement],
+    // Joined rather than listed: this is a definition list of short facts, and an
+    // event needing three things is still one answer to "what does it need".
+    // "None recorded" rather than the row's "Not given", which would read as missing
+    // information when the Coordinator has genuinely recorded nothing.
+    [
+      'Equipment',
+      booking.equipment_requirements.length > 0
+        ? booking.equipment_requirements.join(', ')
+        : 'None recorded',
+    ],
     ['Layout', booking.layout_requirement],
   ]
   return (

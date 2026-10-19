@@ -49,7 +49,12 @@ export interface VenueBookingDecision {
   expected_attendance: number | null
   venue_requirement: string | null
   accessibility_requirement: string | null
-  equipment_requirement: string | null
+  /**
+   * SCRUM-43: what the event needs now, from the records the Coordinator maintains,
+   * each as "Projector x2". Not the organiser's single captured string, which nothing
+   * writes back to and which goes stale the moment a requirement changes (ADR-0033).
+   */
+  equipment_requirements: string[]
   layout_requirement: string | null
   requested_by_id: string
   decided_by_id: string | null
