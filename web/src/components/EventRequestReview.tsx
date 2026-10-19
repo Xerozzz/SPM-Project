@@ -134,7 +134,12 @@ function ReviewCard({
           <dd className="inline">{request.accessibility_requirement}</dd>
         </div>
         <div>
-          <dt className="inline font-medium">Equipment: </dt>
+          {/* SCRUM-43: what the organiser asked for, which is not what the event needs
+              now. The Coordinator maintains the requirements in the editor below and
+              nothing writes back to this field (ADR-0033), so calling it "Equipment"
+              put a stale answer directly above the live one: remove the projector and
+              the card still said the event wanted one. */}
+          <dt className="inline font-medium">Equipment requested: </dt>
           <dd className="inline">{request.equipment_requirement}</dd>
         </div>
         <div>

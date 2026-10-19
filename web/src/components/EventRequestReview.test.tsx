@@ -516,3 +516,15 @@ test('SCRUM-82 AC7: a booking at a venue with no buffers says nothing extra', as
   await screen.findByText(bookingPeriod(pendingBooking))
   expect(screen.queryByText('Venue held:')).toBeNull()
 })
+
+test('SCRUM-43: the organiser’s equipment choice is labelled as what was requested', async () => {
+  // The Coordinator maintains the requirements in the editor below this card, and
+  // nothing writes back to `equipment_requirement` (ADR-0033). Labelling it "Equipment"
+  // put a stale answer directly above the live one: remove the projector and the card
+  // still said the event wanted a projector.
+  signInAsCoordinator()
+  renderExistingBookingReview([])
+
+  expect(await screen.findByText('Equipment requested:')).toBeInTheDocument()
+  expect(screen.queryByText('Equipment:')).toBeNull()
+})
