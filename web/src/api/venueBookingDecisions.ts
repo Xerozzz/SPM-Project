@@ -141,18 +141,7 @@ export async function approveVenueBookingRequest(
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ expires_at: expiresAt }),
   })
-  if (response.status === 422) {
-    const body: unknown = await response.json().catch(() => null)
-    if (body && typeof body === 'object' && 'detail' in body && Array.isArray(body.detail)) {
-      const reasons = body.detail.flatMap((problem: unknown) =>
-        problem && typeof problem === 'object' && 'reason' in problem
-          ? [`Expiry ${String(problem.reason)}`]
-          : [],
-      )
-      if (reasons.length > 0) throw new Error(reasons.join(', '))
-    }
-  }
-  return readDecisionResponse(response)
+  return readExpiryResponse(response)
 }
 
 /**
@@ -174,15 +163,31 @@ export async function holdVenueBookingRequest(
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ expires_at: expiresAt }),
   })
+  return readExpiryResponse(response)
+}
+
+/** SCRUM-121: replace an active Tentative hold's current expiry. */
+export async function updateVenueHoldExpiry(
+  token: string,
+  id: string,
+  expiresAt: string,
+): Promise<VenueBookingDecision> {
+  const response = await fetch(`/api/venue-bookings/${id}/hold`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expires_at: expiresAt }),
+  })
+  return readExpiryResponse(response)
+}
+
+async function readExpiryResponse(response: Response): Promise<VenueBookingDecision> {
   if (response.status === 422) {
     const body: unknown = await response.json().catch(() => null)
     if (body && typeof body === 'object' && 'detail' in body && Array.isArray(body.detail)) {
-      const reasons = body.detail.flatMap((problem: unknown) =>
-        problem && typeof problem === 'object' && 'reason' in problem
-          ? [`Expiry ${String(problem.reason)}`]
-          : [],
-      )
-      if (reasons.length > 0) throw new Error(reasons.join(', '))
+      const reason = body.detail.find(
+        (problem: unknown) => problem && typeof problem === 'object' && 'reason' in problem,
+      ) as { reason?: unknown } | undefined
+      if (reason) throw new Error(`Expiry ${String(reason.reason)}`)
     }
   }
   return readDecisionResponse(response)

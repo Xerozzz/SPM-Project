@@ -314,9 +314,7 @@ test('SCRUM-83 AC2: the Coordinator sees their request is on a tentative hold', 
   })
 
   expect(
-    await screen.findByText(
-      `tentative hold until ${sgt(HELD.expires_at ?? '')}`,
-    ),
+    await screen.findByText(`tentative hold until ${sgt(HELD.expires_at ?? '')}`),
   ).toBeInTheDocument()
 })
 
@@ -338,6 +336,54 @@ test('SCRUM-110: an active hold is shown with its expiry and no approval control
   expect(screen.queryByRole('heading', { name: 'Decided' })).toBeNull()
 })
 
+test('SCRUM-121: Venue Staff update an active hold expiry and see the current value', async () => {
+  const revised = { ...HELD, expires_at: '2030-01-06T09:00:00Z' }
+  let rows = [HELD]
+  const spy = renderWith(<VenueBookingDecisions />, async (_input, init) => {
+    if (init?.method === 'PATCH') {
+      rows = [revised]
+      return json(revised)
+    }
+    return json(rows)
+  })
+
+  const card = (await screen.findByText(/Tentative hold until/)).closest('article') as HTMLElement
+  fireEvent.change(within(card).getByLabelText('New expiry (Singapore time)'), {
+    target: { value: '2030-01-06T17:00' },
+  })
+  fireEvent.click(within(card).getByRole('button', { name: 'Update expiry' }))
+
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    'The hold expiry for Hall A was updated',
+  )
+  expect(
+    await screen.findByText(`Tentative hold until ${sgt(revised.expires_at)}`),
+  ).toBeInTheDocument()
+  const patch = spy.mock.calls.find(([, init]) => init?.method === 'PATCH')
+  expect(String(patch?.[0])).toBe('/api/venue-bookings/booking-1/hold')
+  expect(JSON.parse(String(patch?.[1]?.body))).toEqual({
+    expires_at: '2030-01-06T09:00:00.000Z',
+  })
+})
+
+test('SCRUM-121: a recoverable expiry error is shown on its hold', async () => {
+  renderWith(<VenueBookingDecisions />, async (_input, init) =>
+    init?.method === 'PATCH'
+      ? json({ detail: [{ field: 'expires_at', reason: 'must be in the future' }] }, 422)
+      : json([HELD]),
+  )
+
+  const card = (await screen.findByText(/Tentative hold until/)).closest('article') as HTMLElement
+  fireEvent.change(within(card).getByLabelText('New expiry (Singapore time)'), {
+    target: { value: '2020-01-01T08:00' },
+  })
+  fireEvent.click(within(card).getByRole('button', { name: 'Update expiry' }))
+
+  expect(await within(card).findByRole('alert')).toHaveTextContent(
+    'Could not update expiry: Expiry must be in the future',
+  )
+})
+
 test('SCRUM-110: an expired hold says so and offers no approval', async () => {
   renderWith(<VenueBookingDecisions />, async () =>
     json([{ ...HELD, expires_at: '2020-01-01T00:00:00Z' }]),
@@ -345,6 +391,7 @@ test('SCRUM-110: an expired hold says so and offers no approval', async () => {
 
   expect(await screen.findByText('This hold has expired.')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Update expiry' })).toBeNull()
 })
 
 test('SCRUM-110: a hold with a clash names it and offers no approval', async () => {
@@ -433,8 +480,6 @@ test('SCRUM-108: the Coordinator sees that their hold expired', async () => {
   })
 
   expect(
-    await screen.findByText(
-      `tentative hold expired at ${sgt(EXPIRED.expires_at ?? '')}`,
-    ),
+    await screen.findByText(`tentative hold expired at ${sgt(EXPIRED.expires_at ?? '')}`),
   ).toBeInTheDocument()
 })

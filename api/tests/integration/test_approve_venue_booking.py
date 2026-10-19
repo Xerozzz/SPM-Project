@@ -32,7 +32,7 @@ from models.venue_booking import VenueBooking
 from repositories import venue_availability
 from services import venue_bookings as service
 from services.venue_bookings import InvalidHoldError
-from tests.integration.test_submit_event_request import MakeClient, MakeUser
+from tests.integration.test_submit_event_request import _VENUE_NAME, MakeClient, MakeUser
 from tests.integration.test_submit_venue_booking import approved_event
 from tests.integration.test_venue_search import effective_for, make_venue
 
@@ -398,10 +398,11 @@ def _delete_committed(committed: _Committed) -> None:
     """Delete children before parents, flushing between levels for the foreign keys."""
     session = SessionLocal()
     try:
+        request_form_venue = session.scalar(select(Venue).where(Venue.name == _VENUE_NAME))
         levels: list[list[object]] = [
             [session.get(VenueBooking, i) for i in committed.booking_ids],
             [session.get(EventRequest, i) for i in committed.event_ids],
-            [session.get(Venue, committed.venue_id)],
+            [session.get(Venue, committed.venue_id), request_form_venue],
             [session.get(User, committed.user_id)],
             [session.get(Organisation, committed.organisation_id)],
         ]
