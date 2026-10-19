@@ -585,3 +585,58 @@ async def test_a_requirement_can_be_changed_after_its_type_is_deactivated(
 
     assert changed.status_code == 200, changed.text
     assert changed.json()["quantity"] == 4
+
+
+# --------------------------------------------------- AC3: the catalogue, where it is used
+
+
+@pytest.mark.story("SCRUM-43")
+async def test_the_coordinator_can_read_the_catalogue_they_must_choose_from(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """AC3 is unusable without this.
+
+    The organiser's `/event-requests/equipment-types` refuses a Coordinator, so until now
+    there was no route behind the screen where requirements are actually maintained: the
+    dropdown came back empty and nothing could be added at all.
+    """
+    catalogue(db, "Projector", "Microphone")
+    event, coordinator = planning_event(db, make_user)
+
+    async with make_client(coordinator) as client:
+        response = await client.get(url(event, "/catalogue-types"))
+
+    assert response.status_code == 200, response.text
+    assert sorted(response.json()) == ["Microphone", "Projector"]
+
+
+@pytest.mark.story("SCRUM-43")
+async def test_a_deactivated_type_is_not_offered(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # AC3 says active types. A retired one must not come back as a choice.
+    catalogue(db, "Projector", "Smoke machine")
+    event, coordinator = planning_event(db, make_user)
+    retired = db.query(Equipment).filter(Equipment.equipment_type == "Smoke machine").one()
+    retired.is_active = False
+    db.flush()
+
+    async with make_client(coordinator) as client:
+        response = await client.get(url(event, "/catalogue-types"))
+
+    assert response.json() == ["Projector"]
+
+
+@pytest.mark.story("SCRUM-43")
+async def test_only_the_assigned_coordinator_reads_the_catalogue_for_an_event(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    # AC10: the vocabulary is readable exactly where choosing from it is allowed, so it
+    # is guarded by the same access as maintaining a requirement rather than by a role.
+    catalogue(db, "Projector")
+    event, _ = planning_event(db, make_user)
+
+    async with make_client(make_user("coordinator")) as client:
+        response = await client.get(url(event, "/catalogue-types"))
+
+    assert response.status_code == 403

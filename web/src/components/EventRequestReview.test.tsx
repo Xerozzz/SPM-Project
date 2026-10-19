@@ -90,6 +90,9 @@ function renderReview(reviewable: unknown[], bookable: unknown[] = []) {
     if (key.startsWith('GET ') && key.endsWith('/venue-bookings')) return json([])
     if (key === 'GET /api/venues') return json([])
     if (key.endsWith('/clarifications')) return json([])
+    // SCRUM-43 put an equipment editor on this card; empty is enough for these tests.
+    if (key.endsWith('/equipment-requirements')) return json([])
+    if (key.endsWith('/catalogue-types')) return json([])
     if (key === 'POST /api/event-requests/req-1/approve') {
       return json({ ...submitted, status: 'approved' })
     }
@@ -115,6 +118,9 @@ function renderBookingReview(submission: unknown, status = 200, existingBookings
       return json([{ id: 'venue-1', name: 'Small Hall', is_active: true }])
     }
     if (key.endsWith('/clarifications')) return json([])
+    // SCRUM-43 put an equipment editor on this card; empty is enough for these tests.
+    if (key.endsWith('/equipment-requirements')) return json([])
+    if (key.endsWith('/catalogue-types')) return json([])
     if (key.includes('/venue-bookings/suitability?venue_id=venue-1')) return json(suitability)
     if (key === 'POST /api/event-requests/req-1/venue-bookings') {
       return submission instanceof Response ? submission : json(submission, status)
@@ -141,6 +147,9 @@ function renderExistingBookingReview(existingBookings: unknown[]) {
       return json([{ id: 'venue-1', name: 'Small Hall', is_active: true }])
     }
     if (key.endsWith('/clarifications')) return json([])
+    // SCRUM-43 put an equipment editor on this card; empty is enough for these tests.
+    if (key.endsWith('/equipment-requirements')) return json([])
+    if (key.endsWith('/catalogue-types')) return json([])
     throw new Error(`unexpected request ${key}`)
   })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -295,6 +304,9 @@ test('SCRUM-78: adds another venue, retains both records on reload and accepts a
       ])
     }
     if (key.endsWith('/clarifications')) return json([])
+    // SCRUM-43 put an equipment editor on this card; empty is enough for these tests.
+    if (key.endsWith('/equipment-requirements')) return json([])
+    if (key.endsWith('/catalogue-types')) return json([])
     if (key.includes('/venue-bookings/suitability?venue_id=')) {
       return json(key.endsWith('venue-2') ? suitable : suitability)
     }
@@ -503,4 +515,16 @@ test('SCRUM-82 AC7: a booking at a venue with no buffers says nothing extra', as
 
   await screen.findByText(bookingPeriod(pendingBooking))
   expect(screen.queryByText('Venue held:')).toBeNull()
+})
+
+test('SCRUM-43: the organiser’s equipment choice is labelled as what was requested', async () => {
+  // The Coordinator maintains the requirements in the editor below this card, and
+  // nothing writes back to `equipment_requirement` (ADR-0033). Labelling it "Equipment"
+  // put a stale answer directly above the live one: remove the projector and the card
+  // still said the event wanted a projector.
+  signInAsCoordinator()
+  renderExistingBookingReview([])
+
+  expect(await screen.findByText('Equipment requested:')).toBeInTheDocument()
+  expect(screen.queryByText('Equipment:')).toBeNull()
 })
