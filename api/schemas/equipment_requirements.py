@@ -1,14 +1,16 @@
-"""API contracts for an event's equipment requirements (SCRUM-43, SCRUM-44, SCRUM-52).
+"""API contracts for an event's equipment requirements (SCRUM-43, SCRUM-44, SCRUM-52, SCRUM-53).
 
 Mirrors domain/equipment_requirement.py.
 """
 
 import uuid
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from domain.equipment_requirement import RequirementReview
+from domain.equipment_reservation import ReservationState
 from models.equipment_requirement_change import RequirementAction
 
 
@@ -36,8 +38,8 @@ class RequirementUpdate(BaseModel):
     technical_requirements: str | None = None
 
 
-class RequirementRead(BaseModel):
-    """One requirement as the Coordinator and Technical Support Staff see it."""
+class RequirementRecordRead(BaseModel):
+    """The requirement's own columns, read straight off the row."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -51,6 +53,18 @@ class RequirementRead(BaseModel):
     removed_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class RequirementRead(RequirementRecordRead):
+    """One requirement as the Coordinator and Technical Support Staff see it.
+
+    SCRUM-53 AC6: with what is reserved against it, which is not a column on the row.
+    """
+
+    reserved_quantity: int
+    reservation_state: ReservationState
+    # ADR-0033 AC6: the requirement changed or was removed after something was reserved.
+    has_flagged_reservation: bool
 
 
 class RequirementReviewUpdate(BaseModel):
@@ -72,6 +86,9 @@ class RequirementForReview(BaseModel):
     quantity: int
     technical_requirements: str | None
     review_status: RequirementReview
+    reserved_quantity: int
+    reservation_state: ReservationState
+    has_flagged_reservation: bool
 
 
 class RequirementAvailabilityRead(BaseModel):
@@ -90,6 +107,30 @@ class RequirementAvailabilityRead(BaseModel):
     reserved: int
     available: int
     result: RequirementReview
+
+
+class ReservationCreate(BaseModel):
+    """SCRUM-53: how many to reserve. Left out, as much as is needed and free.
+
+    Strict so that `true` is not read as a quantity of one; below one is a 422 here,
+    while above what is needed or free is the service's decision.
+    """
+
+    quantity: Annotated[int, Field(strict=True, ge=1)] | None = None
+
+
+class ReservationRead(BaseModel):
+    """SCRUM-53 AC7: what was reserved just now, and where the requirement stands."""
+
+    requirement_id: uuid.UUID
+    event_request_id: uuid.UUID
+    equipment_type: str
+    reserved_now: int
+    total_reserved: int
+    outstanding: int
+    state: ReservationState
+    event_start_at: datetime
+    event_end_at: datetime
 
 
 class RequirementChangeRead(BaseModel):

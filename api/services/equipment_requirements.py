@@ -11,6 +11,8 @@ statement of what is needed, and SCRUM-53 is what turns one into a commitment.
 """
 
 import uuid
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy.orm import Session
@@ -25,12 +27,14 @@ from domain.equipment_requirement import (
     validate_change,
     validate_new_requirement,
 )
+from domain.equipment_reservation import ReservationState, reservation_state
 from domain.validation import FieldProblem
 from models.equipment_requirement_change import EquipmentRequirementChange, RequirementAction
 from models.event_equipment_requirement import EventEquipmentRequirement
 from models.event_request import EventRequest
 from repositories import equipment as catalogue_repo
 from repositories import equipment_requirements as repo
+from repositories import equipment_reservations as reservation_repo
 from repositories import event_requests as event_request_repo
 
 
@@ -52,6 +56,15 @@ class InvalidRequirementError(RequirementError):
     def __init__(self, problems: list[FieldProblem]) -> None:
         super().__init__("invalid equipment requirement")
         self.problems = problems
+
+
+@dataclass(frozen=True)
+class ReservationSummary:
+    """SCRUM-53 AC6: what a requirement holds, shown wherever the requirement is."""
+
+    reserved_quantity: int
+    reservation_state: ReservationState
+    has_flagged_reservation: bool
 
 
 def list_for_event(db: Session, event: EventRequest) -> list[EventEquipmentRequirement]:
@@ -121,6 +134,9 @@ def update(
     The type is not changed here. AC4 makes one type one line, so moving a line to a
     different type is a removal and an addition, which keeps the history honest about
     what was asked for and when.
+
+    Any live reservation for it is flagged (ADR-0033 AC6), not released, in the same
+    commit: what was reserved may no longer match, and deciding that is a person's call.
     """
     requirement = _live_requirement(db, event, requirement_id)
     merged_quantity = changes.get("quantity", requirement.quantity)
@@ -139,6 +155,7 @@ def update(
     )
     requirement.review_status = review_after_change()
     requirement.updated_at = now
+    reservation_repo.flag_live(db, requirement.id, now)
     _record(
         db,
         requirement,
@@ -163,12 +180,13 @@ def remove(
     """AC7: take a requirement out of the live set without losing that it was ever asked for.
 
     The row stays, so the event's history still shows it and the same type can be asked
-    for again later. AC6's reservation question does not arise yet: SCRUM-53 is what
-    creates reservations, and none exist.
+    for again later. Any reservation for it is flagged (AC6) but left in place:
+    releasing it is Event Change Management's work.
     """
     requirement = _live_requirement(db, event, requirement_id)
     requirement.removed_at = now
     requirement.updated_at = now
+    reservation_repo.flag_live(db, requirement.id, now)
     _record(
         db,
         requirement,
@@ -191,6 +209,20 @@ def history_for_event(db: Session, event: EventRequest) -> list[EquipmentRequire
 def list_for_review(db: Session) -> list[tuple[EventEquipmentRequirement, EventRequest]]:
     """SCRUM-44 AC1: what Technical Support Staff have to assess, with each event's timing."""
     return repo.list_for_review(db)
+
+
+def reservation_summaries(
+    db: Session, requirements: Sequence[EventEquipmentRequirement]
+) -> list[ReservationSummary]:
+    """SCRUM-53 AC6: one summary per requirement, in the order given."""
+    totals = reservation_repo.live_totals(db, [row.id for row in requirements])
+    summaries = []
+    for row in requirements:
+        reserved, flagged = totals.get(row.id, (0, False))
+        summaries.append(
+            ReservationSummary(reserved, reservation_state(row.quantity, reserved), flagged)
+        )
+    return summaries
 
 
 def review(

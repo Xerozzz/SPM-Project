@@ -88,6 +88,23 @@ def reserved_quantity(
     return int(db.scalar(statement) or 0)
 
 
+def lock_entries_of_type(db: Session, equipment_type: str) -> list[Equipment]:
+    """SCRUM-53: every entry of one type, row-locked until the transaction ends.
+
+    Taken before counting what is free, so two reservations of the same type queue
+    behind each other rather than both reading the same free quantity (ADR-0038). A
+    catalogue edit to the type waits too, so stock cannot change under a reservation.
+    Ordered by id so every caller locks in the same order and none deadlock.
+    """
+    statement = (
+        select(Equipment)
+        .where(Equipment.equipment_type == equipment_type)
+        .order_by(Equipment.id)
+        .with_for_update()
+    )
+    return list(db.scalars(statement))
+
+
 def save(db: Session, equipment: Equipment) -> Equipment:
     """Commit an added or edited entry and refresh its persisted values."""
     db.add(equipment)
