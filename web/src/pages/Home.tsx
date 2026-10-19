@@ -13,6 +13,7 @@ import BookingProblems from '../components/BookingProblems'
 import EventRequestReview from '../components/EventRequestReview'
 import UnassignedQueue from '../components/UnassignedQueue'
 import EquipmentCatalogue from '../components/EquipmentCatalogue'
+import EquipmentReviewQueue from '../components/EquipmentReviewQueue'
 import VenueBookingDecisions from '../components/VenueBookingDecisions'
 import VenueCalendar from '../components/VenueCalendar'
 import VenueCatalogue from '../components/VenueCatalogue'
@@ -66,6 +67,10 @@ export default function HomePage() {
       <NotificationInbox />
 
       {hasRole('tech_support') && <EquipmentCatalogue />}
+
+      {/* SCRUM-44 and SCRUM-53: the review routes have existed since SCRUM-44 merged
+          with nothing reaching them, so neither story could be shown through the UI. */}
+      {hasRole('tech_support') && <EquipmentReviewQueue />}
 
       {/* SCRUM-55: coordinators search active venues by event requirements. */}
       {hasRole('coordinator') && <VenueSearch />}
