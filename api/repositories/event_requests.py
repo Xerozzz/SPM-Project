@@ -130,13 +130,12 @@ def list_active_for_lead(db: Session) -> list[ActiveRow]:
     return list(db.execute(statement).tuples())
 
 
-def list_drafts_for_organisation(db: Session, organisation_id: uuid.UUID) -> list[EventRequest]:
-    """Drafts created by organisers in this organisation, newest first."""
+def list_drafts_for_organiser(db: Session, organiser_id: uuid.UUID) -> list[EventRequest]:
+    """SCRUM-112: this organiser's own drafts, newest first (ADR-0039)."""
     statement = (
         select(EventRequest)
-        .join(User, EventRequest.organiser_id == User.id)
         .where(
-            User.organisation_id == organisation_id,
+            EventRequest.organiser_id == organiser_id,
             EventRequest.status == EventStatus.DRAFT,
         )
         .order_by(EventRequest.created_at.desc())
@@ -145,7 +144,11 @@ def list_drafts_for_organisation(db: Session, organisation_id: uuid.UUID) -> lis
 
 
 def list_calendar_for_organisation(db: Session, organisation_id: uuid.UUID) -> list[EventRequest]:
-    """SCRUM-87: same-organisation VIEW scope (ADR-0009), with usable date ranges."""
+    """SCRUM-87: same-organisation events with usable date ranges.
+
+    SCRUM-112 (ADR-0039): this is the only read organisation membership grants, and its
+    callers expose only the calendar fields; it no longer mirrors event VIEW access.
+    """
     statement = (
         select(EventRequest)
         .join(User, EventRequest.organiser_id == User.id)

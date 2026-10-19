@@ -1,6 +1,6 @@
 # ADR-0009: Derive draft visibility from organiser organisation membership
 
-- **Status:** Proposed
+- **Status:** Proposed — visibility rule superseded by ADR-0039
 - **Date:** 2026-09-14
 - **Deciders:** Sheryl, team review pending
 - **Related stories:** SCRUM-29

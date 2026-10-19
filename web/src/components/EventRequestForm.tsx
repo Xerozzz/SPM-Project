@@ -117,7 +117,6 @@ export default function EventRequestForm({
   /** Everything a successful save has to refresh, wherever it came from. */
   function refreshLists() {
     void queryClient.invalidateQueries({ queryKey: ['event-requests', 'mine', token] })
-    void queryClient.invalidateQueries({ queryKey: ['event-requests', 'drafts', token] })
     void queryClient.invalidateQueries({ queryKey: ['organisation-calendar', token] })
   }
 
