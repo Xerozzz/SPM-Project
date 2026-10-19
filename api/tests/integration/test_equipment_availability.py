@@ -136,8 +136,8 @@ async def test_a_removed_requirement_is_not_checked(
 async def test_reserved_quantity_is_asked_for_the_event_window_and_subtracted(
     db: Session, make_user: MakeUser, make_client: MakeClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Nothing creates reservations until SCRUM-53, so the repository is stood in for to
-    # prove the call site: the window and event id go in, and the answer is subtracted.
+    # The repository is stood in for to prove the call site on its own: the window and
+    # event id go in, and the answer is subtracted. SCRUM-53's tests cover the real query.
     event, _ = planning_event(db, make_user)
     equipment_type = new_type()
     entry(db, equipment_type, 5)
@@ -164,9 +164,9 @@ async def test_reserved_quantity_is_asked_for_the_event_window_and_subtracted(
 
 
 @pytest.mark.story("SCRUM-52")
-def test_nothing_is_reserved_until_scrum_53(db: Session) -> None:
+def test_nothing_is_reserved_for_a_type_without_reservations(db: Session) -> None:
     now = datetime.now(UTC)
-    assert catalogue_repo.reserved_quantity(db, "Projector", now, now, uuid.uuid4()) == 0
+    assert catalogue_repo.reserved_quantity(db, new_type(), now, now, uuid.uuid4()) == 0
 
 
 # --------------------------------------------------------------------------- AC3
