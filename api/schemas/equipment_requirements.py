@@ -1,14 +1,16 @@
-"""API contracts for an event's equipment requirements (SCRUM-43, SCRUM-44, SCRUM-52).
+"""API contracts for an event's equipment requirements (SCRUM-43, SCRUM-44, SCRUM-52, SCRUM-53).
 
 Mirrors domain/equipment_requirement.py.
 """
 
 import uuid
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from domain.equipment_requirement import RequirementReview
+from domain.equipment_reservation import ReservationState
 from models.equipment_requirement_change import RequirementAction
 
 
@@ -90,6 +92,30 @@ class RequirementAvailabilityRead(BaseModel):
     reserved: int
     available: int
     result: RequirementReview
+
+
+class ReservationCreate(BaseModel):
+    """SCRUM-53: how many to reserve. Left out, as much as is needed and free.
+
+    Strict so that `true` is not read as a quantity of one; below one is a 422 here,
+    while above what is needed or free is the service's decision.
+    """
+
+    quantity: Annotated[int, Field(strict=True, ge=1)] | None = None
+
+
+class ReservationRead(BaseModel):
+    """SCRUM-53 AC7: what was reserved just now, and where the requirement stands."""
+
+    requirement_id: uuid.UUID
+    event_request_id: uuid.UUID
+    equipment_type: str
+    reserved_now: int
+    total_reserved: int
+    outstanding: int
+    state: ReservationState
+    event_start_at: datetime
+    event_end_at: datetime
 
 
 class RequirementChangeRead(BaseModel):
