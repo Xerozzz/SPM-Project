@@ -1,4 +1,4 @@
-"""Clarification messages exchanged while an event request is reviewed (SCRUM-30)."""
+"""One internal coordinator note retained with an event request (SCRUM-106)."""
 
 import uuid
 from datetime import datetime

@@ -1,4 +1,4 @@
-# ADR-0036: Plan from the maintained equipment requirements, not the organiser's string
+# ADR-0037: Plan from the maintained equipment requirements, not the organiser's string
 
 - **Status:** Proposed
 - **Date:** 2026-10-18

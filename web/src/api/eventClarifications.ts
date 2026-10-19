@@ -42,16 +42,3 @@ export async function requestClarification(
   })
   return readClarification(response)
 }
-
-export async function respondToClarification(
-  token: string,
-  eventRequestId: string,
-  message: string,
-): Promise<EventClarification> {
-  const response = await fetch(`/api/event-requests/${eventRequestId}/clarifications/responses`, {
-    method: 'POST',
-    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
-  })
-  return readClarification(response)
-}
