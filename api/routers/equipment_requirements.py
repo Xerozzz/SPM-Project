@@ -1,5 +1,6 @@
 """The assigned Coordinator maintains an event's equipment requirements (SCRUM-43),
-Technical Support Staff review them (SCRUM-44), and both can check availability (SCRUM-52)."""
+Technical Support Staff review them (SCRUM-44), both can check availability (SCRUM-52),
+and Technical Support Staff reserve against them (SCRUM-53)."""
 
 import uuid
 from dataclasses import asdict
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.dependencies import EventAccess, get_current_user, require_event_access, require_role
 from domain.equipment_requirement import RequirementFields
+from domain.equipment_reservation import ReservationRefusal
 from domain.roles import Role
 from models.event_request import EventRequest
 from schemas.equipment_requirements import (
@@ -22,9 +24,12 @@ from schemas.equipment_requirements import (
     RequirementRead,
     RequirementReviewUpdate,
     RequirementUpdate,
+    ReservationCreate,
+    ReservationRead,
 )
 from schemas.event_requests import FieldProblemRead
 from services import equipment_requirements as service
+from services import equipment_reservations as reservation_service
 
 router = APIRouter(prefix="/event-requests", tags=["equipment-requirements"])
 # SCRUM-44 works across events rather than inside one, so it has its own prefix.
@@ -48,6 +53,15 @@ TechSupport = Annotated[dict[str, object], Depends(require_role(Role.TECH_SUPPOR
 Db = Annotated[Session, Depends(get_db)]
 
 _AVAILABILITY_FIELDS = {"id", "equipment_type", "quantity", "technical_requirements"}
+
+# SCRUM-53: asking for more than the requirement needs is a bad request (422); asking for
+# more than exists, or finding nothing left to take, conflicts with what is held (409).
+_REFUSAL_STATUS = {
+    ReservationRefusal.ABOVE_OUTSTANDING: 422,
+    ReservationRefusal.ABOVE_FREE: status.HTTP_409_CONFLICT,
+    ReservationRefusal.NOTHING_OUTSTANDING: status.HTTP_409_CONFLICT,
+    ReservationRefusal.NOTHING_FREE: status.HTTP_409_CONFLICT,
+}
 
 
 def _user_id(user: dict[str, object]) -> uuid.UUID:
@@ -187,3 +201,32 @@ def review_requirement(
     except service.ReviewNotAllowedError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, "Event is not in planning") from exc
     return RequirementRead.model_validate(reviewed)
+
+
+@router.post(
+    "/{request_id}/equipment-requirements/{requirement_id}/reserve",
+    response_model=ReservationRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def reserve_equipment(
+    request_id: uuid.UUID,
+    requirement_id: uuid.UUID,
+    user: TechSupport,
+    db: Db,
+    body: ReservationCreate | None = None,
+) -> ReservationRead:
+    """SCRUM-53: reserve what is needed and free; 404 missing, 409 outside planning or short."""
+    asked = body.quantity if body else None
+    try:
+        outcome = reservation_service.reserve(
+            db, request_id, requirement_id, asked, _user_id(user), datetime.now(UTC)
+        )
+    except service.RequirementNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipment requirement not found") from exc
+    except service.ReviewNotAllowedError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Event is not in planning") from exc
+    except reservation_service.EventWindowMissingError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Event has no start or end time") from exc
+    except reservation_service.ReservationRefusedError as exc:
+        raise HTTPException(_REFUSAL_STATUS[exc.refusal], exc.refusal.value) from exc
+    return ReservationRead(**asdict(outcome))

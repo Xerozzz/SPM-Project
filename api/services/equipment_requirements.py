@@ -163,8 +163,8 @@ def remove(
     """AC7: take a requirement out of the live set without losing that it was ever asked for.
 
     The row stays, so the event's history still shows it and the same type can be asked
-    for again later. AC6's reservation question does not arise yet: SCRUM-53 is what
-    creates reservations, and none exist.
+    for again later. Any reservation for it is left in place: flagging it (AC6) is a
+    later story, and releasing it is Event Change Management's work.
     """
     requirement = _live_requirement(db, event, requirement_id)
     requirement.removed_at = now
