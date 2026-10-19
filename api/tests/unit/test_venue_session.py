@@ -17,7 +17,8 @@ def problems(
 ) -> list[tuple[str, str]]:
     start = EVENT_START + timedelta(hours=1) if start is None else start
     end = EVENT_START + timedelta(hours=2) if end is None else end
-    return [(p.field, p.reason) for p in session_problems(label, start, end, EVENT_START, EVENT_END)]
+    found = session_problems(label, start, end, EVENT_START, EVENT_END)
+    return [(p.field, p.reason) for p in found]
 
 
 @pytest.mark.story("SCRUM-111")
@@ -39,7 +40,7 @@ def test_blank_and_missing_labels_are_rejected() -> None:
 
 @pytest.mark.story("SCRUM-111")
 def test_naive_datetimes_are_rejected() -> None:
-    naive = datetime(2026, 11, 10, 10, 0)
+    naive = datetime(2026, 11, 10, 10, 0, tzinfo=UTC).replace(tzinfo=None)
     assert ("start_at", "must include a time zone") in problems(start=naive)
     assert ("end_at", "must include a time zone") in problems(end=naive)
 

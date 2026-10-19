@@ -30,7 +30,10 @@ def upgrade() -> None:
         """
         UPDATE venue_bookings
         SET session_label = COALESCE(
-            (SELECT name FROM event_requests WHERE event_requests.id = venue_bookings.event_request_id),
+            (
+                SELECT name FROM event_requests
+                WHERE event_requests.id = venue_bookings.event_request_id
+            ),
             'Session'
         )
         WHERE session_label IS NULL

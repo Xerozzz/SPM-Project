@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from domain.event_status import EventStatus
 from domain.venue_booking import BookingStatus
 from models.event_request import EventRequest
-from models.user import User
 from models.venue_booking import VenueBooking
 from tests.integration.test_submit_event_request import MakeClient, MakeUser
 from tests.integration.test_submit_venue_booking import (
@@ -125,9 +124,7 @@ async def test_invalid_session_or_wrong_state_creates_no_booking(
 
     async with make_client(coordinator) as client:
         blank = await _submit_session(client, event, venue.id, "   ", start, end)
-        reversed_period = await _submit_session(
-            client, event, venue.id, "Backwards", end, start
-        )
+        reversed_period = await _submit_session(client, event, venue.id, "Backwards", end, start)
         outside = await _submit_session(
             client,
             event,
@@ -220,6 +217,7 @@ async def test_same_venue_session_overlap_is_refused(
 
     _confirm_session(db, first.json()["id"])
     async with make_client(staff) as client:
+        assert event.start_at is not None
         clash = await client.post(
             f"/api/venue-bookings/{parallel.json()['id']}/approve",
             json={"expires_at": (event.start_at - timedelta(days=1)).isoformat()},
@@ -231,6 +229,7 @@ async def test_same_venue_session_overlap_is_refused(
         )
         assert overlapping_same_venue.status_code == 201
     async with make_client(staff) as client:
+        assert event.start_at is not None
         refused = await client.post(
             f"/api/venue-bookings/{overlapping_same_venue.json()['id']}/approve",
             json={"expires_at": (event.start_at - timedelta(days=1)).isoformat()},
@@ -256,6 +255,8 @@ async def test_staff_decision_coordinator_list_and_calendar_agree(
         listed = await list_venue_bookings(client, event)
     async with make_client(staff) as client:
         queue = await client.get("/api/venue-bookings")
+        assert event.start_at is not None
+        assert event.end_at is not None
         calendar = await client.get(
             "/api/venue-calendar",
             params={"start_at": event.start_at.isoformat(), "end_at": event.end_at.isoformat()},
