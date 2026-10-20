@@ -24,6 +24,9 @@ export default function VenueBookingRequest({ event }: { event: EventRequest }) 
   const [sessionLabel, setSessionLabel] = useState('')
   const [sessionStart, setSessionStart] = useState(event.start_at ?? '')
   const [sessionEnd, setSessionEnd] = useState(event.end_at ?? '')
+  // SCRUM-116: the affected arrangement a new request would replace. Its session and
+  // period are carried over and locked, only the venue is chosen again.
+  const [replacing, setReplacing] = useState<VenueBooking | null>(null)
   const venueBookings = useQuery({
     queryKey: ['venue-bookings', event.id],
     queryFn: () => listVenueBookings(token ?? '', event.id),
@@ -45,8 +48,10 @@ export default function VenueBookingRequest({ event }: { event: EventRequest }) 
         session_label: sessionLabel,
         start_at: new Date(sessionStart).toISOString(),
         end_at: new Date(sessionEnd).toISOString(),
+        ...(replacing ? { replaces_booking_id: replacing.id } : {}),
       }),
     onSuccess: () => {
+      setReplacing(null)
       void queryClient.invalidateQueries({ queryKey: ['venue-bookings', event.id] })
     },
   })
@@ -72,7 +77,28 @@ export default function VenueBookingRequest({ event }: { event: EventRequest }) 
   return (
     <div className="mt-3 border-t border-slate-200 pt-3">
       {venueBookings.data.length > 0 && (
-        <ExistingVenueBookings bookings={venueBookings.data} venues={venues.data ?? []} />
+        <ExistingVenueBookings
+          bookings={venueBookings.data}
+          venues={venues.data ?? []}
+          onReplace={(booking) => {
+            setReplacing(booking)
+            setSessionLabel(booking.session_label)
+            setSessionStart(booking.start_at)
+            setSessionEnd(booking.end_at)
+            setVenueId('')
+            submit.reset()
+          }}
+        />
+      )}
+      {replacing && (
+        <div role="note" className="mb-2 rounded bg-sky-50 p-2 text-sm text-sky-900">
+          Requesting a replacement for {replacing.session_label}. Choose another venue. The session
+          and its times stay the same, and the current booking is kept until a replacement is
+          adopted.{' '}
+          <button type="button" onClick={() => setReplacing(null)} className="underline">
+            Cancel replacement
+          </button>
+        </div>
       )}
       <VenueBookingForm
         venueId={venueId}
@@ -92,6 +118,7 @@ export default function VenueBookingRequest({ event }: { event: EventRequest }) 
         isSuitabilityPending={suitability.isPending}
         isSubmitPending={submit.isPending}
         hasSubmitted={submit.data !== undefined}
+        sessionLocked={replacing !== null}
         onSubmit={() => submit.mutate()}
         submittedStatus={submit.data?.status}
       />
@@ -116,6 +143,7 @@ function VenueBookingForm({
   hasSubmitted,
   onSubmit,
   submittedStatus,
+  sessionLocked = false,
 }: {
   venueId: string
   onVenueChange: (value: string) => void
@@ -133,6 +161,8 @@ function VenueBookingForm({
   hasSubmitted: boolean
   onSubmit: () => void
   submittedStatus: string | undefined
+  /** SCRUM-116: a replacement keeps the original session and period. */
+  sessionLocked?: boolean
 }) {
   return (
     <>
@@ -157,6 +187,7 @@ function VenueBookingForm({
         <input
           value={sessionLabel}
           onChange={(change) => onSessionLabelChange(change.target.value)}
+          disabled={sessionLocked}
           placeholder="Morning workshop"
           maxLength={120}
           className="rounded border border-slate-300 px-2 py-1.5"
@@ -169,6 +200,7 @@ function VenueBookingForm({
             type="datetime-local"
             value={toLocalInput(sessionStart)}
             onChange={(change) => onSessionStartChange(fromLocalInput(change.target.value))}
+            disabled={sessionLocked}
             className="rounded border border-slate-300 px-2 py-1.5"
           />
         </label>
@@ -178,6 +210,7 @@ function VenueBookingForm({
             type="datetime-local"
             value={toLocalInput(sessionEnd)}
             onChange={(change) => onSessionEndChange(fromLocalInput(change.target.value))}
+            disabled={sessionLocked}
             className="rounded border border-slate-300 px-2 py-1.5"
           />
         </label>
@@ -221,11 +254,22 @@ function VenueBookingForm({
 function ExistingVenueBookings({
   bookings,
   venues,
+  onReplace,
 }: {
   bookings: VenueBooking[]
   venues: Venue[]
+  onReplace: (booking: VenueBooking) => void
 }) {
   const venueNames = new Map(venues.map((venue) => [venue.id, venue.name]))
+  const byId = new Map(bookings.map((booking) => [booking.id, booking]))
+  // SCRUM-116 AC6: a rejected or expired replacement no longer counts, so another can be
+  // requested. The API checks the same thing.
+  const liveReplacementOf = (booking: VenueBooking) =>
+    bookings.find(
+      (other) =>
+        other.replaces_booking_id === booking.id &&
+        ['pending', 'tentative', 'confirmed'].includes(other.status),
+    )
   return (
     <div className="mb-3 text-sm">
       <h4 className="font-medium">Existing venue booking requests</h4>
@@ -270,11 +314,65 @@ function ExistingVenueBookings({
                 contact them to agree what moves.
               </p>
             )}
+            <ReplacementLink
+              booking={booking}
+              original={
+                booking.replaces_booking_id ? byId.get(booking.replaces_booking_id) : undefined
+              }
+              replacement={liveReplacementOf(booking)}
+              venueNames={venueNames}
+            />
+            {booking.conflict &&
+              ['confirmed', 'tentative'].includes(booking.status) &&
+              !liveReplacementOf(booking) && (
+                <button
+                  type="button"
+                  onClick={() => onReplace(booking)}
+                  aria-label={`Find a replacement for ${booking.session_label}`}
+                  className="mt-2 rounded border border-slate-300 px-2 py-1"
+                >
+                  Find a replacement
+                </button>
+              )}
           </li>
         ))}
       </ul>
     </div>
   )
+}
+
+/** SCRUM-116 AC3: the traceable old/new link, shown on both sides. */
+function ReplacementLink({
+  booking,
+  original,
+  replacement,
+  venueNames,
+}: {
+  booking: VenueBooking
+  original: VenueBooking | undefined
+  replacement: VenueBooking | undefined
+  venueNames: Map<string, string>
+}) {
+  const name = (venueId: string) => venueNames.get(venueId) ?? venueId
+  if (booking.replaces_booking_id) {
+    return (
+      <p className="mt-2 text-sky-900">
+        Replacement for{' '}
+        {original
+          ? `${original.session_label} at ${name(original.venue_id)}`
+          : 'an earlier request'}
+        .
+      </p>
+    )
+  }
+  if (replacement) {
+    return (
+      <p className="mt-2 text-sky-900">
+        Replacement requested at {name(replacement.venue_id)} ({replacement.status}).
+      </p>
+    )
+  }
+  return null
 }
 
 function formatBookingTime(value: string) {

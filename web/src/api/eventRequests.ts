@@ -128,6 +128,8 @@ export interface VenueBooking {
   effective_end_at?: string | null
   /** SCRUM-83 AC2: when a tentative hold on this request ends. */
   expires_at?: string | null
+  /** SCRUM-116 AC3: the affected arrangement this request replaces, if it is one. */
+  replaces_booking_id?: string | null
   /**
    * SCRUM-89 AC4: what this booking now clashes with at its venue, or null when nothing.
    * Derived by the API on every read, so it appears and clears on its own as the venue's
@@ -532,7 +534,13 @@ export async function submitVenueBooking(
   token: string,
   eventId: string,
   venueId: string,
-  session: { session_label: string; start_at: string; end_at: string },
+  session: {
+    session_label: string
+    start_at: string
+    end_at: string
+    /** SCRUM-116: set when this request replaces an affected arrangement. */
+    replaces_booking_id?: string
+  },
 ): Promise<VenueBookingSubmission> {
   return readBookingResponse(
     await fetch(`/api/event-requests/${eventId}/venue-bookings`, {

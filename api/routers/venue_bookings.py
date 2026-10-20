@@ -113,6 +113,7 @@ def submit_venue_booking(
             body.session_label,
             body.start_at,
             body.end_at,
+            body.replaces_booking_id,
         )
     except service.InvalidBookingRequestError as exc:
         raise _validation_error(exc) from exc
@@ -124,6 +125,7 @@ def submit_venue_booking(
         end_at=booking.end_at,
         status=booking.status,
         suitability=SuitabilityRead.model_validate(suitability),
+        replaces_booking_id=booking.replaces_booking_id,
     )
 
 

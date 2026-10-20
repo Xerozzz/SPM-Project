@@ -1,6 +1,6 @@
 import { expect, type Page, test } from '@playwright/test'
 
-// SCRUM-81: Venue Staff record a closure over a live venue hold. The closure is saved,
+// SCRUM-81 and SCRUM-116: Venue Staff record a closure over a live venue hold. The closure is saved,
 // the affected arrangement is listed, nothing is cancelled, and the assigned
 // Coordinator gets a closure-impact notification.
 //
@@ -96,6 +96,19 @@ test('a closure over a live hold is saved, listed and notified', async ({ page }
   // AC2, AC3: the existing booking list shows the arrangement needs action.
   const card = page.getByRole('article').filter({ hasText: 'Careers Fair' }).first()
   await expect(card.getByText(/Needs attention\. The venue is closed/)).toBeVisible()
+
+  // SCRUM-116 AC1 to AC3: start a linked replacement at another venue from the affected
+  // arrangement. The session and its times are carried over.
+  await card.getByRole('button', { name: 'Find a replacement for Closure impact session' }).click()
+  await expect(card.getByRole('note')).toContainText('Requesting a replacement')
+  await card.getByLabel('Active venue').selectOption({ label: 'SCIS Seminar Room 2-1' })
+  await card.getByRole('button', { name: 'Submit booking request' }).click()
+  await expect(
+    card.getByText(`Replacement for Closure impact session at ${VENUE_NAME}.`),
+  ).toBeVisible()
+  await expect(
+    card.getByText('Replacement requested at SCIS Seminar Room 2-1 (pending).'),
+  ).toBeVisible()
   await page.getByRole('button', { name: 'Sign out' }).click()
 
   // Clean up so later specs see the seeded Careers Fair without this closure. Removing

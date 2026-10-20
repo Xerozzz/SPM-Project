@@ -6,7 +6,13 @@ import uuid
 from datetime import datetime
 
 from core.database import Session
-from domain import venue_booking, venue_hold, venue_session, venue_suitability
+from domain import (
+    venue_booking,
+    venue_hold,
+    venue_replacement,
+    venue_session,
+    venue_suitability,
+)
 from domain.booking_conflict import BookedPeriod, UnavailablePeriod, ensure_no_conflict
 from domain.event_request import (
     EQUIPMENT_REQUIREMENT_FACILITIES,
@@ -24,6 +30,7 @@ from repositories import equipment_requirements as requirement_repo
 from repositories import event_requests as event_repo
 from repositories import venue_availability as booking_repo
 from repositories import venues as venue_repo
+from services import venue_buffer_review as buffer_review
 from services import venue_hold_expiry
 
 
@@ -98,7 +105,14 @@ def submit(
     session_label: str,
     start_at: datetime,
     end_at: datetime,
+    replaces_booking_id: uuid.UUID | None = None,
 ) -> tuple[VenueBooking, venue_suitability.SuitabilityResult]:
+    """SCRUM-78/SCRUM-111: a new Pending request for one session of the event.
+
+    SCRUM-116: with `replaces_booking_id` it is a replacement for an affected arrangement
+    of the same event and session. The event row lock taken here also serialises two
+    replacements for the same arrangement, so only one can be in progress (AC6).
+    """
     locked = event_repo.get_for_update(db, event.id)
     assert locked is not None and locked.coordinator_id is not None
     assert locked.start_at is not None and locked.end_at is not None
@@ -113,6 +127,8 @@ def submit(
     )
     if problems:
         raise InvalidBookingRequestError(problems)
+    if replaces_booking_id is not None:
+        _ensure_replaceable(db, locked, replaces_booking_id, session_label, start_at, end_at, now)
     venue = venue_repo.get(db, venue_id)
     assert venue is not None  # evaluate() has already refused an unknown venue.
     effective_start, effective_end = effective_interval(start_at, end_at, _buffers(venue))
@@ -126,8 +142,42 @@ def submit(
         effective_start_at=effective_start,
         effective_end_at=effective_end,
         status=BookingStatus.PENDING,
+        replaces_booking_id=replaces_booking_id,
     )
     return booking_repo.save_booking(db, booking), suitability
+
+
+def _ensure_replaceable(
+    db: Session,
+    event: EventRequest,
+    original_id: uuid.UUID,
+    session_label: str,
+    start_at: datetime,
+    end_at: datetime,
+    now: datetime,
+) -> None:
+    """SCRUM-116 AC1, AC2, AC6: the request may replace this arrangement.
+
+    "Needs attention" is the same derived answer the Coordinator's list shows (SCRUM-89,
+    SCRUM-81), so the button and this check can never disagree.
+    """
+    row = booking_repo.get_booking(db, original_id)
+    original = None
+    if row is not None:
+        original = venue_replacement.Original(
+            event_request_id=row.event_request_id,
+            status=row.status,
+            session_label=row.session_label,
+            start_at=row.start_at,
+            end_at=row.end_at,
+            needs_attention=row.id in buffer_review.problems_by_booking(db, [row], now),
+            has_live_replacement=booking_repo.has_live_replacement(db, row.id),
+        )
+    problems = venue_replacement.replacement_problems(
+        original, event.id, session_label, start_at, end_at
+    )
+    if problems:
+        raise InvalidBookingRequestError(problems)
 
 
 def list_for_event(db: Session, event: EventRequest) -> list[VenueBooking]:

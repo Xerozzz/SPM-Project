@@ -267,3 +267,14 @@ def due_holds_for_update(db: Session, now: datetime) -> list[tuple[VenueBooking,
         .with_for_update(skip_locked=True, of=VenueBooking)
     )
     return list(db.execute(statement).tuples())
+
+
+def has_live_replacement(db: Session, booking_id: uuid.UUID) -> bool:
+    """SCRUM-116 AC6: is a replacement for this arrangement still in progress?"""
+    statement = select(VenueBooking.id).where(
+        VenueBooking.replaces_booking_id == booking_id,
+        VenueBooking.status.in_(
+            [BookingStatus.PENDING, BookingStatus.TENTATIVE, BookingStatus.CONFIRMED]
+        ),
+    )
+    return db.scalars(statement).first() is not None

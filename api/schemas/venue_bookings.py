@@ -20,6 +20,8 @@ class VenueBookingCreate(BaseModel):
     session_label: str = Field(max_length=MAX_SESSION_LABEL_LENGTH)
     start_at: AwareDatetime
     end_at: AwareDatetime
+    # SCRUM-116: set when this request replaces an affected arrangement of the event.
+    replaces_booking_id: uuid.UUID | None = None
 
     @field_validator("start_at", "end_at")
     @classmethod
@@ -48,6 +50,8 @@ class VenueBookingSubmissionRead(BaseModel):
     end_at: datetime
     status: BookingStatus
     suitability: SuitabilityRead
+    # SCRUM-116: the arrangement this request replaces, if any.
+    replaces_booking_id: uuid.UUID | None = None
 
 
 class VenueBookingRead(BaseModel):
@@ -71,6 +75,8 @@ class VenueBookingRead(BaseModel):
     effective_end_at: datetime | None = None
     # SCRUM-83 AC2: when a tentative hold on this request ends.
     expires_at: datetime | None = None
+    # SCRUM-116 AC3: the arrangement this request replaces, so old and new stay linked.
+    replaces_booking_id: uuid.UUID | None = None
     # SCRUM-89 AC4: set when the venue's current buffers mean this booking can no longer
     # stand beside everything else at that venue. Derived on every read rather than
     # stored, so it appears and disappears on its own as the venue changes (AC3, AC7).

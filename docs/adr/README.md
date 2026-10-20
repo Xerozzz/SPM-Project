@@ -54,6 +54,7 @@ someone else made two weeks ago.
 | [0042](0042-confirmed-events-refuse-ordinary-updates.md) | Confirmed events refuse ordinary updates | Proposed |
 | [0043](0043-decide-change-requests-apply-event-fields-only.md) | Deciding a change request applies the event fields and flags arrangements | Proposed |
 | [0044](0044-record-closures-over-commitments-and-report-impact.md) | Record venue closures over live commitments and report their impact | Proposed |
+| [0045](0045-link-replacement-venue-requests.md) | Link a replacement venue request to the arrangement it replaces | Proposed |
 
 ## When to write one
 
