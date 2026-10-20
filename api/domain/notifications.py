@@ -27,6 +27,8 @@ class NotificationType(StrEnum):
     # so the owning organiser can tell without opening the event.
     REQUEST_APPROVED = "request_approved"
     REQUEST_REJECTED = "request_rejected"
+    # SCRUM-81 AC4: a venue closure now covers one of your event's arrangements.
+    VENUE_CLOSURE_IMPACT = "venue_closure_impact"
 
 
 class NotificationSource(StrEnum):
@@ -54,3 +56,7 @@ class NotificationSource(StrEnum):
     # same request (reject, resubmit, reject again) is a new decision with a new
     # decision time, so the source_id carries the decision time to stay distinct.
     EVENT_DECISION = "event_decision"
+    # SCRUM-81: one closure period hitting one arrangement. The source_id is a stable
+    # key of (closure, period, booking), so re-saving the same closure does not notify
+    # twice, while moving it to a new period does (domain.venue_closure_impact).
+    VENUE_CLOSURE = "venue_closure"

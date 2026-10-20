@@ -68,6 +68,22 @@ export interface VenueUnavailability {
   reason: string
 }
 
+/** SCRUM-81: one live booking or hold a saved closure runs into. */
+export interface AffectedArrangement {
+  booking_id: string
+  event_request_id: string
+  event_name: string | null
+  session_label: string
+  start_at: string
+  end_at: string
+  status: string
+}
+
+/** A saved closure plus what it affects. Nothing is cancelled, it only reports. */
+export interface SavedVenueUnavailability extends VenueUnavailability {
+  affected: AffectedArrangement[]
+}
+
 export interface VenueUnavailabilityInput {
   starts_at: string | null
   ends_at: string | null
@@ -192,20 +208,19 @@ async function reasonFrom(response: Response): Promise<string | null> {
   }
 }
 
-async function readUnavailability(response: Response): Promise<VenueUnavailability> {
+async function readUnavailability(response: Response): Promise<SavedVenueUnavailability> {
   if (response.status === 422) {
     const body = (await response.json()) as { detail: unknown }
     const problems = asVenueProblems(body.detail)
     if (problems !== null) throw new VenueUnavailabilityRejectedError(problems)
   }
   if (!response.ok) {
-    // A 409 carries the reason as a sentence: the venue is inactive, or a confirmed
-    // booking is in the way. Falling through to the status code alone threw away the
+    // A 409 carries the reason as a sentence, for example that the venue is inactive. Falling through to the status code alone threw away the
     // only part the person reading the screen can act on.
     const reason = await reasonFrom(response)
     throw new Error(reason ?? `The unavailability period could not be saved (${response.status})`)
   }
-  return (await response.json()) as VenueUnavailability
+  return (await response.json()) as SavedVenueUnavailability
 }
 
 export async function listVenueUnavailabilities(
@@ -223,7 +238,7 @@ export async function createVenueUnavailability(
   token: string,
   venueId: string,
   input: VenueUnavailabilityInput,
-): Promise<VenueUnavailability> {
+): Promise<SavedVenueUnavailability> {
   return readUnavailability(
     await fetch(`/api/venues/${venueId}/unavailabilities`, {
       method: 'POST',
@@ -238,7 +253,7 @@ export async function updateVenueUnavailability(
   venueId: string,
   id: string,
   input: VenueUnavailabilityInput,
-): Promise<VenueUnavailability> {
+): Promise<SavedVenueUnavailability> {
   return readUnavailability(
     await fetch(`/api/venues/${venueId}/unavailabilities/${id}`, {
       method: 'PUT',
@@ -298,7 +313,6 @@ export async function searchVenues(token: string, input: VenueSearchInput): Prom
   if (!response.ok) throw new Error(`Could not search venues (${response.status})`)
   return (await response.json()) as Venue[]
 }
-
 
 /** SCRUM-89 AC4: one booking that cannot stand under its venue's current buffers. */
 export interface ProblemBooking {

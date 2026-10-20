@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useState } from 'react'
 
 import {
+  type AffectedArrangement,
   createVenueUnavailability,
   deleteVenueUnavailability,
   listVenueUnavailabilities,
@@ -27,6 +28,8 @@ export default function VenueUnavailabilityManager({ venues }: { venues: Venue[]
   const [error, setError] = useState<string | null>(null)
   const [problems, setProblems] = useState<VenueProblem[]>([])
   const [formVersion, setFormVersion] = useState(0)
+  // SCRUM-81 AC2: what the last saved closure runs into. Cleared on the next action.
+  const [affected, setAffected] = useState<AffectedArrangement[] | null>(null)
   const selectedVenue = venues.find((venue) => venue.id === venueId)
   const queryKey = ['venue-unavailabilities', token, venueId]
   const records = useQuery({
@@ -56,11 +59,16 @@ export default function VenueUnavailabilityManager({ venues }: { venues: Venue[]
       editing
         ? updateVenueUnavailability(token ?? '', venueId, editing.id, input)
         : createVenueUnavailability(token ?? '', venueId, input),
-    onSuccess: saved,
+    onMutate: () => setAffected(null),
+    onSuccess: (result) => {
+      saved()
+      setAffected(result.affected)
+    },
     onError: failed,
   })
   const remove = useMutation({
     mutationFn: (id: string) => deleteVenueUnavailability(token ?? '', venueId, id),
+    onMutate: () => setAffected(null),
     onSuccess: saved,
     onError: failed,
   })
@@ -79,6 +87,7 @@ export default function VenueUnavailabilityManager({ venues }: { venues: Venue[]
           value={venueId}
           onChange={(event) => {
             setVenueId(event.target.value)
+            setAffected(null)
             setEditing(null)
             setError(null)
             setProblems([])
@@ -102,6 +111,28 @@ export default function VenueUnavailabilityManager({ venues }: { venues: Venue[]
           onCancel={() => setEditing(null)}
           onSubmit={(input) => save.mutate(input)}
         />
+      )}
+      {affected && affected.length > 0 && (
+        <div role="status" className="mt-3 rounded bg-amber-50 p-3 text-sm text-amber-900">
+          <p>
+            Closure saved. It affects {affected.length} live{' '}
+            {affected.length === 1 ? 'arrangement' : 'arrangements'}. Nothing was cancelled, and the
+            assigned Coordinators have been notified to replan.
+          </p>
+          <ul className="mt-2 list-disc pl-5">
+            {affected.map((item) => (
+              <li key={item.booking_id}>
+                {item.event_name ?? 'Untitled event'}, {item.session_label} ({item.status}),{' '}
+                {display(item.start_at)} to {display(item.end_at)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {affected && affected.length === 0 && (
+        <p role="status" className="mt-3 text-sm text-green-700">
+          Closure saved. It does not affect any live booking or hold.
+        </p>
       )}
       {venueId && <h3 className="mt-5 text-sm font-medium">Recorded unavailability periods</h3>}
       {records.isError && (

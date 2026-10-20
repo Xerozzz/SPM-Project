@@ -284,13 +284,15 @@ async def test_delete_rejects_an_unknown_closure(
     assert response.json()["detail"] == "Venue unavailability not found"
 
 
-# ----------------------------------- a closure cannot land on a confirmed booking
+# ------------------------------- a closure over a confirmed booking is recorded
+# SCRUM-81 AC1 changed this: the closure used to be refused. A venue that really is shut
+# must be recordable, so it is saved and the booking it hits is reported instead.
 
 
 def confirm_booking(
     db: Session, venue: Venue, make_user: MakeUser, hours_from_anchor: int, length: int = 2
 ) -> VenueBooking:
-    """A confirmed booking at this venue, as the thing a closure must not sit on top of."""
+    """A confirmed booking at this venue, for a closure to run into."""
     coordinator = make_user("coordinator")
     start = _ANCHOR + timedelta(hours=hours_from_anchor)
     end = start + timedelta(hours=length)
@@ -313,26 +315,22 @@ def confirm_booking(
 
 
 @pytest.mark.story("SCRUM-62")
-async def test_a_closure_over_a_confirmed_booking_is_refused(
+@pytest.mark.story("SCRUM-81")
+async def test_a_closure_over_a_confirmed_booking_is_recorded_and_reported(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
-    """Reported from end-to-end testing: the venue was both promised and shut.
-
-    Nothing downstream could resolve it. SCRUM-73 refuses an *approval* that clashes with
-    a closure, but this booking was already approved, so the clash had no owner.
-    """
+    """SCRUM-81 AC1 and AC3: recorded, and the booking it hits is named, not cancelled."""
     venue = make_venue(db)
     booking = confirm_booking(db, venue, make_user, hours_from_anchor=0)
 
     async with make_client(make_user("venue_staff")) as client:
         response = await client.post(f"/api/venues/{venue.id}/unavailabilities", json=body())
 
-    assert response.status_code == 409
-    detail = response.json()["detail"]
-    # Readable by the person being refused, not just by whoever reads the logs.
-    assert "already committed to a confirmed booking" in detail
-    assert str(booking.id) in detail
-    assert db.query(VenueUnavailability).count() == 0
+    assert response.status_code == 201, response.text
+    assert [a["booking_id"] for a in response.json()["affected"]] == [str(booking.id)]
+    assert db.query(VenueUnavailability).count() == 1
+    db.refresh(booking)
+    assert booking.status == BookingStatus.CONFIRMED
 
 
 @pytest.mark.story("SCRUM-62")
@@ -347,6 +345,7 @@ async def test_a_closure_that_misses_every_booking_is_allowed(
         response = await client.post(f"/api/venues/{venue.id}/unavailabilities", json=body())
 
     assert response.status_code == 201, response.text
+    assert response.json()["affected"] == []
 
 
 @pytest.mark.story("SCRUM-62")
@@ -368,16 +367,16 @@ async def test_a_closure_touching_a_booking_end_to_end_is_allowed(
 
 
 @pytest.mark.story("SCRUM-62")
-async def test_a_closure_reaching_into_setup_time_is_refused(
+async def test_a_closure_reaching_into_setup_time_affects_the_booking(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     # SCRUM-82 AC5 from the other side: the booking is widened by the venue's buffers and
     # the closure is not, so a closure that only touches the preparation time still
-    # clashes. Without this the venue would be shut while an event was being set up.
+    # affects it (SCRUM-81 AC2).
     venue = make_venue(db)
     venue.setup_minutes = 60
     db.flush()
-    confirm_booking(db, venue, make_user, hours_from_anchor=3)
+    booking = confirm_booking(db, venue, make_user, hours_from_anchor=3)
 
     async with make_client(make_user("venue_staff")) as client:
         # The event runs from +3h, so with an hour of setup the venue is occupied from
@@ -387,7 +386,8 @@ async def test_a_closure_reaching_into_setup_time_is_refused(
             json=body(starts_at=_utc(1), ends_at=_utc(3)),
         )
 
-    assert response.status_code == 409, response.text
+    assert response.status_code == 201, response.text
+    assert [a["booking_id"] for a in response.json()["affected"]] == [str(booking.id)]
 
 
 @pytest.mark.story("SCRUM-62")
@@ -405,34 +405,32 @@ async def test_a_pending_request_does_not_stop_a_closure(
         response = await client.post(f"/api/venues/{venue.id}/unavailabilities", json=body())
 
     assert response.status_code == 201, response.text
+    assert response.json()["affected"] == []
 
 
 @pytest.mark.story("SCRUM-62")
-async def test_a_closure_cannot_be_edited_onto_a_confirmed_booking(
+@pytest.mark.story("SCRUM-81")
+async def test_a_closure_edited_onto_a_confirmed_booking_reports_it(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
-    """Otherwise `update` is the way round `create`'s check.
-
-    Record a closure somewhere clear, then move it on top of a confirmed booking and the
-    venue ends up both promised and shut by the back door.
-    """
+    """SCRUM-81 AC6: moving a closure works out its impact again for the new period."""
     venue = make_venue(db)
     booking = confirm_booking(db, venue, make_user, hours_from_anchor=10)
 
     async with make_client(make_user("venue_staff")) as client:
         created = await client.post(f"/api/venues/{venue.id}/unavailabilities", json=body())
         assert created.status_code == 201, created.text
+        assert created.json()["affected"] == []
         edited = await client.put(
             f"/api/venues/{venue.id}/unavailabilities/{created.json()['id']}",
             json=body(starts_at=_utc(10), ends_at=_utc(12)),
         )
 
-    assert edited.status_code == 409
-    assert str(booking.id) in edited.json()["detail"]
-    # Refused means unchanged, not partly applied.
+    assert edited.status_code == 200, edited.text
+    assert [a["booking_id"] for a in edited.json()["affected"]] == [str(booking.id)]
     db.expire_all()
     stored = db.query(VenueUnavailability).one()
-    assert stored.starts_at == _ANCHOR
+    assert stored.starts_at == _ANCHOR + timedelta(hours=10)
 
 
 @pytest.mark.story("SCRUM-62")
