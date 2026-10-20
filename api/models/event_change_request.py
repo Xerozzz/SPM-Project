@@ -3,7 +3,7 @@
 One request holds the reason and who asked when; each item is one changed value with the
 value it would replace (AC3). Values are JSONB because they are dates, numbers, text or a
 whole equipment line, and the item says which. Nothing here is applied to the event:
-SCRUM-47 decides and applies a request.
+SCRUM-47 decides a request and records what its approval applied.
 """
 
 import uuid
@@ -45,6 +45,12 @@ class EventChangeRequest(Base):
     # item's current value, with the event when deciding, so a stale request is caught.
     event_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # SCRUM-47: who decided, when and why. Null while the request is pending.
+    decided_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decision_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     items: Mapped[list["EventChangeItem"]] = relationship(
         order_by="EventChangeItem.position", cascade="all, delete-orphan"
@@ -69,3 +75,6 @@ class EventChangeItem(Base):
     field: Mapped[str] = mapped_column(String(60), nullable=False)
     current_value: Mapped[object | None] = mapped_column(JSONB, nullable=True)
     proposed_value: Mapped[object | None] = mapped_column(JSONB, nullable=True)
+    # SCRUM-47: applied, or needs replanning (domain.change_decision.ItemOutcome). Null
+    # until the request is approved.
+    outcome: Mapped[str | None] = mapped_column(String(30), nullable=True)

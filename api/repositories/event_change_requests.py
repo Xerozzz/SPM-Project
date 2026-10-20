@@ -54,3 +54,15 @@ def save(db: Session, change: EventChangeRequest) -> EventChangeRequest:
         raise
     db.refresh(change)
     return change
+
+
+def get_for_update(db: Session, change_id: uuid.UUID) -> EventChangeRequest | None:
+    """SCRUM-47: the request with its items, locked so two decisions cannot both apply."""
+    statement = (
+        select(EventChangeRequest)
+        .options(selectinload(EventChangeRequest.items))
+        .where(EventChangeRequest.id == change_id)
+        .with_for_update(of=EventChangeRequest)
+        .execution_options(populate_existing=True)
+    )
+    return db.scalars(statement).first()

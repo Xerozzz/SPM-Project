@@ -11,6 +11,7 @@ Stories add transitions here as they land, each with its own tests:
     SCRUM-31  submitted -> approved | rejected        (review and decide)
     SCRUM-30  submitted -> clarification_requested    (request clarification)
     SCRUM-35  allowed_actions: what a status permits
+    SCRUM-47  confirmed -> approved                   (an approved change reopens planning)
 
 SCRUM-34 pre-declares the `CONFIRMED` value below, ahead of any story landing the
 transition into it: coordinator assignment needs to ask "does this coordinator already
@@ -39,6 +40,7 @@ class EventAction(StrEnum):
     SUBMIT = "submit"
     APPROVE = "approve"
     REJECT = "reject"
+    REPLAN = "replan"
 
 
 class InvalidTransitionError(Exception):
@@ -66,6 +68,7 @@ _ALLOWED_TRANSITIONS: dict[tuple[EventStatus, EventStatus], EventAction] = {
     (EventStatus.SUBMITTED, EventStatus.APPROVED): EventAction.APPROVE,
     (EventStatus.SUBMITTED, EventStatus.REJECTED): EventAction.REJECT,
     (EventStatus.REJECTED, EventStatus.SUBMITTED): EventAction.SUBMIT,
+    (EventStatus.CONFIRMED, EventStatus.APPROVED): EventAction.REPLAN,
 }
 
 
@@ -89,6 +92,17 @@ def approve(current: EventStatus) -> EventStatus:
 def reject(current: EventStatus) -> EventStatus:
     """SCRUM-31: a coordinator returns a submitted request with a reason."""
     return transition(current, EventStatus.REJECTED)
+
+
+def replan(current: EventStatus) -> EventStatus:
+    """SCRUM-47 AC5: an approved significant change returns a Confirmed event to planning.
+
+    Checked by action, not only by target: Submitted -> Approved is the review approval
+    (SCRUM-31), which is a different decision and must not pass as a replan.
+    """
+    if _ALLOWED_TRANSITIONS.get((current, EventStatus.APPROVED)) is not EventAction.REPLAN:
+        raise InvalidTransitionError(current, EventStatus.APPROVED)
+    return EventStatus.APPROVED
 
 
 def is_editable(status: EventStatus) -> bool:

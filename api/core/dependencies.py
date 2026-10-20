@@ -43,6 +43,7 @@ class EventAccess(StrEnum):
     UPDATE_PLANNING_INFO = "update_planning_info"
     PROPOSE_CHANGE = "propose_change"
     READ_CHANGE_REQUESTS = "read_change_requests"
+    DECIDE_CHANGE_REQUEST = "decide_change_request"
 
 
 def get_current_user(
@@ -143,6 +144,14 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
         # current assigned Coordinator, so a reassignment moves it at once (AC6).
         if permission is EventAccess.PROPOSE_CHANGE:
             if is_owner and accepts_change_request(request.status):
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        # SCRUM-47 AC1: only the current assigned Coordinator decides, and only while the
+        # event can still take a change request.
+        if permission is EventAccess.DECIDE_CHANGE_REQUEST:
+            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+            if is_assigned and accepts_change_request(request.status):
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 

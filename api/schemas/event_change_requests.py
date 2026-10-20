@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, field_validator
 
+from domain.change_decision import Decision
 from domain.event_change import (
     Catalogue,
     CurrentPlan,
@@ -100,6 +101,8 @@ class EventChangeItemRead(BaseModel):
     field: str
     current_value: object | None
     proposed_value: object | None
+    # SCRUM-47: applied or needs_replanning once approved, null before.
+    outcome: str | None
 
 
 class EventChangeRequestRead(BaseModel):
@@ -114,7 +117,19 @@ class EventChangeRequestRead(BaseModel):
     status: str
     event_updated_at: datetime
     created_at: datetime
+    decided_by_id: uuid.UUID | None
+    decided_at: datetime | None
+    decision_note: str | None
     items: list[EventChangeItemRead]
+
+
+class ChangeDecisionCreate(BaseModel):
+    """SCRUM-47 AC1: approve or reject, always with a note."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    decision: Decision
+    note: str
 
 
 class PlannedSessionRead(BaseModel):
