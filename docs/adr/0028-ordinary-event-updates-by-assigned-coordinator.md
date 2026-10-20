@@ -1,6 +1,6 @@
 # ADR-0028: Ordinary event updates after submission belong to the assigned coordinator
 
-- **Status:** Proposed
+- **Status:** Proposed, status rule superseded by ADR-0042
 - **Date:** 2026-10-14
 - **Deciders:** Parikshit
 - **Related stories:** SCRUM-36, SCRUM-29, SCRUM-31, SCRUM-100
@@ -21,8 +21,8 @@ in its name. The Sprint 2 review walkthrough raised exactly this.
 ## Decision
 
 We will let only the assigned coordinator update the ordinary fields (name, purpose,
-description, accessibility, layout, registration) of a Submitted or Approved request
-(`ORDINARY_UPDATE_STATUSES` in `api/domain/event_request.py`), through a separate
+description, accessibility, layout, registration) of an active request (Submitted,
+Approved or Confirmed, the SCRUM-100 `ACTIVE_STATUSES`), through a separate
 `PATCH /api/event-requests/{id}/planning-info` endpoint. Access is a new
 `EventAccess.UPDATE_PLANNING_INFO` mode in the shared dependency. The body schema forbids
 every other field, so a protected field is a 422 and nothing is saved.
@@ -54,13 +54,6 @@ every other field, so a protected field is a 422 and nothing is saved.
   the endpoint.
 
 ## Notes
-
-Updated 18 Oct 2026 (SCRUM-36 reopened): the first version also allowed Confirmed
-requests, reusing the SCRUM-100 `ACTIVE_STATUSES`. The customer clarified that Confirmed
-information cannot be changed directly, so Confirmed is now refused here, in the shared
-dependency and again on the locked row, and the UI does not offer the edit. A Confirmed
-event is changed through the significant-change process (SCRUM-37/SCRUM-47).
-`ACTIVE_STATUSES` itself is unchanged, since the Lead overview still needs it.
 
 The field list is `ORDINARY_FIELDS` in `api/domain/event_request.py`, mirrored in
 `web/src/validation/planningInfo.ts`.

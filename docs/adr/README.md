@@ -38,7 +38,7 @@ someone else made two weeks ago.
 | [0025](0025-equipment-soft-deactivation.md) | Deactivate equipment catalogue entries instead of deleting them | Proposed |
 | [0026](0026-multiple-venue-booking-requests.md) | Allow independent venue booking requests for one event | Proposed |
 | [0027](0027-venue-buffer-change-audit.md) | Record a venue buffer change as an immutable snapshot, not a live relationship | Proposed |
-| [0028](0028-ordinary-event-updates-by-assigned-coordinator.md) | Ordinary event updates after submission belong to the assigned coordinator | Proposed |
+| [0028](0028-ordinary-event-updates-by-assigned-coordinator.md) | Ordinary event updates after submission belong to the assigned coordinator | Proposed, status rule superseded by ADR-0042 |
 | [0029](0029-tentative-venue-holds.md) | Place a tentative venue hold on a pending booking request | Proposed |
 | [0030](0030-expire-tentative-holds-with-an-in-process-timer.md) | Expire tentative venue holds with an in-process minute timer | Proposed |
 | [0031](0031-catalogue-backed-venue-requirements.md) | Validate event venue requirements against the catalogue | Proposed |
@@ -51,6 +51,7 @@ someone else made two weeks ago.
 | [0038](0038-equipment-reservations-by-type-with-row-locks.md) | Reserve equipment by type, serialised with catalogue row locks | Proposed |
 | [0039](0039-peer-organisers-see-calendar-projection-only.md) | Limit peer Organisers to the organisation-calendar projection | Proposed |
 | [0041](0041-significant-changes-as-change-request-records.md) | Record a significant change as a change request with one row per changed value | Proposed |
+| [0042](0042-confirmed-events-refuse-ordinary-updates.md) | Confirmed events refuse ordinary updates | Proposed |
 
 ## When to write one
 
