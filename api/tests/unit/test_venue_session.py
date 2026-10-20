@@ -68,9 +68,7 @@ def test_missing_start_and_end_are_rejected() -> None:
         (p.field, p.reason) for p in missing_start
     ]
     missing_end = session_problems("Opening keynote", start, None, EVENT_START, EVENT_END)
-    assert ("end_at", "must give the session end") in [
-        (p.field, p.reason) for p in missing_end
-    ]
+    assert ("end_at", "must give the session end") in [(p.field, p.reason) for p in missing_end]
 
 
 @pytest.mark.story("SCRUM-111")
