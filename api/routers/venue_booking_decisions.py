@@ -17,6 +17,7 @@ from core.dependencies import require_role
 from domain.booking_conflict import BookingConflictError
 from domain.roles import Role
 from domain.venue_booking import InvalidBookingTransitionError
+from domain.venue_hold import InactiveHoldError
 from repositories import equipment_requirements as requirement_repo
 from schemas.venue_booking_decisions import (
     VenueBookingDecisionRead,
@@ -65,6 +66,27 @@ def hold_booking_request(
         problems = [{"field": p.field, "reason": p.reason} for p in exc.problems]
         raise HTTPException(422, problems) from exc
     except (BookingConflictError, InvalidBookingTransitionError) as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    context = service.get(db, booking_id)
+    return VenueBookingDecisionRead.from_context(
+        *context, None, requirement_repo.list_for_event(db, context[1].id)
+    )
+
+
+@router.patch("/{booking_id}/hold", response_model=VenueBookingDecisionRead)
+def update_hold_expiry(
+    booking_id: uuid.UUID, body: VenueBookingHold, user: VenueStaff, db: Db
+) -> VenueBookingDecisionRead:
+    """SCRUM-121: revise the expiry of an active Tentative hold."""
+    del user
+    try:
+        venue_bookings.update_hold_expiry(db, booking_id, body.expires_at, datetime.now(UTC))
+    except venue_bookings.BookingNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Venue booking request not found") from exc
+    except venue_bookings.InvalidHoldError as exc:
+        problems = [{"field": p.field, "reason": p.reason} for p in exc.problems]
+        raise HTTPException(422, problems) from exc
+    except InactiveHoldError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     context = service.get(db, booking_id)
     return VenueBookingDecisionRead.from_context(

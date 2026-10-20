@@ -11,6 +11,10 @@ from domain.validation import FieldProblem
 from domain.venue_booking import BookingStatus, InvalidBookingTransitionError
 
 
+class InactiveHoldError(Exception):
+    """The booking is not an active Tentative hold at the action instant."""
+
+
 def expiry_problems(
     expires_at: datetime, now: datetime, event_start: datetime
 ) -> list[FieldProblem]:
@@ -28,6 +32,18 @@ def expiry_problems(
     if expires_at > event_start:
         return [FieldProblem("expires_at", "must not be after the event starts")]
     return []
+
+
+def ensure_active(status: BookingStatus, expires_at: datetime | None, now: datetime) -> None:
+    """SCRUM-121: expiry may change only while a Tentative hold is still active.
+
+    Comparing the stored expiry with the same supplied action time used to validate the
+    replacement prevents an update from reviving a hold at its exact deadline.
+    """
+    if status is not BookingStatus.TENTATIVE:
+        raise InactiveHoldError(f"cannot update a venue hold in {status} status")
+    if expires_at is None or expires_at <= now:
+        raise InactiveHoldError("cannot update a venue hold whose expiry has been reached")
 
 
 def confirm() -> BookingStatus:

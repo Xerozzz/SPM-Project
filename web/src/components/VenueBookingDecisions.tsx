@@ -12,6 +12,7 @@ import {
   singaporeLocalToUtc,
   STATUS_LABELS,
   type VenueBookingDecision,
+  updateVenueHoldExpiry,
 } from '../api/venueBookingDecisions'
 import { useAuth } from '../auth/useAuth'
 
@@ -52,10 +53,23 @@ export default function VenueBookingDecisions() {
       void client.invalidateQueries({ queryKey })
     },
   })
-  const busy = reject.isPending || approve.isPending
+  const updateExpiry = useMutation({
+    mutationFn: ({ booking, until }: { booking: VenueBookingDecision; until: string }) =>
+      updateVenueHoldExpiry(token ?? '', booking.id, singaporeLocalToUtc(until)),
+    onSuccess: (_held, { booking }) => {
+      setOutcome(`The hold expiry for ${booking.venue_name} was updated.`)
+      setHoldUntil((values) => ({ ...values, [booking.id]: '' }))
+      void client.invalidateQueries({ queryKey })
+    },
+    onError: () => {
+      void client.invalidateQueries({ queryKey })
+    },
+  })
+  const busy = reject.isPending || approve.isPending || updateExpiry.isPending
   const resetAll = () => {
     reject.reset()
     approve.reset()
+    updateExpiry.reset()
   }
   const pending = requests.data?.filter((booking) => booking.status === 'pending') ?? []
   const held = requests.data?.filter((booking) => booking.status === 'tentative') ?? []
@@ -165,11 +179,43 @@ export default function VenueBookingDecisions() {
                   This hold has expired.
                 </p>
               ) : (
-                booking.conflict && (
-                  <p className="mt-2 rounded bg-amber-50 p-2 text-sm text-amber-800">
-                    {describeConflict(booking.conflict)}
-                  </p>
-                )
+                <>
+                  {booking.conflict && (
+                    <p className="mt-2 rounded bg-amber-50 p-2 text-sm text-amber-800">
+                      {describeConflict(booking.conflict)}
+                    </p>
+                  )}
+                  <label className="mt-3 block text-sm font-medium" htmlFor={`hold-${booking.id}`}>
+                    New expiry (Singapore time)
+                  </label>
+                  <div className="mt-1 flex gap-2">
+                    <input
+                      id={`hold-${booking.id}`}
+                      type="datetime-local"
+                      value={holdUntil[booking.id] ?? ''}
+                      onChange={(event) =>
+                        setHoldUntil({ ...holdUntil, [booking.id]: event.target.value })
+                      }
+                      className="rounded border border-slate-300 p-1.5 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetAll()
+                        updateExpiry.mutate({ booking, until: holdUntil[booking.id] ?? '' })
+                      }}
+                      disabled={busy || !holdUntil[booking.id]}
+                      className="rounded bg-violet-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+                    >
+                      Update expiry
+                    </button>
+                  </div>
+                  {updateExpiry.isError && updateExpiry.variables?.booking.id === booking.id && (
+                    <p role="alert" className="mt-2 text-sm text-red-600">
+                      Could not update expiry: {updateExpiry.error.message}
+                    </p>
+                  )}
+                </>
               )}
             </article>
           ))}

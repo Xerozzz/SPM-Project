@@ -205,6 +205,31 @@ def hold(
     return booking_repo.save_confirmed_booking(db, booking)
 
 
+def update_hold_expiry(
+    db: Session, booking_id: uuid.UUID, expires_at: datetime, now: datetime
+) -> VenueBooking:
+    """SCRUM-121: replace the current expiry of one active Tentative hold.
+
+    The row lock serialises this edit with another edit or the SCRUM-108 worker. Both
+    the old and new expiry are checked against the same supplied UTC action time. The
+    occupied interval and status do not change, so the existing exclusion constraint
+    continues to protect buffered overlaps without another conflict check.
+    """
+    booking = booking_repo.get_booking_for_update(db, booking_id)
+    if booking is None:
+        raise BookingNotFoundError
+    venue_hold.ensure_active(booking.status, booking.expires_at, now)
+    problems = venue_hold.expiry_problems(expires_at, now, booking.start_at)
+    if problems:
+        raise InvalidHoldError(problems)
+    booking.expires_at = expires_at
+    try:
+        return booking_repo.save_booking(db, booking)
+    except Exception:
+        db.rollback()
+        raise
+
+
 def _buffers(venue: Venue) -> VenueBuffers:
     """SCRUM-82: the venue's current setup and turnaround, as the domain takes them."""
     return VenueBuffers(
