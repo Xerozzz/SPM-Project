@@ -184,8 +184,8 @@ function ReviewCard({
         )}
       </div>
       {acceptsOrdinaryUpdate(request.status) && <PlanningInfoEditor request={request} />}
-      {/* SCRUM-37 AC6: pending significant-change requests, current next to proposed. */}
-      <ChangeRequestList eventId={request.id} />
+      {/* SCRUM-37 AC6 and SCRUM-47: change requests, current next to proposed, decided here. */}
+      <ChangeRequestList eventId={request.id} canDecide />
       <ClarificationThread
         eventRequestId={request.id}
         canRequest={request.status === 'submitted'}

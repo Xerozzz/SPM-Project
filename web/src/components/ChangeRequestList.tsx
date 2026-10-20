@@ -3,13 +3,24 @@ import { useQuery } from '@tanstack/react-query'
 import { type ChangeItem, listChangeRequests } from '../api/eventChangeRequests'
 import { useAuth } from '../auth/useAuth'
 import { CHANGE_FIELDS } from '../validation/eventChange'
+import ChangeDecision from './ChangeDecision'
 
 /**
  * SCRUM-37 AC3 and AC6: an event's change requests, each changed value shown next to the
  * value it would replace. The Organiser sees their own, the assigned Coordinator sees the
  * event's. The API decides who may read, so this only shows what it returns.
+ *
+ * SCRUM-47: with `canDecide`, a pending request also offers Approve and Reject. A decided
+ * request shows the decision note and what the approval did with each item.
  */
-export default function ChangeRequestList({ eventId }: { eventId: string }) {
+export default function ChangeRequestList({
+  eventId,
+  canDecide = false,
+}: {
+  eventId: string
+  /** The assigned Coordinator's view. The API still checks who may decide. */
+  canDecide?: boolean
+}) {
   const { token } = useAuth()
   const requests = useQuery({
     queryKey: ['change-requests', eventId, token],
@@ -39,12 +50,19 @@ export default function ChangeRequestList({ eventId }: { eventId: string }) {
           <p>
             <span className="font-medium">Reason:</span> <span>{request.reason}</span>
           </p>
+          {request.decision_note && (
+            <p>
+              <span className="font-medium">Decision note:</span>{' '}
+              <span>{request.decision_note}</span>
+            </p>
+          )}
           <table className="mt-1 w-full text-left">
             <thead>
               <tr>
                 <th className="font-medium">Change</th>
                 <th className="font-medium">Current</th>
                 <th className="font-medium">Proposed</th>
+                {request.status === 'approved' && <th className="font-medium">Result</th>}
               </tr>
             </thead>
             <tbody>
@@ -53,10 +71,14 @@ export default function ChangeRequestList({ eventId }: { eventId: string }) {
                   <td>{itemLabel(item)}</td>
                   <td>{shown(item.current_value)}</td>
                   <td>{shown(item.proposed_value)}</td>
+                  {request.status === 'approved' && <td>{outcomeLabel(item.outcome)}</td>}
                 </tr>
               ))}
             </tbody>
           </table>
+          {canDecide && request.status === 'pending' && (
+            <ChangeDecision eventId={eventId} changeId={request.id} />
+          )}
         </article>
       ))}
     </section>
@@ -64,7 +86,17 @@ export default function ChangeRequestList({ eventId }: { eventId: string }) {
 }
 
 function statusLabel(status: string): string {
-  return status === 'pending' ? 'Pending review' : status
+  if (status === 'pending') return 'Pending review'
+  if (status === 'approved') return 'Approved'
+  if (status === 'rejected') return 'Rejected'
+  return status
+}
+
+/** SCRUM-47 AC3/AC4: event fields are applied, arrangements go through their own flows. */
+function outcomeLabel(outcome: string | null): string {
+  if (outcome === 'applied') return 'Applied'
+  if (outcome === 'needs_replanning') return 'Needs replanning'
+  return '-'
 }
 
 const EVENT_LABELS: Record<string, string> = Object.fromEntries(CHANGE_FIELDS)
