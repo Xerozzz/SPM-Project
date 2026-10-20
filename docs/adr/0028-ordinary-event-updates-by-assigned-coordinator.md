@@ -1,6 +1,6 @@
 # ADR-0028: Ordinary event updates after submission belong to the assigned coordinator
 
-- **Status:** Proposed, status rule superseded by ADR-0042
+- **Status:** Proposed, status rule superseded by ADR-0042, field list superseded by ADR-0046
 - **Date:** 2026-10-14
 - **Deciders:** Parikshit
 - **Related stories:** SCRUM-36, SCRUM-29, SCRUM-31, SCRUM-100

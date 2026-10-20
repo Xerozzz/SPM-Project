@@ -3,14 +3,13 @@ import type { EventRequest, EventStatus } from '../api/eventRequests'
 /**
  * SCRUM-36: the ordinary planning fields the assigned coordinator may change, with their
  * labels. Mirrors ORDINARY_FIELDS in api/domain/event_request.py. Date/time, attendance,
- * venue and equipment are not here because they need change control (AC3).
+ * venue, equipment, layout and accessibility are not here because they need change control
+ * (AC3, AC4, ADR-0046).
  */
 export const ORDINARY_FIELDS = [
   ['name', 'Name'],
   ['purpose', 'Purpose'],
   ['description', 'Description'],
-  ['accessibility_requirement', 'Accessibility'],
-  ['layout_requirement', 'Layout'],
   ['registration_requirement', 'Registration'],
 ] as const
 

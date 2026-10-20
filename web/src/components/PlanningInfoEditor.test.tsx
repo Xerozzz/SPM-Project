@@ -95,19 +95,17 @@ test('SCRUM-36 AC3: only ordinary fields are offered', async () => {
 
   const form = await openEditor()
 
-  for (const label of [
-    'Name',
-    'Purpose',
-    'Description',
-    'Accessibility',
-    'Layout',
-    'Registration',
-  ]) {
+  for (const label of ['Name', 'Purpose', 'Description', 'Registration']) {
     expect(within(form).getByLabelText(label)).toBeInTheDocument()
   }
-  expect(within(form).getAllByRole('textbox')).toHaveLength(6)
+  // AC4 (ADR-0046): layout and accessibility go through change control now.
+  expect(within(form).queryByLabelText('Layout')).not.toBeInTheDocument()
+  expect(within(form).queryByLabelText('Accessibility')).not.toBeInTheDocument()
+  expect(within(form).getAllByRole('textbox')).toHaveLength(4)
   expect(
-    within(form).getByText('Date, time, attendance, venue and equipment cannot be changed here.'),
+    within(form).getByText(
+      'Date, time, attendance, venue, equipment, layout and accessibility cannot be changed here. The Organiser proposes those as a change request.',
+    ),
   ).toBeInTheDocument()
 })
 
