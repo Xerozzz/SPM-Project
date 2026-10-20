@@ -77,5 +77,11 @@ class VenueBooking(Base):
     # venue. Empty for a request that was never held. Kept after the hold ends, for its
     # history. Migration 0021, ADR-0029.
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # SCRUM-116: the affected arrangement this request would replace, if it is a
+    # replacement. Kept after either side is decided so the old/new link stays traceable
+    # (AC3). Migration 0029, ADR-0045.
+    replaces_booking_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("venue_bookings.id"), nullable=True, index=True
+    )
     held_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     held_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
