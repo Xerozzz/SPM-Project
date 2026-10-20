@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 
 from core.database import Session
-from domain import venue_booking, venue_hold, venue_suitability
+from domain import venue_booking, venue_hold, venue_session, venue_suitability
 from domain.booking_conflict import BookedPeriod, UnavailablePeriod, ensure_no_conflict
 from domain.event_request import (
     EQUIPMENT_REQUIREMENT_FACILITIES,
@@ -91,23 +91,38 @@ def _facilities_needed(db: Session, event: EventRequest) -> list[str]:
 
 
 def submit(
-    db: Session, event: EventRequest, venue_id: uuid.UUID, now: datetime
+    db: Session,
+    event: EventRequest,
+    venue_id: uuid.UUID,
+    now: datetime,
+    session_label: str,
+    start_at: datetime,
+    end_at: datetime,
 ) -> tuple[VenueBooking, venue_suitability.SuitabilityResult]:
     locked = event_repo.get_for_update(db, event.id)
     assert locked is not None and locked.coordinator_id is not None
-    suitability = evaluate(db, locked, venue_id, now)
     assert locked.start_at is not None and locked.end_at is not None
+    # Suitability first: it owns the event-level requirement checks, so an invalid
+    # event still reports those rather than a session error about its own times.
+    suitability = evaluate(db, locked, venue_id, now)
+    # SCRUM-111: the request names one session and its own period, which must sit
+    # inside the parent event period. Suitability still scores the event's recorded
+    # requirements (AC4); there is no per-session attendance.
+    problems = venue_session.session_problems(
+        session_label, start_at, end_at, locked.start_at, locked.end_at
+    )
+    if problems:
+        raise InvalidBookingRequestError(problems)
     venue = venue_repo.get(db, venue_id)
     assert venue is not None  # evaluate() has already refused an unknown venue.
-    effective_start, effective_end = effective_interval(
-        locked.start_at, locked.end_at, _buffers(venue)
-    )
+    effective_start, effective_end = effective_interval(start_at, end_at, _buffers(venue))
     booking = VenueBooking(
         event_request_id=locked.id,
         venue_id=venue_id,
         requested_by_id=locked.coordinator_id,
-        start_at=locked.start_at,
-        end_at=locked.end_at,
+        session_label=session_label.strip(),
+        start_at=start_at,
+        end_at=end_at,
         effective_start_at=effective_start,
         effective_end_at=effective_end,
         status=BookingStatus.PENDING,

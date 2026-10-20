@@ -58,6 +58,7 @@ def booking_for(
         venue_id=venue.id,
         event_request_id=event.id,
         requested_by_id=coordinator.id,
+        session_label="Opening keynote",
         start_at=start_at,
         end_at=end_at,
         effective_start_at=effective_start,
@@ -88,7 +89,9 @@ async def test_submitting_stores_the_effective_interval(db: Session, make_user: 
     coordinator = make_user("coordinator")
     event = approved_event(db, coordinator, coordinator, start_at=at(10), end_at=at(12))
 
-    booking, _ = booking_service.submit(db, event, venue.id, datetime.now(UTC))
+    booking, _ = booking_service.submit(
+        db, event, venue.id, datetime.now(UTC), "Opening keynote", at(10), at(12)
+    )
 
     assert booking.effective_start_at == at(9.5)
     assert booking.effective_end_at == at(12.75)
@@ -103,7 +106,9 @@ async def test_a_venue_without_buffers_stores_the_event_period(
     coordinator = make_user("coordinator")
     event = approved_event(db, coordinator, coordinator, start_at=at(10), end_at=at(12))
 
-    booking, _ = booking_service.submit(db, event, venue.id, datetime.now(UTC))
+    booking, _ = booking_service.submit(
+        db, event, venue.id, datetime.now(UTC), "Opening keynote", at(10), at(12)
+    )
 
     assert (booking.effective_start_at, booking.effective_end_at) == (at(10), at(12))
 

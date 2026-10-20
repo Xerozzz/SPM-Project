@@ -30,6 +30,7 @@ const PENDING: VenueBookingDecision = {
   venue_location: 'Level 2',
   event_request_id: 'event-1',
   event_name: 'Orientation Day',
+  session_label: 'Morning workshop',
   start_at: '2030-01-01T02:00:00Z',
   end_at: '2030-01-01T06:00:00Z',
   expected_attendance: 150,

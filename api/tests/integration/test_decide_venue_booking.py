@@ -42,6 +42,7 @@ def pending_booking(db: Session, make_user: MakeUser, **event_changes: object) -
         venue_id=venue.id,
         event_request_id=event.id,
         requested_by_id=coordinator.id,
+        session_label="Opening keynote",
         start_at=event.start_at,
         end_at=event.end_at,
         effective_start_at=effective_start,

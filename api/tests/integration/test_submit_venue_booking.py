@@ -43,10 +43,27 @@ def seed_equipment(db: Session, event: EventRequest) -> None:
 
 
 async def submit(
-    client: httpx.AsyncClient, event: EventRequest, venue_id: object
+    client: httpx.AsyncClient,
+    event: EventRequest,
+    venue_id: object,
+    session_label: str = "Opening keynote",
+    start_at: datetime | None = None,
+    end_at: datetime | None = None,
 ) -> httpx.Response:
+    """Submit one session request; defaults cover the whole parent event period.
+
+    SCRUM-111: the API takes the session label and period explicitly rather than
+    copying the parent event times, so the helper sends them explicitly too.
+    """
+    assert event.start_at is not None and event.end_at is not None
     return await client.post(
-        f"/api/event-requests/{event.id}/venue-bookings", json={"venue_id": str(venue_id)}
+        f"/api/event-requests/{event.id}/venue-bookings",
+        json={
+            "venue_id": str(venue_id),
+            "session_label": session_label,
+            "start_at": (start_at or event.start_at).isoformat(),
+            "end_at": (end_at or event.end_at).isoformat(),
+        },
     )
 
 

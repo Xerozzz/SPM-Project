@@ -260,7 +260,11 @@ function BookingDetails({ booking }: { booking: VenueBookingDecision }) {
       : null
   const rows: [string, string | number | null][] = [
     ['Venue', `${booking.venue_name}, ${booking.venue_location}`],
-    ['When', `${formatSingaporeTime(booking.start_at)} to ${formatSingaporeTime(booking.end_at)}`],
+    ['Session', booking.session_label],
+    [
+      'When',
+      `${formatSingaporeTime(booking.start_at)} to ${formatSingaporeTime(booking.end_at)}`,
+    ],
     // Omitted rather than shown empty when the venue has no buffers: the row renders
     // "Not given" for a null, and there is nothing missing here (AC7).
     ...(held ? ([['Venue held', held]] as [string, string][]) : []),

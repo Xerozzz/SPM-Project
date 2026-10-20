@@ -42,6 +42,7 @@ const suitability = {
 const pendingBooking = {
   id: 'booking-1',
   venue_id: 'venue-1',
+  session_label: 'Morning workshop',
   start_at: approved.start_at,
   end_at: approved.end_at,
   status: 'pending',
@@ -50,6 +51,7 @@ const pendingBooking = {
 const rejectedBooking = {
   id: 'booking-2',
   venue_id: 'venue-2',
+  session_label: 'Afternoon panel',
   start_at: approved.start_at,
   end_at: approved.end_at,
   status: 'rejected',
@@ -61,6 +63,11 @@ function bookingPeriod(booking: { start_at: string; end_at: string }) {
   const sgt = (value: string) =>
     new Date(value).toLocaleString('en-SG', { timeZone: 'Asia/Singapore' })
   return `${sgt(booking.start_at)} to ${sgt(booking.end_at)}`
+}
+
+/** SCRUM-111: the form needs a session label before it submits. */
+function fillSession(label = 'Morning workshop') {
+  fireEvent.change(screen.getByLabelText('Session label'), { target: { value: label } })
 }
 
 afterEach(() => {
@@ -335,6 +342,7 @@ test('SCRUM-78: adds another venue, retains both records on reload and accepts a
   ).toBeInTheDocument()
   await screen.findByRole('option', { name: 'Large Hall' })
   fireEvent.change(screen.getByLabelText('Active venue'), { target: { value: 'venue-2' } })
+  fillSession()
   expect(await screen.findByText('Capacity and facilities are suitable.')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Submit booking request' }))
   await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(2))
@@ -348,6 +356,7 @@ test('SCRUM-78: adds another venue, retains both records on reload and accepts a
   expect(screen.getByRole('button', { name: 'Submit booking request' })).toBeDisabled()
   // Changing the venue resets the successful mutation and evaluates the newly selected venue.
   fireEvent.change(screen.getByLabelText('Active venue'), { target: { value: 'venue-3' } })
+  fillSession()
   expect(await screen.findByText(/Capacity mismatch/)).toBeInTheDocument()
   expect(screen.queryByText('Capacity and facilities are suitable.')).not.toBeInTheDocument()
   await waitFor(() =>
@@ -362,6 +371,7 @@ test('SCRUM-78: adds another venue, retains both records on reload and accepts a
   expect(screen.getAllByRole('listitem')).toHaveLength(2)
   await screen.findByRole('option', { name: 'Studio' })
   fireEvent.change(screen.getByLabelText('Active venue'), { target: { value: 'venue-3' } })
+  fillSession()
   await waitFor(() =>
     expect(screen.getByRole('button', { name: 'Submit booking request' })).toBeEnabled(),
   )
@@ -370,8 +380,8 @@ test('SCRUM-78: adds another venue, retains both records on reload and accepts a
   expect(within(screen.getAllByRole('listitem')[2]).getByText('Studio')).toBeInTheDocument()
   const posts = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')
   expect(posts.map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
-    { venue_id: 'venue-2' },
-    { venue_id: 'venue-3' },
+    { venue_id: 'venue-2', session_label: 'Morning workshop', start_at: '2026-12-01T01:00:00.000Z', end_at: '2026-12-01T05:00:00.000Z' },
+    { venue_id: 'venue-3', session_label: 'Morning workshop', start_at: '2026-12-01T01:00:00.000Z', end_at: '2026-12-01T05:00:00.000Z' },
   ])
 })
 
@@ -402,6 +412,7 @@ test('approved event previews advisory warnings and submits a pending booking re
   fireEvent.change(screen.getByLabelText('Active venue'), {
     target: { value: 'venue-1' },
   })
+  fillSession()
   expect(await screen.findByText(/Capacity mismatch/)).toBeInTheDocument()
   expect(screen.getByText('Missing facilities: Projector')).toBeInTheDocument()
   expect(screen.getByText('Venue accessibility: Lift access')).toBeInTheDocument()
@@ -423,6 +434,7 @@ test('booking authorization failure shows the backend detail', async () => {
   fireEvent.change(screen.getByLabelText('Active venue'), {
     target: { value: 'venue-1' },
   })
+  fillSession()
   await screen.findByText(/Capacity mismatch/)
   fireEvent.click(screen.getByRole('button', { name: 'Submit booking request' }))
 
@@ -437,6 +449,7 @@ test('booking failure with a non-JSON body shows the generic status error', asyn
   fireEvent.change(screen.getByLabelText('Active venue'), {
     target: { value: 'venue-1' },
   })
+  fillSession()
   await screen.findByText(/Capacity mismatch/)
   fireEvent.click(screen.getByRole('button', { name: 'Submit booking request' }))
 
@@ -527,4 +540,44 @@ test('SCRUM-43: the organiser’s equipment choice is labelled as what was reque
 
   expect(await screen.findByText('Equipment requested:')).toBeInTheDocument()
   expect(screen.queryByText('Equipment:')).toBeNull()
+})
+
+test('SCRUM-111 TC-111-10: the form sends the session label and period with the request', async () => {
+  signInAsCoordinator()
+  renderBookingReview({
+    id: 'booking-1',
+    venue_id: 'venue-1',
+    session_label: 'Morning workshop',
+    start_at: approved.start_at,
+    end_at: approved.end_at,
+    status: 'pending',
+    suitability,
+  })
+
+  await screen.findByRole('option', { name: 'Small Hall' })
+  fireEvent.change(screen.getByLabelText('Active venue'), {
+    target: { value: 'venue-1' },
+  })
+  // The button stays disabled until the session is labelled (AC1).
+  expect(screen.getByRole('button', { name: 'Submit booking request' })).toBeDisabled()
+  fillSession('Morning workshop')
+  expect(await screen.findByText(/Capacity mismatch/)).toBeInTheDocument()
+  const submit = screen.getByRole('button', { name: 'Submit booking request' })
+  expect(submit).toBeEnabled()
+  fireEvent.click(submit)
+
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    'Booking request submitted. Status: pending.',
+  )
+})
+
+test('SCRUM-111 TC-111-10: existing requests show their session label', async () => {
+  signInAsCoordinator()
+  renderExistingBookingReview([pendingBooking, rejectedBooking])
+
+  expect(
+    await screen.findByRole('heading', { name: 'Existing venue booking requests' }),
+  ).toBeInTheDocument()
+  expect(screen.getByText('Morning workshop')).toBeInTheDocument()
+  expect(screen.getByText('Afternoon panel')).toBeInTheDocument()
 })

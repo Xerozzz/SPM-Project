@@ -300,6 +300,7 @@ def confirm_booking(
         venue_id=venue.id,
         event_request_id=event.id,
         requested_by_id=coordinator.id,
+        session_label="Opening keynote",
         start_at=start,
         end_at=end,
         effective_start_at=effective_start,

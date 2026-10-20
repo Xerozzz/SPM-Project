@@ -104,6 +104,8 @@ export type BookingStatus =
 export interface VenueBookingSubmission {
   id: string
   venue_id: string
+  /** SCRUM-111: which session of the event this request is for. */
+  session_label: string
   start_at: string
   end_at: string
   status: BookingStatus
@@ -113,6 +115,8 @@ export interface VenueBookingSubmission {
 export interface VenueBooking {
   id: string
   venue_id: string
+  /** SCRUM-111: which session of the event this request is for. */
+  session_label: string
   start_at: string
   end_at: string
   status: BookingStatus
@@ -528,12 +532,13 @@ export async function submitVenueBooking(
   token: string,
   eventId: string,
   venueId: string,
+  session: { session_label: string; start_at: string; end_at: string },
 ): Promise<VenueBookingSubmission> {
   return readBookingResponse(
     await fetch(`/api/event-requests/${eventId}/venue-bookings`, {
       method: 'POST',
       headers: jsonHeaders(token),
-      body: JSON.stringify({ venue_id: venueId }),
+      body: JSON.stringify({ venue_id: venueId, ...session }),
     }),
   )
 }

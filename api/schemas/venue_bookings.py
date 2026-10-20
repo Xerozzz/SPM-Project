@@ -1,16 +1,30 @@
-"""Venue booking request contracts (SCRUM-38, SCRUM-74)."""
+"""Venue booking request contracts (SCRUM-38, SCRUM-74, session fields SCRUM-111)."""
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 from domain.venue_booking import BookingStatus
+from domain.venue_session import MAX_SESSION_LABEL_LENGTH
 from schemas.venue_booking_decisions import ConflictRead
 
 
 class VenueBookingCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     venue_id: uuid.UUID
+    # SCRUM-111: which session of the parent event this request is for, and the period
+    # that session needs the venue for. AwareDatetime refuses a naive instant at the
+    # door (AGENTS.md 3); the domain checks the rest against the parent event period.
+    session_label: str = Field(max_length=MAX_SESSION_LABEL_LENGTH)
+    start_at: AwareDatetime
+    end_at: AwareDatetime
+
+    @field_validator("start_at", "end_at")
+    @classmethod
+    def _to_utc(cls, value: datetime) -> datetime:
+        return value.astimezone(UTC)
 
 
 class SuitabilityRead(BaseModel):
@@ -29,6 +43,7 @@ class SuitabilityRead(BaseModel):
 class VenueBookingSubmissionRead(BaseModel):
     id: uuid.UUID
     venue_id: uuid.UUID
+    session_label: str
     start_at: datetime
     end_at: datetime
     status: BookingStatus
@@ -42,6 +57,8 @@ class VenueBookingRead(BaseModel):
 
     id: uuid.UUID
     venue_id: uuid.UUID
+    # SCRUM-111: which session of the parent event this request is for.
+    session_label: str
     start_at: datetime
     end_at: datetime
     status: BookingStatus

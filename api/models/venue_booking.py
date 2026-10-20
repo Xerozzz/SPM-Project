@@ -39,6 +39,11 @@ class VenueBooking(Base):
     requested_by_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
+    # SCRUM-111: which session of the parent event this request is for. The row's own
+    # `start_at/end_at` is that session's requested period; the parent event period is
+    # only the outer boundary it must sit inside. Backfilled from the event name for
+    # pre-existing whole-event rows (migration 0025).
+    session_label: Mapped[str] = mapped_column(Text, nullable=False)
     start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     # SCRUM-82: the period the venue is really occupied, event times widened by the

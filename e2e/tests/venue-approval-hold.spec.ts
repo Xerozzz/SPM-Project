@@ -43,7 +43,7 @@ test('SCRUM-110 and SCRUM-121: approval and an expiry update survive reload', as
     const api = `${window.location.protocol}//${window.location.hostname}:8000`
     const bookable = (await (
       await fetch(`${api}/api/event-requests/bookable`, { headers })
-    ).json()) as { id: string; name: string }[]
+    ).json()) as { id: string; name: string; start_at: string; end_at: string }[]
     const event = bookable.find((row) => row.name === 'Careers Fair')
     const venues = (await (await fetch(`${api}/api/venues`, { headers })).json()) as {
       id: string
@@ -55,7 +55,12 @@ test('SCRUM-110 and SCRUM-121: approval and an expiry update survive reload', as
     const created = await fetch(`${api}/api/event-requests/${event.id}/venue-bookings`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ venue_id: venue.id }),
+      body: JSON.stringify({
+        venue_id: venue.id,
+        session_label: 'Careers Fair session',
+        start_at: event.start_at,
+        end_at: event.end_at,
+      }),
     })
     if (!created.ok) return null
     return { venueName }

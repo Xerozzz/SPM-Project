@@ -27,6 +27,7 @@ const ENTRY: CalendarEntry = {
   id: 'b-1',
   venue_id: 'v-1',
   venue_name: 'Hall A',
+  session_label: 'Morning workshop',
   // SCRUM-82: a venue with no buffers, so the venue is held for exactly the event period.
   effective_start_at: '2030-03-04T01:00:00Z',
   effective_end_at: '2030-03-04T03:00:00Z',
@@ -139,6 +140,7 @@ const DETAILS = {
   venue_id: 'v-1',
   venue_name: 'Hall A',
   venue_location: 'Level 2',
+  session_label: 'Morning workshop',
   start_at: '2030-03-04T01:00:00Z',
   end_at: '2030-03-04T03:00:00Z',
   status: 'confirmed',

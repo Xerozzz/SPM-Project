@@ -44,6 +44,8 @@ export interface VenueBookingDecision {
   venue_location: string
   event_request_id: string
   event_name: string | null
+  /** SCRUM-111: which session of the event this request is for. */
+  session_label: string
   start_at: string
   end_at: string
   expected_attendance: number | null

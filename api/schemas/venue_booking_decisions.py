@@ -100,6 +100,8 @@ class VenueBookingDecisionRead(BaseModel):
     venue_location: str
     event_request_id: uuid.UUID
     event_name: str | None
+    # SCRUM-111: which session of the parent event this request is for.
+    session_label: str
     start_at: datetime
     end_at: datetime
     # SCRUM-82 AC3: the period the venue is actually held for, and the buffers that made
@@ -150,6 +152,7 @@ class VenueBookingDecisionRead(BaseModel):
             venue_location=venue.location,
             event_request_id=event.id,
             event_name=event.name,
+            session_label=booking.session_label,
             start_at=booking.start_at,
             end_at=booking.end_at,
             # From the venue as it is now, not the stored snapshot. The conflict beside

@@ -39,14 +39,11 @@ class CalendarEntry:
     # "confirmed", "tentative" or "pending" for a booking (AC1 labels, SCRUM-83 AC2),
     # "unavailable" for a closure.
     status: venue_calendar.EntryStatus
-    # SCRUM-82: the period the venue is actually held, which for a booking is the event
-    # widened by the venue's current buffers. Reported alongside the event's own times
-    # rather than instead of them, because the calendar now lists a booking whose setup
-    # or reset reaches into the window while its event sits outside it, and showing only
-    # the event times would leave that unexplained. Equal to the event period for a
-    # closure, which is never widened, and for any venue without buffers (AC7).
     effective_start_at: datetime
     effective_end_at: datetime
+    # SCRUM-111: which session of the parent event a booking entry is for.
+    # None for a closure, which belongs to no session.
+    session_label: str | None = None
     # SCRUM-83 AC2: when a tentative hold ends. None for anything else.
     expires_at: datetime | None = None
 
@@ -77,6 +74,7 @@ def entries(
             b.end_at,
             venue_calendar.BOOKING_LABELS[b.status],
             *effective_interval(b.start_at, b.end_at, _buffers_of(v)),
+            session_label=b.session_label,
             expires_at=b.expires_at,
         )
         for b, v in repo.bookings_in_range(db, start_at, end_at, statuses, venue_id)
@@ -163,6 +161,8 @@ class EntryDetails:
     event_request_id: uuid.UUID | None
     # SCRUM-83 AC2: when a tentative hold ends, kept after it ends.
     expires_at: datetime | None = None
+    # SCRUM-111: which session of the parent event a booking entry is for.
+    session_label: str | None = None
 
 
 def booking_details(db: Session, booking_id: uuid.UUID) -> EntryDetails:
@@ -182,6 +182,7 @@ def booking_details(db: Session, booking_id: uuid.UUID) -> EntryDetails:
         None,
         b.event_request_id,
         b.expires_at,
+        b.session_label,
     )
 
 

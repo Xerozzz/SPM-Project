@@ -105,12 +105,21 @@ def submit_venue_booking(
     event: PlanningEvent, body: VenueBookingCreate, db: Db
 ) -> VenueBookingSubmissionRead:
     try:
-        booking, suitability = service.submit(db, event, body.venue_id, datetime.now(UTC))
+        booking, suitability = service.submit(
+            db,
+            event,
+            body.venue_id,
+            datetime.now(UTC),
+            body.session_label,
+            body.start_at,
+            body.end_at,
+        )
     except service.InvalidBookingRequestError as exc:
         raise _validation_error(exc) from exc
     return VenueBookingSubmissionRead(
         id=booking.id,
         venue_id=booking.venue_id,
+        session_label=booking.session_label,
         start_at=booking.start_at,
         end_at=booking.end_at,
         status=booking.status,
