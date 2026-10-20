@@ -1,15 +1,31 @@
-"""Venue-unavailability orchestration for SCRUM-62."""
+"""Venue-unavailability orchestration for SCRUM-62, with closure impact for SCRUM-81.
+
+A closure is always recordable once it is valid, even over confirmed bookings and live
+holds (SCRUM-81 AC1). Saving one works out which of those it affects, keeps a snapshot
+of them, and notifies each affected event's assigned Coordinator, all in one commit
+(AC8). Nothing is cancelled and no booking or event is changed (AC3). See ADR-0044.
+"""
 
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 
 from core.database import Session
+from domain.booking_conflict import BookedPeriod
+from domain.notifications import NotificationSource, NotificationType
 from domain.validation import FieldProblem
-from domain.venue_buffer import VenueBuffers, booking_clashes_with_closure
+from domain.venue_buffer import VenueBuffers
+from domain.venue_closure_impact import affected_by_closure, impact_key
 from domain.venue_unavailability import VenueUnavailabilityFields, validate_unavailability
+from models.event_request import EventRequest
 from models.venue import Venue
+from models.venue_booking import VenueBooking
+from models.venue_closure_impact import VenueClosureImpact
 from models.venue_unavailability import VenueUnavailability
+from repositories import event_requests as event_repo
+from repositories import notifications as notification_repo
 from repositories import venue_availability as booking_repo
+from repositories import venue_closure_impacts as impact_repo
 from repositories import venue_unavailabilities as repo
 from services import venues
 
@@ -26,28 +42,26 @@ class InactiveVenueError(VenueUnavailabilityError):
     """New closure records only make sense for selectable venues."""
 
 
-class ConfirmedBookingInTheWayError(VenueUnavailabilityError):
-    """The venue is already committed to an event for part of this period.
-
-    Recording a closure over a confirmed booking would leave the venue both promised and
-    shut, which nothing downstream can resolve: SCRUM-73 refuses an approval that clashes
-    with a closure, but this booking is already approved.
-    """
-
-    def __init__(self, booking_id: uuid.UUID) -> None:
-        # Written for the Venue Staff member who is being refused, because this string is
-        # what the screen shows them. The id trails it so a conflict can still be traced.
-        super().__init__(
-            "This venue is already committed to a confirmed booking for part of that "
-            f"period, so it cannot be closed. Booking {booking_id}."
-        )
-        self.booking_id = booking_id
-
-
 class InvalidVenueUnavailabilityError(VenueUnavailabilityError):
     def __init__(self, problems: list[FieldProblem]) -> None:
         super().__init__("the unavailability period is not valid")
         self.problems = problems
+
+
+@dataclass(frozen=True)
+class AffectedArrangement:
+    """One live booking or hold a saved closure runs into, with its event."""
+
+    booking: VenueBooking
+    event: EventRequest | None
+
+
+@dataclass(frozen=True)
+class SavedClosure:
+    """A saved closure and what it affected when it was saved (AC2)."""
+
+    record: VenueUnavailability
+    affected: list[AffectedArrangement]
 
 
 def list_for_venue(db: Session, venue_id: uuid.UUID) -> list[VenueUnavailability]:
@@ -56,14 +70,18 @@ def list_for_venue(db: Session, venue_id: uuid.UUID) -> list[VenueUnavailability
 
 
 def create(
-    db: Session, venue_id: uuid.UUID, fields: VenueUnavailabilityFields, now: datetime
-) -> VenueUnavailability:
+    db: Session,
+    venue_id: uuid.UUID,
+    fields: VenueUnavailabilityFields,
+    staff_id: uuid.UUID,
+    now: datetime,
+) -> SavedClosure:
     venue = venues.get(db, venue_id)
     if not venue.is_active:
         raise InactiveVenueError
     _ensure_valid(fields, now)
-    _ensure_no_confirmed_booking(db, venue, fields)
-    return repo.save(db, VenueUnavailability(venue_id=venue_id, **_stored_values(fields)))
+    record = repo.stage(db, VenueUnavailability(venue_id=venue_id, **_stored_values(fields)))
+    return _record_impact(db, venue, record, staff_id, now)
 
 
 def update(
@@ -71,17 +89,16 @@ def update(
     venue_id: uuid.UUID,
     unavailability_id: uuid.UUID,
     fields: VenueUnavailabilityFields,
+    staff_id: uuid.UUID,
     now: datetime,
-) -> VenueUnavailability:
+) -> SavedClosure:
     record = _get_for_venue(db, venue_id, unavailability_id)
     _ensure_valid(fields, now)
-    # Moving a closure asks the same question as recording one, against the period it
-    # would occupy afterwards. Without this, `update` is a way round `create`'s check:
-    # record a closure somewhere clear, then edit it on top of a confirmed booking.
-    _ensure_no_confirmed_booking(db, venues.get(db, venue_id), fields)
     for name, value in _stored_values(fields).items():
         setattr(record, name, value)
-    return repo.save(db, record)
+    repo.stage(db, record)
+    # AC6: the impact is worked out again for the period the closure has now.
+    return _record_impact(db, venues.get(db, venue_id), record, staff_id, now)
 
 
 def delete(db: Session, venue_id: uuid.UUID, unavailability_id: uuid.UUID) -> None:
@@ -114,25 +131,64 @@ def _stored_values(fields: VenueUnavailabilityFields) -> dict[str, object]:
     }
 
 
-def _ensure_no_confirmed_booking(
-    db: Session, venue: Venue, fields: VenueUnavailabilityFields
-) -> None:
-    """Refuse a closure that would sit on top of a booking the venue is committed to.
+def _record_impact(
+    db: Session,
+    venue: Venue,
+    record: VenueUnavailability,
+    staff_id: uuid.UUID,
+    now: datetime,
+) -> SavedClosure:
+    """AC2, AC4, AC7, AC8: find what the closure hits, keep a snapshot, notify, commit.
 
-    The same comparison booking approval runs, from the other side: the booking is
-    widened by the venue's setup and turnaround and the closure is not (SCRUM-82 AC5), so
-    a closure that eats into a confirmed event's preparation time is a clash even when it
-    misses the event itself.
-
-    Only confirmed bookings are in the way. A pending request is not a commitment, and
-    refusing a closure because of one would let an unapproved request block maintenance.
+    The candidates are the same live set the problem displays use (SCRUM-89): confirmed
+    bookings and unexpired holds still running at `now`. Pending requests are not
+    commitments, so a closure over one is not an impact (SCRUM-62).
     """
-    assert fields.starts_at is not None and fields.ends_at is not None
+    rows = {row.id: row for row in booking_repo.blocking_periods_from(db, venue.id, now)}
     buffers = VenueBuffers(
         setup_minutes=venue.setup_minutes, turnaround_minutes=venue.turnaround_minutes
     )
-    for booking in booking_repo.confirmed_bookings_from(db, venue.id, fields.starts_at):
-        if booking_clashes_with_closure(
-            booking.start_at, booking.end_at, fields.starts_at, fields.ends_at, buffers
-        ):
-            raise ConfirmedBookingInTheWayError(booking.id)
+    hit = affected_by_closure(
+        [
+            BookedPeriod(id=row.id, status=row.status, start_at=row.start_at, end_at=row.end_at)
+            for row in rows.values()
+        ],
+        record.starts_at,
+        record.ends_at,
+        buffers,
+    )
+    affected = [
+        AffectedArrangement(rows[b.id], event_repo.get(db, rows[b.id].event_request_id))
+        for b in hit
+    ]
+    if affected:
+        impact_repo.stage(
+            db,
+            VenueClosureImpact(
+                unavailability_id=record.id,
+                venue_id=venue.id,
+                recorded_by_id=staff_id,
+                recorded_at=now,
+                starts_at=record.starts_at,
+                ends_at=record.ends_at,
+                reason=record.reason,
+                affected_booking_ids=[item.booking.id for item in affected],
+            ),
+        )
+    for item in affected:
+        # AC4: zero recipients is fine. An event with no Coordinator is still affected
+        # and still shown to Venue Staff, it just has nobody to notify.
+        if item.event is None or item.event.coordinator_id is None:
+            continue
+        notification_repo.stage(
+            db,
+            recipient_id=item.event.coordinator_id,
+            event_request_id=item.event.id,
+            type=NotificationType.VENUE_CLOSURE_IMPACT,
+            source_type=NotificationSource.VENUE_CLOSURE,
+            source_id=impact_key(record.id, record.starts_at, record.ends_at, item.booking.id),
+            occurred_at=now,
+        )
+    db.commit()
+    db.refresh(record)
+    return SavedClosure(record=record, affected=affected)

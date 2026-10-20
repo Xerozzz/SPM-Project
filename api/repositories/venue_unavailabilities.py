@@ -31,3 +31,11 @@ def save(db: Session, record: VenueUnavailability) -> VenueUnavailability:
 def delete(db: Session, record: VenueUnavailability) -> None:
     db.delete(record)
     db.commit()
+
+
+def stage(db: Session, record: VenueUnavailability) -> VenueUnavailability:
+    """SCRUM-81: add or update without committing, so the caller commits the closure, its
+    impact record and its notifications together (AC8)."""
+    db.add(record)
+    db.flush()
+    return record

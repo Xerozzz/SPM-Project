@@ -11,7 +11,12 @@ from core.database import get_db
 from core.dependencies import get_current_user, require_role
 from domain.roles import Role
 from domain.venue_unavailability import VenueUnavailabilityFields
-from schemas.venue_unavailabilities import VenueUnavailabilityRead, VenueUnavailabilityWrite
+from schemas.venue_unavailabilities import (
+    AffectedArrangementRead,
+    VenueUnavailabilityRead,
+    VenueUnavailabilitySaved,
+    VenueUnavailabilityWrite,
+)
 from services import venue_unavailabilities as service
 from services import venues
 
@@ -29,10 +34,6 @@ def _http_error(exc: Exception) -> HTTPException:
         return HTTPException(status.HTTP_404_NOT_FOUND, "Venue unavailability not found")
     if isinstance(exc, service.InactiveVenueError):
         return HTTPException(status.HTTP_409_CONFLICT, "Venue is not active")
-    # 409 rather than 422: the record is well formed, the world is in the way. Same
-    # status and shape booking approval answers for the mirror image of this clash.
-    if isinstance(exc, service.ConfirmedBookingInTheWayError):
-        return HTTPException(status.HTTP_409_CONFLICT, str(exc))
     assert isinstance(exc, service.InvalidVenueUnavailabilityError)
     return HTTPException(422, [problem.__dict__ for problem in exc.problems])
 
@@ -47,42 +48,34 @@ def list_records(venue_id: uuid.UUID, user: AnyUser, db: Db) -> list[VenueUnavai
         raise _http_error(exc) from exc
 
 
-@router.post("", response_model=VenueUnavailabilityRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=VenueUnavailabilitySaved, status_code=status.HTTP_201_CREATED)
 def create_record(
     venue_id: uuid.UUID, body: VenueUnavailabilityWrite, user: VenueStaff, db: Db
-) -> VenueUnavailabilityRead:
-    del user
+) -> VenueUnavailabilitySaved:
+    fields = VenueUnavailabilityFields(**body.model_dump())
     try:
-        return VenueUnavailabilityRead.model_validate(
-            service.create(
-                db, venue_id, VenueUnavailabilityFields(**body.model_dump()), datetime.now(UTC)
-            )
-        )
+        saved = service.create(db, venue_id, fields, _user_id(user), datetime.now(UTC))
     except (venues.VenueNotFoundError, service.VenueUnavailabilityError) as exc:
         raise _http_error(exc) from exc
+    return _saved(saved)
 
 
-@router.put("/{unavailability_id}", response_model=VenueUnavailabilityRead)
+@router.put("/{unavailability_id}", response_model=VenueUnavailabilitySaved)
 def update_record(
     venue_id: uuid.UUID,
     unavailability_id: uuid.UUID,
     body: VenueUnavailabilityWrite,
     user: VenueStaff,
     db: Db,
-) -> VenueUnavailabilityRead:
-    del user
+) -> VenueUnavailabilitySaved:
+    fields = VenueUnavailabilityFields(**body.model_dump())
     try:
-        return VenueUnavailabilityRead.model_validate(
-            service.update(
-                db,
-                venue_id,
-                unavailability_id,
-                VenueUnavailabilityFields(**body.model_dump()),
-                datetime.now(UTC),
-            )
+        saved = service.update(
+            db, venue_id, unavailability_id, fields, _user_id(user), datetime.now(UTC)
         )
     except service.VenueUnavailabilityError as exc:
         raise _http_error(exc) from exc
+    return _saved(saved)
 
 
 @router.delete("/{unavailability_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -95,3 +88,25 @@ def delete_record(
     except service.VenueUnavailabilityError as exc:
         raise _http_error(exc) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _user_id(user: dict[str, object]) -> uuid.UUID:
+    return uuid.UUID(str(user["sub"]))
+
+
+def _saved(saved: service.SavedClosure) -> VenueUnavailabilitySaved:
+    """SCRUM-81 AC2: the closure and the arrangements it affects, for Venue Staff."""
+    read = VenueUnavailabilityRead.model_validate(saved.record)
+    affected = [
+        AffectedArrangementRead(
+            booking_id=item.booking.id,
+            event_request_id=item.booking.event_request_id,
+            event_name=item.event.name if item.event else None,
+            session_label=item.booking.session_label,
+            start_at=item.booking.start_at,
+            end_at=item.booking.end_at,
+            status=item.booking.status,
+        )
+        for item in saved.affected
+    ]
+    return VenueUnavailabilitySaved(**read.model_dump(), affected=affected)

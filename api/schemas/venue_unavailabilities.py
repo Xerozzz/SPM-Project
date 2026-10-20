@@ -20,3 +20,21 @@ class VenueUnavailabilityRead(BaseModel):
     starts_at: datetime
     ends_at: datetime
     reason: str
+
+
+class AffectedArrangementRead(BaseModel):
+    """SCRUM-81 AC2: one arrangement a saved closure runs into."""
+
+    booking_id: uuid.UUID
+    event_request_id: uuid.UUID
+    event_name: str | None
+    session_label: str
+    start_at: datetime
+    end_at: datetime
+    status: str
+
+
+class VenueUnavailabilitySaved(VenueUnavailabilityRead):
+    """A saved closure plus the live arrangements it affects (SCRUM-81 AC2)."""
+
+    affected: list[AffectedArrangementRead]
