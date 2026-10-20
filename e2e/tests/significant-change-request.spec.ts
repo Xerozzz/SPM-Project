@@ -52,3 +52,30 @@ test('an organiser proposes a change and the coordinator can compare it', async 
   await expect(card.getByText(REASON)).toBeVisible()
   await expect(card.getByText('Attendance:').locator('..')).toContainText('180')
 })
+
+// SCRUM-47: the assigned Coordinator approves a pending change with a note, and the
+// event's own value changes while the request shows what was applied.
+const LAYOUT_REASON = `E2E new layout ${Date.now()}`
+
+test('the coordinator approves a change and it is applied', async ({ page }) => {
+  await signIn(page, 'organiser@example.com')
+  const row = ownRow(page, 'Careers Fair')
+  await row.getByRole('button', { name: 'Propose a change to Careers Fair' }).click()
+  const form = row.getByRole('form', { name: 'Propose a change' })
+  await form.getByLabel('Layout').fill('Cabaret style')
+  await form.getByLabel('Reason for the change').fill(LAYOUT_REASON)
+  await form.getByRole('button', { name: 'Send change request' }).click()
+  await expect(form.getByRole('status')).toContainText('Change request sent')
+  await page.getByRole('button', { name: 'Sign out' }).click()
+
+  await signIn(page, 'coordinator@example.com')
+  const card = page.getByRole('article').filter({ hasText: 'Careers Fair' }).first()
+  const request = card.getByRole('article').filter({ hasText: LAYOUT_REASON })
+  await request.getByLabel('Decision note').fill('Cabaret fits the hall')
+  await request.getByRole('button', { name: 'Approve change' }).click()
+
+  await expect(request).toContainText('Approved')
+  await expect(request).toContainText('Cabaret fits the hall')
+  await expect(request.getByRole('row').filter({ hasText: 'Layout' })).toContainText('Applied')
+  await expect(card.getByText('Layout:').locator('..')).toContainText('Cabaret style')
+})
