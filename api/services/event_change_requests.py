@@ -11,6 +11,18 @@ import uuid
 from datetime import datetime
 
 from core.database import Session
+from domain import event_status
+from domain.change_decision import (
+    Decision,
+    ItemOutcome,
+    RecordedItem,
+    decided_status,
+    decision_problems,
+    event_value,
+    outcome_of,
+    proposal_of,
+    stale_items,
+)
 from domain.event_change import (
     EVENT_FIELDS,
     Catalogue,
@@ -23,6 +35,7 @@ from domain.event_change import (
     accepts_change_request,
     plan_change,
 )
+from domain.event_status import EventStatus
 from domain.validation import FieldProblem
 from domain.venue_booking import BookingStatus
 from models.event_change_request import EventChangeItem, EventChangeRequest
@@ -89,6 +102,80 @@ def submit(
         winner = repo.get_by_submission(db, event_request_id, submission_key)
         assert winner is not None
         return winner, False
+
+
+class ChangeRequestNotFoundError(Exception):
+    """No change request with this id belongs to this event."""
+
+
+class StaleChangeRequestError(Exception):
+    """SCRUM-47 AC2: values the request was made against have changed since."""
+
+    def __init__(self, problems: list[FieldProblem]) -> None:
+        super().__init__("change request is stale")
+        self.problems = problems
+
+
+def decide(
+    db: Session,
+    event_request_id: uuid.UUID,
+    change_id: uuid.UUID,
+    coordinator_id: uuid.UUID,
+    decision: Decision,
+    note: str,
+    now: datetime,
+) -> EventChangeRequest:
+    """SCRUM-47: approve or reject a pending change request, all in one transaction.
+
+    Approval applies the event's own fields and marks session and equipment items for
+    replanning (ADR-0043). A stale or no longer valid request is refused and stays
+    pending (AC2). Any failure leaves the plan and the request as they were (AC9).
+    """
+    # Event first, then request: the same lock order as `submit`, so the two never wait
+    # on each other in opposite orders.
+    event = event_repo.get_for_update(db, event_request_id)
+    if event is None:
+        raise EventRequestNotFoundError
+    if event.coordinator_id != coordinator_id or not accepts_change_request(event.status):
+        raise NotAuthorisedError
+    change = repo.get_for_update(db, change_id)
+    if change is None or change.event_request_id != event.id:
+        raise ChangeRequestNotFoundError
+    problems = decision_problems(change.status, note)
+    if problems:
+        raise InvalidChangeRequestError(problems)
+
+    if decision is Decision.APPROVE:
+        _approve(db, event, change, now)
+    change.status = decided_status(decision)
+    change.decided_by_id = coordinator_id
+    change.decided_at = now
+    change.decision_note = note.strip()
+    db.commit()
+    db.refresh(change)
+    return change
+
+
+def _approve(db: Session, event: EventRequest, change: EventChangeRequest, now: datetime) -> None:
+    recorded = [
+        RecordedItem(i.target, i.target_id, i.field, i.current_value, i.proposed_value)
+        for i in change.items
+    ]
+    current = _current_plan(db, event)
+    stale = stale_items(recorded, current)
+    if stale:
+        raise StaleChangeRequestError(stale)
+    # AC4 of SCRUM-37 again: a value valid when proposed may not be valid today.
+    _, problems = plan_change(proposal_of(change.reason, recorded), current, _catalogue(db), now)
+    if problems:
+        raise InvalidChangeRequestError(problems)
+    for row, item in zip(change.items, recorded, strict=True):
+        outcome = outcome_of(item)
+        if outcome is ItemOutcome.APPLIED:
+            setattr(event, item.field, event_value(item))
+        row.outcome = outcome.value
+    if event.status == EventStatus.CONFIRMED:
+        event.status = event_status.replan(event.status)
 
 
 def list_for_event(db: Session, event_request_id: uuid.UUID) -> list[EventChangeRequest]:

@@ -28,9 +28,11 @@ from domain.venue_session import session_problems
 
 
 class ChangeRequestStatus(StrEnum):
-    """Where a change request is. SCRUM-47 adds the decisions."""
+    """Where a change request is. SCRUM-47 decides a pending one."""
 
     PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
 
 
 class ChangeTarget(StrEnum):
