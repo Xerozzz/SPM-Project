@@ -50,6 +50,7 @@ someone else made two weeks ago.
 | [0037](0037-plan-from-maintained-equipment-requirements.md) | Plan from the maintained equipment requirements, not the organiser's string | Proposed |
 | [0038](0038-equipment-reservations-by-type-with-row-locks.md) | Reserve equipment by type, serialised with catalogue row locks | Proposed |
 | [0039](0039-peer-organisers-see-calendar-projection-only.md) | Limit peer Organisers to the organisation-calendar projection | Proposed |
+| [0041](0041-significant-changes-as-change-request-records.md) | Record a significant change as a change request with one row per changed value | Proposed |
 
 ## When to write one
 
