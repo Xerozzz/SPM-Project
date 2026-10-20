@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.security import decode_access_token
+from domain.event_change import accepts_change_request
 from domain.event_request import accepts_ordinary_update
 from domain.event_status import EventStatus
 from domain.roles import Role
@@ -40,6 +41,8 @@ class EventAccess(StrEnum):
     REQUEST_CLARIFICATION = "request_clarification"
     READ_CLARIFICATIONS = "read_clarifications"
     UPDATE_PLANNING_INFO = "update_planning_info"
+    PROPOSE_CHANGE = "propose_change"
+    READ_CHANGE_REQUESTS = "read_change_requests"
 
 
 def get_current_user(
@@ -132,6 +135,20 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
         if permission is EventAccess.UPDATE_PLANNING_INFO:
             is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
             if is_assigned and accepts_ordinary_update(request.status):
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        # SCRUM-37: after submission the owning Organiser proposes significant changes
+        # rather than editing (AC1, AC7). Reading them is for the owner and the event's
+        # current assigned Coordinator, so a reassignment moves it at once (AC6).
+        if permission is EventAccess.PROPOSE_CHANGE:
+            if is_owner and accepts_change_request(request.status):
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        if permission is EventAccess.READ_CHANGE_REQUESTS:
+            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+            if is_owner or is_assigned:
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 

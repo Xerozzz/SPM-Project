@@ -20,6 +20,7 @@ from routers import (
     auth,
     equipment,
     equipment_requirements,
+    event_change_requests,
     event_clarifications,
     event_requests,
     notifications,
@@ -80,6 +81,7 @@ def create_app() -> FastAPI:
     app.include_router(equipment_requirements.router, prefix="/api")
     # SCRUM-44: Technical Support Staff review requirements across events.
     app.include_router(equipment_requirements.review_router, prefix="/api")
+    app.include_router(event_change_requests.router, prefix="/api")
     app.include_router(event_clarifications.router, prefix="/api")
     app.include_router(notifications.router)
     app.include_router(event_requests.router, prefix="/api")
