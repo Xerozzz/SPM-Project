@@ -55,6 +55,25 @@ def test_equal_or_reversed_period_is_rejected() -> None:
 
 
 @pytest.mark.story("SCRUM-111")
+def test_overlong_label_is_rejected() -> None:
+    assert problems(label="x" * 121) == [("session_label", "must be at most 120 characters")]
+
+
+@pytest.mark.story("SCRUM-111")
+def test_missing_start_and_end_are_rejected() -> None:
+    start = EVENT_START + timedelta(hours=1)
+    end = EVENT_START + timedelta(hours=2)
+    missing_start = session_problems("Opening keynote", None, end, EVENT_START, EVENT_END)
+    assert ("start_at", "must give the session start") in [
+        (p.field, p.reason) for p in missing_start
+    ]
+    missing_end = session_problems("Opening keynote", start, None, EVENT_START, EVENT_END)
+    assert ("end_at", "must give the session end") in [
+        (p.field, p.reason) for p in missing_end
+    ]
+
+
+@pytest.mark.story("SCRUM-111")
 def test_period_outside_either_parent_boundary_is_rejected() -> None:
     assert ("start_at", "must not be before the event starts") in problems(
         start=EVENT_START - timedelta(minutes=1)
