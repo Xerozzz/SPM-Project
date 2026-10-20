@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../auth/useAuth'
 import { hasReviewNote } from '../validation/eventRequestReview'
 import { acceptsOrdinaryUpdate } from '../validation/planningInfo'
+import ChangeRequestList from './ChangeRequestList'
 import ClarificationThread from './ClarificationThread'
 import EventEquipmentRequirements from './EventEquipmentRequirements'
 import PlanningInfoEditor from './PlanningInfoEditor'
@@ -183,6 +184,8 @@ function ReviewCard({
         )}
       </div>
       {acceptsOrdinaryUpdate(request.status) && <PlanningInfoEditor request={request} />}
+      {/* SCRUM-37 AC6: pending significant-change requests, current next to proposed. */}
+      <ChangeRequestList eventId={request.id} />
       <ClarificationThread
         eventRequestId={request.id}
         canRequest={request.status === 'submitted'}

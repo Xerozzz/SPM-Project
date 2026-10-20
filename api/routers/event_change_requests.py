@@ -10,7 +10,11 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.dependencies import EventAccess, get_current_user, require_event_access
 from models.event_request import EventRequest
-from schemas.event_change_requests import EventChangeRequestCreate, EventChangeRequestRead
+from schemas.event_change_requests import (
+    ChangePlanRead,
+    EventChangeRequestCreate,
+    EventChangeRequestRead,
+)
 from services import event_change_requests as service
 from services.event_requests import EventRequestNotFoundError, NotAuthorisedError
 
@@ -55,3 +59,9 @@ def propose_change(
 def list_change_requests(event: ReadableEvent, db: Db) -> list[EventChangeRequestRead]:
     """AC6: the event's change requests, for its Organiser and current Coordinator."""
     return [EventChangeRequestRead.model_validate(r) for r in service.list_for_event(db, event.id)]
+
+
+@router.get("/{request_id}/change-requests/plan", response_model=ChangePlanRead)
+def change_plan(event: ProposableEvent, db: Db) -> ChangePlanRead:
+    """The current values and choices the Organiser's change form starts from."""
+    return ChangePlanRead.build(*service.plan_for(db, event))

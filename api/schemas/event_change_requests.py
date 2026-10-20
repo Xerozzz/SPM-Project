@@ -5,7 +5,13 @@ from datetime import UTC, datetime
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, field_validator
 
-from domain.event_change import EquipmentProposal, Proposal, SessionProposal
+from domain.event_change import (
+    Catalogue,
+    CurrentPlan,
+    EquipmentProposal,
+    Proposal,
+    SessionProposal,
+)
 
 
 def _utc(value: datetime | None) -> datetime | None:
@@ -109,3 +115,45 @@ class EventChangeRequestRead(BaseModel):
     event_updated_at: datetime
     created_at: datetime
     items: list[EventChangeItemRead]
+
+
+class PlannedSessionRead(BaseModel):
+    """One live session the Organiser may propose to move or rename."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    session_label: str
+    start_at: datetime
+    end_at: datetime
+
+
+class RequirementRead(BaseModel):
+    """One live equipment line the Organiser may propose to change or remove."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    equipment_type: str
+    quantity: int
+    technical_requirements: str | None
+
+
+class ChangePlanRead(BaseModel):
+    """What a proposal starts from (AC2) and the catalogue choices it may use (AC4)."""
+
+    event: dict[str, object]
+    sessions: list[PlannedSessionRead]
+    equipment: list[RequirementRead]
+    venue_options: list[str]
+    equipment_types: list[str]
+
+    @classmethod
+    def build(cls, plan: CurrentPlan, catalogue: Catalogue) -> "ChangePlanRead":
+        return cls(
+            event=dict(plan.event),
+            sessions=[PlannedSessionRead.model_validate(s) for s in plan.sessions],
+            equipment=[RequirementRead.model_validate(r) for r in plan.equipment],
+            venue_options=list(catalogue.venue_names),
+            equipment_types=sorted(catalogue.equipment_types),
+        )

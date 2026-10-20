@@ -97,6 +97,7 @@ function renderReview(reviewable: unknown[], bookable: unknown[] = []) {
     if (key.startsWith('GET ') && key.endsWith('/venue-bookings')) return json([])
     if (key === 'GET /api/venues') return json([])
     if (key.endsWith('/clarifications')) return json([])
+    if (key.endsWith('/change-requests')) return json([])
     // SCRUM-43 put an equipment editor on this card; empty is enough for these tests.
     if (key.endsWith('/equipment-requirements')) return json([])
     if (key.endsWith('/catalogue-types')) return json([])
@@ -125,6 +126,7 @@ function renderBookingReview(submission: unknown, status = 200, existingBookings
       return json([{ id: 'venue-1', name: 'Small Hall', is_active: true }])
     }
     if (key.endsWith('/clarifications')) return json([])
+    if (key.endsWith('/change-requests')) return json([])
     // SCRUM-43 put an equipment editor on this card; empty is enough for these tests.
     if (key.endsWith('/equipment-requirements')) return json([])
     if (key.endsWith('/catalogue-types')) return json([])
@@ -154,6 +156,7 @@ function renderExistingBookingReview(existingBookings: unknown[]) {
       return json([{ id: 'venue-1', name: 'Small Hall', is_active: true }])
     }
     if (key.endsWith('/clarifications')) return json([])
+    if (key.endsWith('/change-requests')) return json([])
     // SCRUM-43 put an equipment editor on this card; empty is enough for these tests.
     if (key.endsWith('/equipment-requirements')) return json([])
     if (key.endsWith('/catalogue-types')) return json([])
@@ -311,6 +314,7 @@ test('SCRUM-78: adds another venue, retains both records on reload and accepts a
       ])
     }
     if (key.endsWith('/clarifications')) return json([])
+    if (key.endsWith('/change-requests')) return json([])
     // SCRUM-43 put an equipment editor on this card; empty is enough for these tests.
     if (key.endsWith('/equipment-requirements')) return json([])
     if (key.endsWith('/catalogue-types')) return json([])

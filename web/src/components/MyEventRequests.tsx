@@ -11,6 +11,9 @@ import {
   SubmissionRejectedError,
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
+import { acceptsChangeRequest } from '../validation/eventChange'
+import ChangeRequestList from './ChangeRequestList'
+import ProposeChange from './ProposeChange'
 
 /**
  * SCRUM-46: an organiser's event requests, each with a Submit action while it is a draft.
@@ -35,6 +38,7 @@ export default function MyEventRequests({
   const { token } = useAuth()
   const queryClient = useQueryClient()
   const [outcome, setOutcome] = useState<Outcome | null>(null)
+  const [proposing, setProposing] = useState<string | null>(null)
 
   // The token is part of the key: the list is per-user, and without it a sign-out and
   // sign-in as someone else on the same tab could briefly show the previous user's data
@@ -111,6 +115,11 @@ export default function MyEventRequests({
                       Rejection reason: {request.rejection_reason}
                     </p>
                   )}
+                  {(request.status === 'draft' || request.status === 'rejected') && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      To change this request, edit it and submit it again.
+                    </p>
+                  )}
                 </div>
                 {request.status_permits.includes('edit') ? (
                   <div className="flex flex-wrap gap-2">
@@ -134,10 +143,28 @@ export default function MyEventRequests({
                       </button>
                     )}
                   </div>
+                ) : acceptsChangeRequest(request.status) ? (
+                  // SCRUM-37: after submission, significant changes are proposed, not edited.
+                  <button
+                    type="button"
+                    onClick={() => setProposing(request.id)}
+                    aria-label={`Propose a change to ${titleOf(request)}`}
+                    className="rounded border border-slate-300 px-3 py-1.5 text-sm"
+                  >
+                    Propose a change
+                  </button>
                 ) : (
                   <span className="text-sm text-slate-500">
                     Locked - ask your coordinator to request changes
                   </span>
+                )}
+                {acceptsChangeRequest(request.status) && (
+                  <div className="w-full">
+                    {proposing === request.id && (
+                      <ProposeChange eventId={request.id} onClose={() => setProposing(null)} />
+                    )}
+                    <ChangeRequestList eventId={request.id} />
+                  </div>
                 )}
               </li>
             ))}
@@ -161,6 +188,7 @@ function StatusLabel({ status }: { status: EventRequest['status'] }) {
   if (status === 'submitted') return <>Submitted</>
   if (status === 'approved') return <>Approved</>
   if (status === 'rejected') return <>Rejected</>
+  if (status === 'confirmed') return <>Confirmed</>
   return <>Draft</>
 }
 
