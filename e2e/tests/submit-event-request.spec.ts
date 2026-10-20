@@ -55,7 +55,9 @@ test('a complete draft is submitted and confirmed (AC1), then locked (AC3)', asy
     `“${name}” has been submitted for review. Its status is now Submitted.`,
   )
   await expect(row(page, name)).toContainText('Submitted')
-  await expect(row(page, name)).toContainText('Locked')
+  // SCRUM-37: a submitted request is no longer edited, only changed by proposal.
+  await expect(row(page, name).getByRole('button', { name: /Propose a change/ })).toBeVisible()
+  await expect(row(page, name).getByRole('button', { name: /Edit draft/ })).toHaveCount(0)
   await expect(
     row(page, name).getByRole('button', {
       name: 'Submit for review',

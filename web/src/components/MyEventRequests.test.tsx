@@ -83,19 +83,24 @@ function renderSignedIn(
 function defaultHandler(key: string): Handler | null {
   if (key === 'GET /api/event-requests/equipment-types') return () => json(['Projector'])
   if (key === 'GET /api/event-requests/venue-names') return () => json(['Hall A'])
+  // SCRUM-37: a submitted request lists its change requests.
+  if (key.startsWith('GET /api/event-requests/') && key.endsWith('/change-requests'))
+    return () => json([])
   // SCRUM-106: the organiser view renders no clarification surface at all — the
   // thread lives only on the coordinator review card — so no clarification fetch
   // is expected here. If one fires, the mock throws and the test fails loudly.
   return null
 }
 
-test('lists drafts with a submit button and submitted requests as locked', async () => {
+test('lists drafts with a submit button and submitted requests as proposals only', async () => {
   renderSignedIn({ 'GET /api/event-requests': () => json([draft, submitted]) })
 
   expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Submit for review' })).toBeInTheDocument()
   expect(screen.getByText('Open Day')).toBeInTheDocument()
-  expect(screen.getAllByText(/Locked/)).toHaveLength(1)
+  // SCRUM-37: a submitted request is no longer edited directly, only changed by proposal.
+  expect(screen.getAllByRole('button', { name: /Propose a change/ })).toHaveLength(1)
+  expect(screen.getAllByRole('button', { name: /Edit draft/ })).toHaveLength(1)
 })
 
 test('shows a rejection reason to the organiser', async () => {
@@ -150,7 +155,9 @@ test('submitting a complete draft shows confirmation and the new status', async 
   expect(await screen.findByRole('status')).toHaveTextContent(
     '“Orientation Day” has been submitted for review. Its status is now Submitted.',
   )
-  expect(await screen.findByText(/Locked/)).toBeInTheDocument()
+  expect(
+    await screen.findByRole('button', { name: 'Propose a change to Orientation Day' }),
+  ).toBeInTheDocument()
 })
 
 describe('SCRUM-112 own drafts only (frontend unit)', () => {

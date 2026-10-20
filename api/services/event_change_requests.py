@@ -69,11 +69,7 @@ def submit(
         raise EventRequestNotFoundError
     if event.organiser_id != organiser_id or not accepts_change_request(event.status):
         raise NotAuthorisedError
-    catalogue = Catalogue(
-        venue_names=venues_service.list_selectable_names(db),
-        equipment_types=frozenset(equipment_repo.list_distinct_active_types(db)),
-    )
-    items, problems = plan_change(proposal, _current_plan(db, event), catalogue, now)
+    items, problems = plan_change(proposal, _current_plan(db, event), _catalogue(db), now)
     if problems:
         raise InvalidChangeRequestError(problems)
     change = EventChangeRequest(
@@ -98,6 +94,18 @@ def submit(
 def list_for_event(db: Session, event_request_id: uuid.UUID) -> list[EventChangeRequest]:
     """AC6: the event's change requests, newest first. Access is checked by the route."""
     return repo.list_for_event(db, event_request_id)
+
+
+def plan_for(db: Session, event: EventRequest) -> tuple[CurrentPlan, Catalogue]:
+    """The values a proposal starts from and the choices it may pick, for the form."""
+    return _current_plan(db, event), _catalogue(db)
+
+
+def _catalogue(db: Session) -> Catalogue:
+    return Catalogue(
+        venue_names=venues_service.list_selectable_names(db),
+        equipment_types=frozenset(equipment_repo.list_distinct_active_types(db)),
+    )
 
 
 def _current_plan(db: Session, event: EventRequest) -> CurrentPlan:
