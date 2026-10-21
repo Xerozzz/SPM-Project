@@ -1,11 +1,14 @@
 import { expect, type Page, test } from '@playwright/test'
 
+import { createApprovedEvent, VENUE_SPEC_ACCOUNT } from '../support/approved-event'
+
 // SCRUM-111 TC-111-11: a coordinator books one labelled session of a multi-session
 // event through the UI, and the label plus the session period (not the parent event
 // period) show on the request, in the staff queue, and on the calendar.
 //
-// The seeded "Careers Fair" event is the multi-session parent; the session is a
-// two-hour slice of it. CI reseeds before every run, so the venue starts free.
+// The parent is an Approved event this spec creates for itself, on a day no other run
+// or spec uses (support/approved-event.ts), so the venue is free and its card carries
+// only this spec's request — on a reseeded database and on a local one alike.
 
 async function signIn(page: Page, email: string) {
   await page.goto('/')
@@ -22,13 +25,15 @@ async function signOut(page: Page) {
 const SESSION_LABEL = 'E2E morning workshop'
 
 test('a labelled session request shows its label and period everywhere', async ({ page }) => {
-  await signIn(page, 'coordinator@example.com')
+  const event = await createApprovedEvent(page.request, {
+    name: `E2E session label ${Date.now()}`,
+    lane: 1,
+  })
+  // The event's assigned coordinator, who appears in no other spec (see the helper).
+  await signIn(page, VENUE_SPEC_ACCOUNT)
 
-  // Find the seeded Approved event and open its booking card.
-  const card = page
-    .getByRole('article')
-    .filter({ hasText: 'Careers Fair' })
-    .first()
+  // Find this spec's Approved event and open its booking card.
+  const card = page.getByRole('article').filter({ hasText: event.name })
   await expect(card).toBeVisible()
   await card.getByLabel('Active venue').selectOption({ label: 'Hall A' })
   await card.getByLabel('Session label').fill(SESSION_LABEL)
@@ -45,7 +50,8 @@ test('a labelled session request shows its label and period everywhere', async (
   const queue = page.locator('main section', {
     has: page.getByRole('heading', { name: 'Venue booking requests' }),
   })
+  // This event's own request: earlier runs left requests with the same label on others.
   await expect(
-    queue.getByRole('article').filter({ hasText: SESSION_LABEL }).first(),
+    queue.getByRole('article').filter({ hasText: event.name }).filter({ hasText: SESSION_LABEL }),
   ).toBeVisible()
 })

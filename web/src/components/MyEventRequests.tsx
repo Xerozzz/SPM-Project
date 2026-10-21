@@ -12,6 +12,7 @@ import {
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
 import { acceptsChangeRequest } from '../validation/eventChange'
+import { AssignmentHistoryToggle } from './AssignmentHistory'
 import ChangeRequestList from './ChangeRequestList'
 import ProposeChange from './ProposeChange'
 
@@ -164,6 +165,12 @@ export default function MyEventRequests({
                       <ProposeChange eventId={request.id} onClose={() => setProposing(null)} />
                     )}
                     <ChangeRequestList eventId={request.id} />
+                  </div>
+                )}
+                {/* SCRUM-105: a draft has never been submitted, so it has no history. */}
+                {request.status !== 'draft' && (
+                  <div className="w-full">
+                    <AssignmentHistoryToggle requestId={request.id} requestName={request.name} />
                   </div>
                 )}
               </li>

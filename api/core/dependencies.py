@@ -29,7 +29,8 @@ class EventAccess(StrEnum):
     are internal to the assigned coordinator: only they may list or record them, and
     recording is pinned to review (SUBMITTED). Reading the notes needs no status pin —
     the assignee keeps their notes after a decision — but it still needs the current
-    assignment, so reassignment transfers access immediately.
+    assignment, so reassignment transfers access immediately. Assignment history
+    (SCRUM-105) is readable by any Lead, the owning Organiser and the current assignee.
     """
 
     VIEW = "view"
@@ -44,6 +45,7 @@ class EventAccess(StrEnum):
     PROPOSE_CHANGE = "propose_change"
     READ_CHANGE_REQUESTS = "read_change_requests"
     DECIDE_CHANGE_REQUEST = "decide_change_request"
+    READ_ASSIGNMENT_HISTORY = "read_assignment_history"
 
 
 def get_current_user(
@@ -158,6 +160,16 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
         if permission is EventAccess.READ_CHANGE_REQUESTS:
             is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
             if is_owner or is_assigned:
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        # SCRUM-105 (ADR-0047): the assignment history is for any Lead, as before, plus
+        # the owning Organiser and the current assigned Coordinator. No status pin, so a
+        # Lead still reads a draft's empty history. Each role is checked on its own, so
+        # an outgoing Coordinator who is also the owner or a Lead keeps that access.
+        if permission is EventAccess.READ_ASSIGNMENT_HISTORY:
+            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+            if Role.COORDINATOR_LEAD.value in roles or is_owner or is_assigned:
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 

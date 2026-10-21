@@ -1,10 +1,12 @@
 import { expect, type Page, test } from '@playwright/test'
 
+import { API, createApprovedEvent, tokenFor, VENUE_SPEC_ACCOUNT } from '../support/approved-event'
+
 // TC-110-07: Venue Staff approval of a Pending venue booking creates a time-limited
 // tentative hold — not a confirmation — and the hold survives a reload.
 //
 // The Pending booking is set up through the real booking API as the coordinator
-// assigned to the seeded Approved "Careers Fair" event; the approval itself goes
+// assigned to an Approved event this spec creates for itself; the approval itself goes
 // through the Venue Staff UI with a hold expiry, which is what this story changed.
 
 async function signIn(page: Page, email: string) {
@@ -19,54 +21,47 @@ async function signOut(page: Page) {
   await page.getByRole('button', { name: 'Sign out' }).click()
 }
 
-// One seeded active venue is enough: CI reseeds before every run, so the database
-// starts with no holds and the new request is conflict-free. (A previous version of
-// this spec tried each venue in turn to survive local re-runs against a dirty DB,
-// but with only three venues and one bookable event that fallback just hid real
-// failures — a conflict here means the product code regressed, not the seed.)
+// One seeded active venue is enough. The event is the spec's own, on a day no other
+// run or spec uses (support/approved-event.ts), so the new request is conflict-free on
+// a reseeded database and on a local one that keeps earlier runs' holds alike. A
+// conflict here still means the product code regressed, not the data.
 const VENUE_NAME = 'Hall A'
 
 function singaporeDisplay(value: string) {
   return new Date(value).toLocaleString('en-SG', { timeZone: 'Asia/Singapore' })
 }
 
-test('SCRUM-110 and SCRUM-121: approval and an expiry update survive reload', async ({ page }) => {
-  await signIn(page, 'coordinator@example.com')
+/** The Singapore wall clock `days` before an instant, as the hold inputs take it. */
+function singaporeInputBefore(iso: string, days: number) {
+  const at = new Date(iso).getTime() - days * 24 * 3_600_000
+  return new Date(at + 8 * 3_600_000).toISOString().slice(0, 16)
+}
 
-  // Find the seeded Approved event and request Hall A for it through the same
-  // reads the UI uses.
-  const setup = await page.evaluate(async (venueName: string) => {
-    const raw = localStorage.getItem('connectsphere.token')
-    const token = raw ? (JSON.parse(raw) as { token: string }).token : ''
-    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
-    // Relative /api paths would hit the web dev server, so resolve them against the API.
-    const api = `${window.location.protocol}//${window.location.hostname}:8000`
-    const bookable = (await (
-      await fetch(`${api}/api/event-requests/bookable`, { headers })
-    ).json()) as { id: string; name: string; start_at: string; end_at: string }[]
-    const event = bookable.find((row) => row.name === 'Careers Fair')
-    const venues = (await (await fetch(`${api}/api/venues`, { headers })).json()) as {
-      id: string
-      name: string
-    }[]
-    if (!event) return null
-    const venue = venues.find((row) => row.name === venueName)
-    if (!venue) return null
-    const created = await fetch(`${api}/api/event-requests/${event.id}/venue-bookings`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        venue_id: venue.id,
-        session_label: 'Careers Fair session',
-        start_at: event.start_at,
-        end_at: event.end_at,
-      }),
-    })
-    if (!created.ok) return null
-    return { venueName }
-  }, VENUE_NAME)
-  if (!setup) throw new Error('Could not create a Careers Fair booking at Hall A')
-  await signOut(page)
+test('SCRUM-110 and SCRUM-121: approval and an expiry update survive reload', async ({ page }) => {
+  // An Approved event of the spec's own, then a Pending request for Hall A for its
+  // whole period, made as its assigned coordinator through the booking API.
+  const event = await createApprovedEvent(page.request, {
+    name: `E2E approval hold ${Date.now()}`,
+    lane: 0,
+  })
+  const coordinator = await tokenFor(page.request, VENUE_SPEC_ACCOUNT)
+  const headers = { Authorization: `Bearer ${coordinator}` }
+  const venues = (await (await page.request.get(`${API}/api/venues`, { headers })).json()) as {
+    id: string
+    name: string
+  }[]
+  const venue = venues.find((row) => row.name === VENUE_NAME)
+  if (!venue) throw new Error(`Seeded venue ${VENUE_NAME} missing`)
+  const created = await page.request.post(`${API}/api/event-requests/${event.id}/venue-bookings`, {
+    headers,
+    data: {
+      venue_id: venue.id,
+      session_label: 'Approval hold session',
+      start_at: event.start_at,
+      end_at: event.end_at,
+    },
+  })
+  expect(created.ok(), `booking request -> ${created.status()}`).toBe(true)
 
   // Venue Staff approve the Pending request with a hold expiry.
   await signIn(page, 'venue-staff@example.com')
@@ -75,19 +70,20 @@ test('SCRUM-110 and SCRUM-121: approval and an expiry update survive reload', as
   })
   const card = section
     .getByRole('article')
-    .filter({ hasText: 'Careers Fair' })
-    .filter({ hasText: setup.venueName })
+    .filter({ hasText: event.name })
+    .filter({ hasText: VENUE_NAME })
     .first()
   await expect(card).toBeVisible()
-  await card.getByLabel('Hold until (Singapore time)').fill('2026-12-01T10:00')
+  // Both expiries sit before the event starts, as the API requires, wherever its day is.
+  await card.getByLabel('Hold until (Singapore time)').fill(singaporeInputBefore(event.start_at, 2))
   await card.getByRole('button', { name: 'Approve' }).click()
   // The request left Pending for the Tentative holds section — it was never confirmed,
   // so its card offers no approval control anymore. The hold text itself is the proof
   // the approval committed (the outcome line renders alongside it).
   const heldCard = section
     .getByRole('article')
-    .filter({ hasText: 'Careers Fair' })
-    .filter({ hasText: setup.venueName })
+    .filter({ hasText: event.name })
+    .filter({ hasText: VENUE_NAME })
     .first()
   await expect(heldCard).toContainText(/Tentative hold until/)
   await expect(heldCard.getByRole('button', { name: 'Approve' })).toHaveCount(0)
@@ -95,7 +91,7 @@ test('SCRUM-110 and SCRUM-121: approval and an expiry update survive reload', as
 
   // Venue Staff revise the active hold through SCRUM-121's control. The new current
   // expiry is visible immediately and remains the only expiry after reload.
-  const revisedInput = '2026-12-02T10:00'
+  const revisedInput = singaporeInputBefore(event.start_at, 1)
   const revisedInstant = new Date(`${revisedInput}:00+08:00`).toISOString()
   await heldCard.getByLabel('New expiry (Singapore time)').fill(revisedInput)
   await heldCard.getByRole('button', { name: 'Update expiry' }).click()
@@ -109,8 +105,8 @@ test('SCRUM-110 and SCRUM-121: approval and an expiry update survive reload', as
   })
   const reloadedHold = reloaded
     .getByRole('article')
-    .filter({ hasText: 'Careers Fair' })
-    .filter({ hasText: setup.venueName })
+    .filter({ hasText: event.name })
+    .filter({ hasText: VENUE_NAME })
     .first()
   await expect(reloadedHold).toContainText(
     `Tentative hold until ${singaporeDisplay(revisedInstant)}`,
