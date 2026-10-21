@@ -13,6 +13,7 @@ from pydantic import (
 )
 
 from domain.event_status import EventAction, EventStatus, allowed_actions
+from models.event_coordinator_assignment import EventCoordinatorAssignment
 from models.event_request import EventRequest
 
 
@@ -213,15 +214,42 @@ class AssignmentHistoryRead(BaseModel):
 
     `previous_coordinator_id` is None only for the first assignment after this story's
     migration landed; requests assigned earlier have no history rows at all (ADR-0021).
+
+    SCRUM-105 (ADR-0047) adds each person's email beside their id. An email is None
+    when its user row is missing; the UI shows "Unknown user" for it. A None
+    `previous_coordinator_email` with a None id is the first assignment, not a missing user.
     """
 
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     previous_coordinator_id: uuid.UUID | None
+    previous_coordinator_email: str | None
     new_coordinator_id: uuid.UUID
+    new_coordinator_email: str | None
     acted_by_id: uuid.UUID
+    acted_by_email: str | None
     assigned_at: datetime
+
+    @classmethod
+    def from_row(
+        cls,
+        entry: EventCoordinatorAssignment,
+        previous_coordinator_email: str | None,
+        new_coordinator_email: str | None,
+        acted_by_email: str | None,
+    ) -> Self:
+        """Build one entry from the history row and the three emails joined to it."""
+        return cls(
+            id=entry.id,
+            previous_coordinator_id=entry.previous_coordinator_id,
+            previous_coordinator_email=previous_coordinator_email,
+            new_coordinator_id=entry.new_coordinator_id,
+            new_coordinator_email=new_coordinator_email,
+            acted_by_id=entry.acted_by_id,
+            acted_by_email=acted_by_email,
+            assigned_at=entry.assigned_at,
+        )
 
 
 class AssignableCoordinatorRead(BaseModel):

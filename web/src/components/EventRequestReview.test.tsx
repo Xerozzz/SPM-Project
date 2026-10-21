@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { AuthProvider } from '../auth/context'
 import EventRequestReview from './EventRequestReview'
@@ -584,4 +584,67 @@ test('SCRUM-111 TC-111-10: existing requests show their session label', async ()
   ).toBeInTheDocument()
   expect(screen.getByText('Morning workshop')).toBeInTheDocument()
   expect(screen.getByText('Afternoon panel')).toBeInTheDocument()
+})
+
+describe('SCRUM-105 assigned coordinator views assignment history (frontend unit)', () => {
+  const historyUrl = '/api/event-requests/req-1/assignment-history'
+
+  function renderCard(history: Response) {
+    signInAsCoordinator()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const key = `${init?.method ?? 'GET'} ${String(input)}`
+      if (key === 'GET /api/event-requests/reviewable') return json([submitted])
+      if (key === 'GET /api/event-requests/bookable') return json([])
+      if (key.endsWith('/clarifications')) return json([])
+      if (key === `GET ${historyUrl}`) return history
+      throw new Error(`unexpected request ${key}`)
+    })
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <AuthProvider>
+          <EventRequestReview />
+        </AuthProvider>
+      </QueryClientProvider>,
+    )
+  }
+
+  test('the card opens the history with emails and offers no assign or reassign', async () => {
+    renderCard(
+      json([
+        {
+          id: 'h-1',
+          previous_coordinator_id: null,
+          previous_coordinator_email: null,
+          new_coordinator_id: 'user-1',
+          new_coordinator_email: 'coordinator@example.com',
+          acted_by_id: 'l-1',
+          acted_by_email: 'lead@example.com',
+          assigned_at: '2026-11-01T02:00:00Z',
+        },
+      ]),
+    )
+    const card = await screen.findByRole('article')
+    const toggle = within(card).getByRole('button', { name: 'View assignment history' })
+
+    expect(vi.mocked(globalThis.fetch).mock.calls.map(([i]) => String(i))).not.toContain(historyUrl)
+    fireEvent.click(toggle)
+
+    expect(
+      await within(card).findByText(/First assignment → coordinator@example.com/),
+    ).toHaveTextContent('by lead@example.com')
+    expect(within(card).queryByRole('button', { name: /^(re)?assign$/i })).toBeNull()
+  })
+
+  test('a refused history shows only the error, with no entries', async () => {
+    renderCard(json({ detail: 'Forbidden' }, 403))
+    const card = await screen.findByRole('article')
+
+    fireEvent.click(within(card).getByRole('button', { name: 'View assignment history' }))
+
+    expect(await within(card).findByText(/Could not load history/)).toHaveTextContent(
+      'Could not load assignment history (403)',
+    )
+    expect(within(card).queryByText(/First assignment|@example.com/)).toBeNull()
+  })
 })

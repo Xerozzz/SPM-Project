@@ -320,8 +320,12 @@ export async function assignEventRequest(
 export interface AssignmentHistoryEntry {
   id: string
   previous_coordinator_id: string | null
+  /** SCRUM-105: null when there is no previous coordinator or their user row is missing. */
+  previous_coordinator_email: string | null
   new_coordinator_id: string
+  new_coordinator_email: string | null
   acted_by_id: string
+  acted_by_email: string | null
   assigned_at: string
 }
 
