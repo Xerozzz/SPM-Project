@@ -38,7 +38,7 @@ someone else made two weeks ago.
 | [0025](0025-equipment-soft-deactivation.md) | Deactivate equipment catalogue entries instead of deleting them | Proposed |
 | [0026](0026-multiple-venue-booking-requests.md) | Allow independent venue booking requests for one event | Proposed |
 | [0027](0027-venue-buffer-change-audit.md) | Record a venue buffer change as an immutable snapshot, not a live relationship | Proposed |
-| [0028](0028-ordinary-event-updates-by-assigned-coordinator.md) | Ordinary event updates after submission belong to the assigned coordinator | Proposed, status rule superseded by ADR-0042 |
+| [0028](0028-ordinary-event-updates-by-assigned-coordinator.md) | Ordinary event updates after submission belong to the assigned coordinator | Proposed, status rule superseded by ADR-0042, field list superseded by ADR-0046 |
 | [0029](0029-tentative-venue-holds.md) | Place a tentative venue hold on a pending booking request | Proposed |
 | [0030](0030-expire-tentative-holds-with-an-in-process-timer.md) | Expire tentative venue holds with an in-process minute timer | Proposed |
 | [0031](0031-catalogue-backed-venue-requirements.md) | Validate event venue requirements against the catalogue | Proposed |
@@ -55,6 +55,7 @@ someone else made two weeks ago.
 | [0043](0043-decide-change-requests-apply-event-fields-only.md) | Deciding a change request applies the event fields and flags arrangements | Proposed |
 | [0044](0044-record-closures-over-commitments-and-report-impact.md) | Record venue closures over live commitments and report their impact | Proposed |
 | [0045](0045-link-replacement-venue-requests.md) | Link a replacement venue request to the arrangement it replaces | Proposed |
+| [0046](0046-layout-and-accessibility-need-change-control.md) | Layout and accessibility changes need change control | Proposed |
 
 ## When to write one
 

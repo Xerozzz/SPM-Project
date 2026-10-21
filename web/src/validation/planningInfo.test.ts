@@ -20,7 +20,7 @@ const request = {
   registration_requirement: 'Open',
 } as unknown as EventRequest
 
-test('SCRUM-36 AC3: the ordinary fields leave out date, attendance, venue and equipment', () => {
+test('SCRUM-36 AC3, AC4: the ordinary fields leave out every field that needs change control', () => {
   const fields: string[] = ORDINARY_FIELDS.map(([field]) => field)
 
   for (const protectedField of [
@@ -29,10 +29,12 @@ test('SCRUM-36 AC3: the ordinary fields leave out date, attendance, venue and eq
     'expected_attendance',
     'venue_requirement',
     'equipment_requirement',
+    'layout_requirement',
+    'accessibility_requirement',
   ]) {
     expect(fields).not.toContain(protectedField)
   }
-  expect(fields).toHaveLength(6)
+  expect(fields).toHaveLength(4)
 })
 
 test('SCRUM-36: a missing value is shown as empty text', () => {
@@ -40,9 +42,9 @@ test('SCRUM-36: a missing value is shown as empty text', () => {
 })
 
 test('SCRUM-36: only changed fields are sent', () => {
-  const draft = { ...planningInfoOf(request), layout_requirement: 'Banquet' }
+  const draft = { ...planningInfoOf(request), registration_requirement: 'Invite only' }
 
-  expect(changedPlanningInfo(request, draft)).toEqual({ layout_requirement: 'Banquet' })
+  expect(changedPlanningInfo(request, draft)).toEqual({ registration_requirement: 'Invite only' })
   expect(changedPlanningInfo(request, planningInfoOf(request))).toEqual({})
 })
 

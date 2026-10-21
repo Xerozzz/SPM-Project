@@ -71,7 +71,8 @@ export default function PlanningInfoEditor({ request }: { request: EventRequest 
       }}
     >
       <p className="text-sm text-slate-600">
-        Date, time, attendance, venue and equipment cannot be changed here.
+        Date, time, attendance, venue, equipment, layout and accessibility cannot be changed here.
+        The Organiser proposes those as a change request.
       </p>
       {ORDINARY_FIELDS.map(([field, label]) => (
         <div key={field} className="mt-2">

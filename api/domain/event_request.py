@@ -39,12 +39,12 @@ EQUIPMENT_REQUIREMENT_FACILITIES: dict[str, str] = {
 # Date/time, expected attendance, venue and equipment requirements are left out on
 # purpose: changing any of them can affect venue, equipment and registration arrangements
 # already made, so they need change control rather than an ordinary edit.
+# Layout and accessibility are left out too (SCRUM-36 AC4, ADR-0046): either can make an
+# approved venue or safety review stale, so they go through SCRUM-37/SCRUM-47 instead.
 ORDINARY_FIELDS: tuple[str, ...] = (
     "name",
     "purpose",
     "description",
-    "accessibility_requirement",
-    "layout_requirement",
     "registration_requirement",
 )
 

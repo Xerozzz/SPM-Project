@@ -57,19 +57,19 @@ async def test_assigned_coordinator_updates_ordinary_planning_information(
         response = await _update(
             client,
             request.id,
-            {"name": "Orientation Night", "layout_requirement": "Banquet style"},
+            {"name": "Orientation Night", "registration_requirement": "Invite only"},
         )
 
     assert response.status_code == 200
     body = response.json()
     assert body["name"] == "Orientation Night"
-    assert body["layout_requirement"] == "Banquet style"
+    assert body["registration_requirement"] == "Invite only"
     # Fields that were not sent are left as they were, and the status does not move.
     assert body["purpose"] == "Welcome new students"
     assert body["status"] == "submitted"
     db.refresh(request)
     assert request.name == "Orientation Night"
-    assert request.layout_requirement == "Banquet style"
+    assert request.registration_requirement == "Invite only"
     assert request.status is EventStatus.SUBMITTED
 
 
@@ -84,8 +84,6 @@ async def test_every_ordinary_field_can_be_updated(
         "name": "Orientation Night",
         "purpose": "Welcome and induct new students",
         "description": "Evening programme with talks.",
-        "accessibility_requirement": "Step-free access",
-        "layout_requirement": "Banquet style",
         "registration_requirement": "Invite only",
     }
 
@@ -437,3 +435,27 @@ async def test_a_request_confirmed_after_the_access_check_is_refused(
 def test_the_service_reports_an_unknown_request(db: Session) -> None:
     with pytest.raises(service.EventRequestNotFoundError):
         service.update_planning_info(db, uuid.uuid4(), uuid.uuid4(), {"name": "Renamed"})
+
+
+@pytest.mark.story("SCRUM-36")
+@pytest.mark.parametrize(
+    "change",
+    [{"layout_requirement": "Banquet style"}, {"accessibility_requirement": "Hearing loop"}],
+)
+async def test_layout_and_accessibility_go_through_change_control(
+    change: dict[str, str], db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """AC4 (ADR-0046): either can make an approved venue or safety review stale, so they
+    are proposed through SCRUM-37 instead. The update is refused and nothing is saved."""
+    organiser = make_user("organiser")
+    coordinator = make_user("coordinator")
+    request = await _submitted_and_assigned(db, make_client, organiser, coordinator)
+    before = (request.layout_requirement, request.accessibility_requirement)
+
+    async with make_client(coordinator) as client:
+        response = await _update(client, request.id, {"name": "Renamed", **change})
+
+    assert response.status_code == 422
+    db.refresh(request)
+    assert (request.layout_requirement, request.accessibility_requirement) == before
+    assert request.name != "Renamed"
