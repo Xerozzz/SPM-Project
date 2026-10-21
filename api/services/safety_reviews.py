@@ -19,6 +19,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from domain.equipment_requirement import RequirementReview
 from domain.event_status import EventStatus
 from domain.safety_review import (
     PlannedEquipment,
@@ -104,7 +105,10 @@ def plan_of(db: Session, event: EventRequest, now: datetime) -> PlanSnapshot:
                 requirement_id=requirement.id,
                 equipment_type=requirement.equipment_type,
                 quantity=requirement.quantity,
-                review_status=requirement.review_status,
+                # Coerced, not passed through: `review_status` is mapped as a plain
+                # String rather than an Enum, so it comes back from the database as a
+                # str whatever the annotation says, and the pure rule compares enums.
+                review_status=RequirementReview(requirement.review_status),
                 reservation_state=summary.reservation_state,
                 has_flagged_reservation=summary.has_flagged_reservation,
             )

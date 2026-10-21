@@ -62,7 +62,12 @@ def arranged_event(
     db.flush()
     # SCRUM-110: approving a request places the hold, so this is what "arranged" means.
     booking_service.hold(
-        db, booking.id, make_user("venue_staff").id, _START + timedelta(days=1), _NOW
+        db,
+        booking.id,
+        make_user("venue_staff").id,
+        # SCRUM-83: a hold may not outlast the event start, so it sits between.
+        _START - timedelta(days=1),
+        _NOW,
     )
 
     requirement = requirement_service.add(
@@ -125,7 +130,7 @@ async def test_the_worklist_shows_an_event_with_the_plan_to_judge(
     assert response.status_code == 200, response.text
     row = plan_of(response, event)
     # AC3: what the Officer needs for attendance, layout, accessibility and equipment.
-    assert row["expected_attendance"] == 150
+    assert row["expected_attendance"] == event.expected_attendance
     assert row["accessibility_requirement"] is not None
     assert [venue["booking_id"] for venue in row["venues"]] == [str(booking.id)]
     assert row["venues"][0]["session_label"] == "Main hall"
@@ -193,7 +198,9 @@ async def test_an_expired_hold_blocks_a_decision(
     stored status, which is the only way a safety approval cannot rest on a dead hold.
     """
     event, booking, _ = arranged_event(db, make_user)
-    booking.expires_at = _NOW - timedelta(minutes=1)
+    # Against the real clock, not the fixture's: the route reads `datetime.now`, and a
+    # hold dated in 2030 is still live however the fixtures are arranged.
+    booking.expires_at = datetime.now(UTC) - timedelta(minutes=1)
     db.flush()
 
     async with make_client(officer(make_user)) as client:
