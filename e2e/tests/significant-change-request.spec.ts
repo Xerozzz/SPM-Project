@@ -21,7 +21,11 @@ function ownRow(page: Page, name: string) {
     .filter({ hasText: name })
 }
 
-const REASON = `E2E more sign-ups ${Date.now()}`
+// Every value this file proposes is unique to the run, and anything it leaves pending is
+// rejected at the end, so a local re-run against the same database works like CI's fresh
+// one: an approved change from an earlier run never makes this run's proposal a no-op.
+const RUN = Date.now()
+const REASON = `E2E more sign-ups ${RUN}`
 
 test('an organiser proposes a change and the coordinator can compare it', async ({ page }) => {
   await signIn(page, 'organiser@example.com')
@@ -36,33 +40,46 @@ test('an organiser proposes a change and the coordinator can compare it', async 
   await expect(form.getByRole('alert')).toContainText('must be a positive whole number')
   await expect(row.getByRole('article').filter({ hasText: REASON })).toHaveCount(0)
 
-  // AC1, AC3: a valid proposal is recorded as pending, with the current value kept.
-  await form.getByLabel('Attendance').fill('220')
+  // AC1, AC3: a valid proposal is recorded as pending, with the current value kept. The
+  // current attendance is read from the form rather than assumed from the seed.
+  const current = await form.getByLabel('Attendance').inputValue()
+  const proposed = String(Number(current) + 40)
+  await form.getByLabel('Attendance').fill(proposed)
   await form.getByRole('button', { name: 'Send change request' }).click()
   await expect(form.getByRole('status')).toContainText('Change request sent')
   const proposal = row.getByRole('article').filter({ hasText: REASON })
   await expect(proposal).toContainText('Pending review')
-  await expect(proposal.getByRole('row').filter({ hasText: 'Attendance' })).toContainText('180')
-  await expect(proposal.getByRole('row').filter({ hasText: 'Attendance' })).toContainText('220')
+  const attendanceRow = proposal.getByRole('row').filter({ hasText: 'Attendance' })
+  await expect(attendanceRow).toContainText(current)
+  await expect(attendanceRow).toContainText(proposed)
   await page.getByRole('button', { name: 'Sign out' }).click()
 
   // AC5, AC6: the coordinator sees the same pending request, and the event is unchanged.
   await signIn(page, 'coordinator@example.com')
   const card = page.getByRole('article').filter({ hasText: 'Careers Fair' }).first()
-  await expect(card.getByText(REASON)).toBeVisible()
-  await expect(card.getByText('Attendance:').locator('..')).toContainText('180')
+  const request = card.getByRole('article').filter({ hasText: REASON })
+  await expect(request).toBeVisible()
+  await expect(card.getByText('Attendance:').locator('..')).toContainText(current)
+
+  // SCRUM-47 AC6: rejecting keeps the event as it was. This also leaves nothing pending
+  // behind for the next run.
+  await request.getByLabel('Decision note').fill('Hall cannot take more people')
+  await request.getByRole('button', { name: 'Reject change' }).click()
+  await expect(request).toContainText('Rejected')
+  await expect(card.getByText('Attendance:').locator('..')).toContainText(current)
 })
 
 // SCRUM-47: the assigned Coordinator approves a pending change with a note, and the
 // event's own value changes while the request shows what was applied.
-const LAYOUT_REASON = `E2E new layout ${Date.now()}`
+const LAYOUT_REASON = `E2E new layout ${RUN}`
+const LAYOUT = `Cabaret style ${RUN}`
 
 test('the coordinator approves a change and it is applied', async ({ page }) => {
   await signIn(page, 'organiser@example.com')
   const row = ownRow(page, 'Careers Fair')
   await row.getByRole('button', { name: 'Propose a change to Careers Fair' }).click()
   const form = row.getByRole('form', { name: 'Propose a change' })
-  await form.getByLabel('Layout').fill('Cabaret style')
+  await form.getByLabel('Layout').fill(LAYOUT)
   await form.getByLabel('Reason for the change').fill(LAYOUT_REASON)
   await form.getByRole('button', { name: 'Send change request' }).click()
   await expect(form.getByRole('status')).toContainText('Change request sent')
@@ -77,5 +94,5 @@ test('the coordinator approves a change and it is applied', async ({ page }) => 
   await expect(request).toContainText('Approved')
   await expect(request).toContainText('Cabaret fits the hall')
   await expect(request.getByRole('row').filter({ hasText: 'Layout' })).toContainText('Applied')
-  await expect(card.getByText('Layout:').locator('..')).toContainText('Cabaret style')
+  await expect(card.getByText('Layout:').locator('..')).toContainText(LAYOUT)
 })

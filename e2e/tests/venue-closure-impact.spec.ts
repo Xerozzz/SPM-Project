@@ -8,6 +8,7 @@ import { expect, type Page, test } from '@playwright/test'
 // auditorium, so it does not collide with the Hall A hold other specs create.
 
 const VENUE_NAME = 'Mochtar Riady Auditorium'
+const SESSION = 'Closure impact session'
 
 async function signIn(page: Page, email: string) {
   await page.goto('/')
@@ -55,22 +56,38 @@ test('a closure over a live hold is saved, listed and notified', async ({ page }
     (row) => row.name === VENUE_NAME,
   )
   if (!event || !venue) throw new Error('Seeded Careers Fair or auditorium missing')
-  const booking = await api<{ id: string }>(
-    page,
-    `/api/event-requests/${event.id}/venue-bookings`,
-    'POST',
-    {
+  // Re-runnable on the same database: a hold this spec placed on an earlier run is reused
+  // rather than doubled up (a second hold over the same period would clash), and any
+  // replacement it left pending is rejected so "Find a replacement" is offered again.
+  type Booking = { id: string; venue_id: string; session_label: string; status: string }
+  type Linked = Booking & { replaces_booking_id: string | null }
+  const existing = (
+    await api<Linked[]>(page, `/api/event-requests/${event.id}/venue-bookings`)
+  ).filter((row) => row.venue_id === venue.id && row.session_label === SESSION)
+  const live = existing.find((row) => ['tentative', 'confirmed'].includes(row.status))
+  const leftover = live
+    ? (await api<Linked[]>(page, `/api/event-requests/${event.id}/venue-bookings`)).filter(
+        (row) => row.replaces_booking_id === live.id && row.status === 'pending',
+      )
+    : []
+  const booking =
+    live ??
+    (await api<Booking>(page, `/api/event-requests/${event.id}/venue-bookings`, 'POST', {
       venue_id: venue.id,
-      session_label: 'Closure impact session',
+      session_label: SESSION,
       start_at: event.start_at,
       end_at: event.end_at,
-    },
-  )
+    }))
   await page.getByRole('button', { name: 'Sign out' }).click()
 
   await signIn(page, 'venue-staff@example.com')
-  const expires = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()
-  await api(page, `/api/venue-bookings/${booking.id}/approve`, 'POST', { expires_at: expires })
+  if (!live) {
+    const expires = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()
+    await api(page, `/api/venue-bookings/${booking.id}/approve`, 'POST', { expires_at: expires })
+  }
+  for (const row of leftover) {
+    await api(page, `/api/venue-bookings/${row.id}/reject`, 'POST', { reason: 'E2E cleanup' })
+  }
 
   // The closure manager's own section, not the catalogue section around it.
   const section = page.locator('section:has(> h2:text-is("Venue unavailability"))')
@@ -91,11 +108,11 @@ test('a closure over a live hold is saved, listed and notified', async ({ page }
 
   await signIn(page, 'coordinator@example.com')
   await expect(
-    page.getByRole('region', { name: 'Notifications' }).getByText('venue_closure_impact'),
+    page.getByRole('region', { name: 'Notifications' }).getByText('venue_closure_impact').first(),
   ).toBeVisible()
   // AC2, AC3: the existing booking list shows the arrangement needs action.
   const card = page.getByRole('article').filter({ hasText: 'Careers Fair' }).first()
-  await expect(card.getByText(/Needs attention\. The venue is closed/)).toBeVisible()
+  await expect(card.getByText(/Needs attention\. The venue is closed/).first()).toBeVisible()
 
   // SCRUM-116 AC1 to AC3: start a linked replacement at another venue from the affected
   // arrangement. The session and its times are carried over.
@@ -104,11 +121,14 @@ test('a closure over a live hold is saved, listed and notified', async ({ page }
   await card.getByLabel('Active venue').selectOption({ label: 'SCIS Seminar Room 2-1' })
   await card.getByRole('button', { name: 'Submit booking request' }).click()
   await expect(
-    card.getByText(`Replacement for Closure impact session at ${VENUE_NAME}.`),
+    card.getByText(`Replacement for Closure impact session at ${VENUE_NAME}.`).first(),
   ).toBeVisible()
   await expect(
     card.getByText('Replacement requested at SCIS Seminar Room 2-1 (pending).'),
   ).toBeVisible()
+  const replacements = (
+    await api<Linked[]>(page, `/api/event-requests/${event.id}/venue-bookings`)
+  ).filter((row) => row.replaces_booking_id === booking.id && row.status === 'pending')
   await page.getByRole('button', { name: 'Sign out' }).click()
 
   // Clean up so later specs see the seeded Careers Fair without this closure. Removing
@@ -128,5 +148,9 @@ test('a closure over a live hold is saved, listed and notified', async ({ page }
       },
       { venueId: venue.id, id: closure.id },
     )
+  }
+  // And reject this run's replacement, so the next run can request one again.
+  for (const row of replacements) {
+    await api(page, `/api/venue-bookings/${row.id}/reject`, 'POST', { reason: 'E2E cleanup' })
   }
 })
