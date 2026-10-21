@@ -102,9 +102,19 @@ async function freeWindow(request: APIRequestContext, lane: 0 | 1 | 2) {
   throw new Error('No free window for the venue specs in 20 tries')
 }
 
+/**
+ * `coordinator` is who the Lead assigns and who approves; it defaults to
+ * `VENUE_SPEC_ACCOUNT`. A spec that needs the owner and the assignee to be different
+ * people passes another account, and must hand the event back afterwards so it does
+ * not stay on that account's review page (see significant-change-request.spec.ts).
+ */
 export async function createApprovedEvent(
   request: APIRequestContext,
-  { name, lane }: { name: string; lane: 0 | 1 | 2 },
+  {
+    name,
+    lane,
+    coordinator: assignee = VENUE_SPEC_ACCOUNT,
+  }: { name: string; lane: 0 | 1 | 2; coordinator?: string },
 ): Promise<ApprovedEvent> {
   const window = await freeWindow(request, lane)
   const call = async (token: string, method: 'GET' | 'POST', path: string, data?: unknown) => {
@@ -138,13 +148,13 @@ export async function createApprovedEvent(
     'GET',
     '/api/event-requests/assignable-coordinators',
   )) as { id: string; email: string }[]
-  const coordinator = coordinators.find((row) => row.email === VENUE_SPEC_ACCOUNT)
-  expect(coordinator, `${VENUE_SPEC_ACCOUNT} is assignable`).toBeDefined()
+  const coordinator = coordinators.find((row) => row.email === assignee)
+  expect(coordinator, `${assignee} is assignable`).toBeDefined()
   await call(lead, 'POST', `/api/event-requests/${created.id}/assign`, {
     coordinator_id: coordinator!.id,
   })
 
-  const assigned = await tokenFor(request, VENUE_SPEC_ACCOUNT)
+  const assigned = await tokenFor(request, assignee)
   const approved = (await call(
     assigned,
     'POST',
