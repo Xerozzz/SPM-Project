@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from domain.equipment_requirement import RequirementReview
 from domain.event_status import EventStatus
 from domain.safety_review import (
+    STANDING_STATUSES,
     PlannedEquipment,
     PlannedVenue,
     PlanSnapshot,
@@ -79,7 +80,15 @@ def plan_of(db: Session, event: EventRequest, now: datetime) -> PlanSnapshot:
     tentative; a safety prerequisite must not be satisfied by one of those, which is why
     the comparison happens here rather than being left to the stored status.
     """
-    bookings = booking_repo.list_bookings_for_event(db, event.id)
+    # Only the arrangements that still stand. The repository returns every row the event
+    # ever had, rejections and swept holds included, and those are its history rather
+    # than its plan (see STANDING_STATUSES). The equipment side already drops removed
+    # requirements, so the two halves of the plan now mean the same thing by "current".
+    bookings = [
+        booking
+        for booking in booking_repo.list_bookings_for_event(db, event.id)
+        if booking.status in STANDING_STATUSES
+    ]
     requirements = requirement_repo.list_for_event(db, event.id)
     summaries = requirement_service.reservation_summaries(db, requirements)
     return PlanSnapshot(

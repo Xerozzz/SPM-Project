@@ -367,3 +367,108 @@ async def test_the_coordinator_can_read_the_decisions_they_have_to_act_on(
 
     assert response.status_code == 200
     assert [row["comment"] for row in response.json()] == ["Widen."]
+
+
+@pytest.mark.story("SCRUM-79")
+async def test_an_arrangement_that_was_rejected_is_not_part_of_the_plan(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """A rejected request is history, and history must not block a review for good.
+
+    An event keeps every booking row it ever had (SCRUM-40 retains the rejection so the
+    Coordinator can read the reason). Nobody can clear one, so judging it would mean a
+    single refused request in an event's past made its plan unreviewable forever.
+    """
+    event, held, coordinator = arranged_event(db, make_user)
+    venue = make_venue(db, name=f"Hall {uuid.uuid4()}")
+    effective_start, effective_end = effective_for(venue, _START, _START + timedelta(hours=2))
+    db.add(
+        VenueBooking(
+            venue_id=venue.id,
+            event_request_id=event.id,
+            requested_by_id=coordinator.id,
+            session_label="Tried and refused",
+            start_at=_START,
+            end_at=_START + timedelta(hours=2),
+            effective_start_at=effective_start,
+            effective_end_at=effective_end,
+            status=BookingStatus.REJECTED,
+        )
+    )
+    db.flush()
+
+    async with make_client(officer(make_user)) as client:
+        response = await client.get(f"/api/safety-reviews/{event.id}")
+
+    plan = response.json()
+    assert plan["blockers"] == []
+    assert plan["may_review"] is True
+    # AC3: the Officer is shown the arrangement that stands, not the one that did not.
+    assert [venue["booking_id"] for venue in plan["venues"]] == [str(held.id)]
+
+
+@pytest.mark.story("SCRUM-79")
+async def test_a_hold_that_was_swept_does_not_block_the_arrangement_that_replaced_it(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """ADR-0030 keeps a swept hold for its history; the live hold beside it is the plan."""
+    event, held, coordinator = arranged_event(db, make_user)
+    venue = make_venue(db, name=f"Hall {uuid.uuid4()}")
+    effective_start, effective_end = effective_for(venue, _START, _START + timedelta(hours=2))
+    db.add(
+        VenueBooking(
+            venue_id=venue.id,
+            event_request_id=event.id,
+            requested_by_id=coordinator.id,
+            session_label="Ran out",
+            start_at=_START,
+            end_at=_START + timedelta(hours=2),
+            effective_start_at=effective_start,
+            effective_end_at=effective_end,
+            status=BookingStatus.EXPIRED,
+            expires_at=_NOW - timedelta(days=1),
+        )
+    )
+    db.flush()
+
+    async with make_client(officer(make_user)) as client:
+        response = await client.get(f"/api/safety-reviews/{event.id}")
+
+    plan = response.json()
+    assert plan["blockers"] == []
+    assert [venue["booking_id"] for venue in plan["venues"]] == [str(held.id)]
+
+
+@pytest.mark.story("SCRUM-79")
+async def test_a_request_still_waiting_on_venue_staff_blocks_the_review(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """The other half of the same rule: a pending request *is* part of the plan.
+
+    It is not history, it is an arrangement nobody has decided yet, and the Coordinator
+    can get it decided. Dropping it with the dead rows would let a review approve a plan
+    half of which no venue has agreed to.
+    """
+    event, _, coordinator = arranged_event(db, make_user)
+    venue = make_venue(db, name=f"Hall {uuid.uuid4()}")
+    effective_start, effective_end = effective_for(venue, _START, _START + timedelta(hours=2))
+    db.add(
+        VenueBooking(
+            venue_id=venue.id,
+            event_request_id=event.id,
+            requested_by_id=coordinator.id,
+            session_label="Second room, still waiting",
+            start_at=_START,
+            end_at=_START + timedelta(hours=2),
+            effective_start_at=effective_start,
+            effective_end_at=effective_end,
+            status=BookingStatus.PENDING,
+        )
+    )
+    db.flush()
+
+    async with make_client(officer(make_user)) as client:
+        response = await client.get(f"/api/safety-reviews/{event.id}")
+
+    assert response.json()["blockers"] == ["venue_not_held"]
+    assert response.json()["may_review"] is False

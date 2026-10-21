@@ -149,6 +149,20 @@ _HELD_STATUSES: frozenset[BookingStatus] = frozenset(
     {BookingStatus.TENTATIVE, BookingStatus.CONFIRMED}
 )
 
+#: Which of an event's booking rows are its *plan*, as opposed to its history.
+#:
+#: An event keeps every booking row it ever had: SCRUM-40 retains a rejection so the
+#: Coordinator can read the reason, and ADR-0030 keeps a swept hold because "no longer
+#: holds the venue" is not the same as "never happened". None of those three arrange
+#: anything, and none of them can be cleared by anybody, so judging them would block a
+#: review for good: one rejected request in an event's past and no Coordinator could ever
+#: get a plan reviewed. They are also not what the Officer is looking at (AC3), and
+#: letting them into the fingerprint would invalidate a sound approval (AC7) because a
+#: dead row appeared next to the live one.
+STANDING_STATUSES: frozenset[BookingStatus] = frozenset(
+    {BookingStatus.PENDING, BookingStatus.TENTATIVE, BookingStatus.CONFIRMED}
+)
+
 
 def may_review(plan: PlanSnapshot) -> bool:
     """AC2, as a single question for callers that do not need the reasons."""
