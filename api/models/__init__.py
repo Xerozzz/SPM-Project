@@ -6,7 +6,8 @@ package. That is what puts a new table into `Base.metadata` and therefore into
 
 Add each new model here as you write it:
 
-    from models.user import User as User
+    from models.safety_review import SafetyReview as SafetyReview
+from models.user import User as User
 """
 
 from core.database import Base as Base

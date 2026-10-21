@@ -14,3 +14,5 @@ class Role(StrEnum):
     VENUE_STAFF = "venue_staff"
     TECH_SUPPORT = "tech_support"
     ATTENDEE = "attendee"
+    # SCRUM-79: decides whether a plan has passed operational safety review.
+    SAFETY_OFFICER = "safety_officer"
