@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../auth/useAuth'
 import { hasReviewNote } from '../validation/eventRequestReview'
 import { acceptsOrdinaryUpdate } from '../validation/planningInfo'
+import { AssignmentHistoryToggle } from './AssignmentHistory'
 import ChangeRequestList from './ChangeRequestList'
 import ClarificationThread from './ClarificationThread'
 import EventEquipmentRequirements from './EventEquipmentRequirements'
@@ -186,6 +187,8 @@ function ReviewCard({
       {acceptsOrdinaryUpdate(request.status) && <PlanningInfoEditor request={request} />}
       {/* SCRUM-37 AC6 and SCRUM-47: change requests, current next to proposed, decided here. */}
       <ChangeRequestList eventId={request.id} canDecide />
+      {/* SCRUM-105: this list holds only events assigned to the viewer (SCRUM-104). */}
+      <AssignmentHistoryToggle requestId={request.id} requestName={request.name} />
       <ClarificationThread
         eventRequestId={request.id}
         canRequest={request.status === 'submitted'}

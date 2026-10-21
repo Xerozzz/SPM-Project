@@ -43,6 +43,9 @@ DecidableEventRequest = Annotated[EventRequest, Depends(require_event_access(Eve
 PlanningUpdatableEventRequest = Annotated[
     EventRequest, Depends(require_event_access(EventAccess.UPDATE_PLANNING_INFO))
 ]
+HistoryReadableEventRequest = Annotated[
+    EventRequest, Depends(require_event_access(EventAccess.READ_ASSIGNMENT_HISTORY))
+]
 Coordinator = Annotated[dict[str, object], Depends(require_role(Role.COORDINATOR))]
 CoordinatorLead = Annotated[dict[str, object], Depends(require_role(Role.COORDINATOR_LEAD))]
 Db = Annotated[Session, Depends(get_db)]
@@ -163,17 +166,15 @@ def reassign_coordinator(
 
 @router.get("/{request_id}/assignment-history", response_model=list[AssignmentHistoryRead])
 def list_assignment_history(
-    request_id: uuid.UUID, _user: CoordinatorLead, db: Db
+    request: HistoryReadableEventRequest, db: Db
 ) -> list[AssignmentHistoryRead]:
-    """SCRUM-97: the request's assignment history, oldest first.
+    """SCRUM-97: the request's assignment history, oldest first. SCRUM-105: readable by
+    a Lead, the owning Organiser and the current assigned Coordinator (ADR-0047).
 
     Static suffix route declared above `/{request_id}` so FastAPI matches it literally.
     """
-    try:
-        rows = service.list_assignment_history(db, request_id)
-    except _REFUSALS as exc:
-        raise _http_error(exc) from exc
-    return [AssignmentHistoryRead.model_validate(row) for row in rows]
+    rows = service.list_assignment_history(db, request)
+    return [AssignmentHistoryRead.from_row(*row) for row in rows]
 
 
 @router.get("", response_model=list[EventRequestRead])

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import type { EventRequest } from '../api/eventRequests'
@@ -244,4 +244,55 @@ test('there is no New draft button, because the form above is always there', asy
 
   await screen.findByLabelText('Edit draft Orientation Day')
   expect(screen.queryByRole('button', { name: 'New draft' })).toBeNull()
+})
+
+describe('SCRUM-105 owner views assignment history (frontend unit)', () => {
+  const historyUrl = '/api/event-requests/req-2/assignment-history'
+  const entry = {
+    id: 'h-1',
+    previous_coordinator_id: null,
+    previous_coordinator_email: null,
+    new_coordinator_id: 'c-1',
+    new_coordinator_email: 'coordinator@example.com',
+    acted_by_id: 'l-1',
+    acted_by_email: 'lead@example.com',
+    assigned_at: '2026-09-13T02:00:00Z',
+  }
+
+  function requestedUrls() {
+    return vi.mocked(globalThis.fetch).mock.calls.map(([input]) => String(input))
+  }
+
+  test('a submitted row offers the toggle, a draft row does not, and nothing loads until opened', async () => {
+    renderSignedIn({
+      'GET /api/event-requests': () => json([draft, submitted]),
+      [`GET ${historyUrl}`]: () => json([entry]),
+    })
+    const rows = await screen.findAllByRole('listitem')
+    const draftRow = rows.find((row) => row.textContent?.includes('Orientation Day'))!
+    const submittedRow = rows.find((row) => row.textContent?.includes('Open Day'))!
+
+    expect(within(draftRow).queryByRole('button', { name: 'View assignment history' })).toBeNull()
+    expect(requestedUrls()).not.toContain(historyUrl)
+
+    fireEvent.click(within(submittedRow).getByRole('button', { name: 'View assignment history' }))
+
+    expect(
+      await within(submittedRow).findByText(/First assignment → coordinator@example.com/),
+    ).toHaveTextContent('by lead@example.com')
+    expect(requestedUrls().filter((url) => url === historyUrl)).toHaveLength(1)
+    expect(within(submittedRow).queryByRole('button', { name: /^(re)?assign$/i })).toBeNull()
+    expect(within(submittedRow).queryByRole('combobox')).toBeNull()
+  })
+
+  test('a submitted event that was never assigned shows the existing empty state', async () => {
+    renderSignedIn({
+      'GET /api/event-requests': () => json([submitted]),
+      [`GET ${historyUrl}`]: () => json([]),
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View assignment history' }))
+
+    expect(await screen.findByText('No assignment history for Open Day yet.')).toBeInTheDocument()
+  })
 })

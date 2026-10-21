@@ -56,6 +56,7 @@ someone else made two weeks ago.
 | [0044](0044-record-closures-over-commitments-and-report-impact.md) | Record venue closures over live commitments and report their impact | Proposed |
 | [0045](0045-link-replacement-venue-requests.md) | Link a replacement venue request to the arrangement it replaces | Proposed |
 | [0046](0046-layout-and-accessibility-need-change-control.md) | Layout and accessibility changes need change control | Proposed |
+| [0047](0047-assignment-history-for-owner-and-assignee.md) | Let the owning Organiser and the current Coordinator read assignment history | Proposed |
 
 ## When to write one
 

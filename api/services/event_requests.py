@@ -24,7 +24,6 @@ from domain.event_request import (
 )
 from domain.notifications import NotificationSource, NotificationType
 from domain.roles import Role
-from models.event_coordinator_assignment import EventCoordinatorAssignment
 from models.event_request import EventRequest
 from models.user import User
 from repositories import coordinator_assignments as history_repo
@@ -342,13 +341,14 @@ def reassign_coordinator(
     return repo.save(db, request)
 
 
-def list_assignment_history(db: Session, request_id: uuid.UUID) -> list[EventCoordinatorAssignment]:
+def list_assignment_history(db: Session, request: EventRequest) -> list[history_repo.HistoryRow]:
     """SCRUM-97: a request's assignment history, oldest first. Empty when the request
-    was assigned before this story's migration landed (ADR-0021)."""
-    request = repo.get(db, request_id)
-    if request is None:
-        raise EventRequestNotFoundError
-    return history_repo.list_for_event(db, request_id)
+    was assigned before this story's migration landed (ADR-0021).
+
+    SCRUM-105: each entry carries the emails of the people in it. The caller has already
+    been checked by require_event_access(READ_ASSIGNMENT_HISTORY), which also loaded
+    the request, so a missing one is a 404 before this runs."""
+    return history_repo.list_for_event_with_emails(db, request.id)
 
 
 def approve(

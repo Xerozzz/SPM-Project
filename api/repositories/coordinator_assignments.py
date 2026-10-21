@@ -8,9 +8,14 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from models.event_coordinator_assignment import EventCoordinatorAssignment
+from models.user import User
+
+# SCRUM-105: an entry with the previous coordinator's, new coordinator's and acting
+# Lead's emails, in that order. An email is None when its user row is missing.
+HistoryRow = tuple[EventCoordinatorAssignment, str | None, str | None, str | None]
 
 
 def list_for_event(db: Session, event_request_id: uuid.UUID) -> list[EventCoordinatorAssignment]:
@@ -21,6 +26,27 @@ def list_for_event(db: Session, event_request_id: uuid.UUID) -> list[EventCoordi
         .order_by(EventCoordinatorAssignment.assigned_at.asc(), EventCoordinatorAssignment.id.asc())
     )
     return list(db.scalars(statement))
+
+
+def list_for_event_with_emails(db: Session, event_request_id: uuid.UUID) -> list[HistoryRow]:
+    """SCRUM-105: `list_for_event` with each person's email, in the same order.
+
+    LEFT joins, not inner: a missing user row must still show the entry (as an unknown
+    user), never drop it from the audit trail. `list_for_event` stays as it is for the
+    SCRUM-102 notifications that read plain rows.
+    """
+    previous = aliased(User)
+    new = aliased(User)
+    acted_by = aliased(User)
+    statement = (
+        select(EventCoordinatorAssignment, previous.email, new.email, acted_by.email)
+        .outerjoin(previous, EventCoordinatorAssignment.previous_coordinator_id == previous.id)
+        .outerjoin(new, EventCoordinatorAssignment.new_coordinator_id == new.id)
+        .outerjoin(acted_by, EventCoordinatorAssignment.acted_by_id == acted_by.id)
+        .where(EventCoordinatorAssignment.event_request_id == event_request_id)
+        .order_by(EventCoordinatorAssignment.assigned_at.asc(), EventCoordinatorAssignment.id.asc())
+    )
+    return list(db.execute(statement).tuples())
 
 
 def count_for_event(db: Session, event_request_id: uuid.UUID) -> int:

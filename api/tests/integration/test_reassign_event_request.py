@@ -151,11 +151,13 @@ async def test_owner_only_actions_transfer_to_the_new_owner(
 
 
 @pytest.mark.story("SCRUM-97")
+@pytest.mark.story("SCRUM-105")
 async def test_two_reassignments_produce_two_ordered_entries(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     """AC2/AC7: A→B→C yields three chronological entries with correct previous/new
-    owners and actors, viewable oldest first."""
+    owners and actors, viewable oldest first. SCRUM-105 (ADR-0047): each entry also
+    names its people by email; the first assignment has no previous coordinator."""
     organiser = make_user("organiser")
     first = make_user("coordinator")
     second = make_user("coordinator")
@@ -188,13 +190,27 @@ async def test_two_reassignments_produce_two_ordered_entries(
         str(second.id),
     ]
     assert all(entry["acted_by_id"] == str(lead.id) for entry in entries)
+    assert [entry["new_coordinator_email"] for entry in entries] == [
+        first.email,
+        second.email,
+        third.email,
+    ]
+    assert [entry["previous_coordinator_email"] for entry in entries] == [
+        None,
+        first.email,
+        second.email,
+    ]
+    assert all(entry["acted_by_email"] == lead.email for entry in entries)
     assert all(
         set(entry)
         == {
             "id",
             "previous_coordinator_id",
+            "previous_coordinator_email",
             "new_coordinator_id",
+            "new_coordinator_email",
             "acted_by_id",
+            "acted_by_email",
             "assigned_at",
         }
         for entry in entries
@@ -271,20 +287,41 @@ async def test_reassignment_leaves_arrangements_unchanged(
 
 
 @pytest.mark.story("SCRUM-97")
+@pytest.mark.story("SCRUM-105")
 @pytest.mark.parametrize(
-    "role", ["organiser", "coordinator", "venue_staff", "tech_support", "attendee"]
+    ("caller_kind", "history_status"),
+    [
+        # SCRUM-105 (ADR-0047): the owning Organiser may now read the history, but
+        # still may not reassign.
+        ("owning_organiser", 200),
+        ("unrelated_organiser", 403),
+        ("coordinator", 403),
+        ("venue_staff", 403),
+        ("tech_support", 403),
+        ("attendee", 403),
+    ],
 )
 async def test_non_lead_roles_cannot_reassign_or_view_history(
-    role: str, db: Session, make_user: MakeUser, make_client: MakeClient
+    caller_kind: str,
+    history_status: int,
+    db: Session,
+    make_user: MakeUser,
+    make_client: MakeClient,
 ) -> None:
-    """AC4: every non-Lead role gets 403 on both endpoints with no owner or history
-    mutation."""
+    """AC4: every non-Lead role gets 403 on reassign with no owner or history
+    mutation. SCRUM-105: of these callers only the owning Organiser may read the
+    history; an unrelated Organiser and an unassigned Coordinator still get 403."""
     organiser = make_user("organiser")
     first = make_user("coordinator")
     second = make_user("coordinator")
     lead = make_user("coordinator_lead")
     request = _assigned(db, organiser, first, lead)
-    caller = organiser if role == "organiser" else make_user(role)
+    if caller_kind == "owning_organiser":
+        caller = organiser
+    elif caller_kind == "unrelated_organiser":
+        caller = make_user("organiser")
+    else:
+        caller = make_user(caller_kind)
 
     async with make_client(caller) as client:
         reassign = await client.post(
@@ -293,7 +330,9 @@ async def test_non_lead_roles_cannot_reassign_or_view_history(
         history = await client.get(f"/api/event-requests/{request.id}/assignment-history")
 
     assert reassign.status_code == 403
-    assert history.status_code == 403
+    assert history.status_code == history_status
+    if history_status == 403:
+        assert history.json() == {"detail": "Forbidden"}
     db.refresh(request)
     assert request.coordinator_id == first.id
     assert history_repo.count_for_event(db, request.id) == 1
