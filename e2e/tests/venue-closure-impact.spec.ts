@@ -1,11 +1,15 @@
 import { expect, type Page, test } from '@playwright/test'
 
+import { createApprovedEvent, VENUE_SPEC_ACCOUNT } from '../support/approved-event'
+
 // SCRUM-81 and SCRUM-116: Venue Staff record a closure over a live venue hold. The closure is saved,
 // the affected arrangement is listed, nothing is cancelled, and the assigned
 // Coordinator gets a closure-impact notification.
 //
-// The hold is set up through the real API on the seeded Approved "Careers Fair" at the
-// auditorium, so it does not collide with the Hall A hold other specs create.
+// The hold is set up through the real API at the auditorium, on an Approved event this
+// spec creates for itself on a day no other run or spec uses (support/approved-event.ts).
+// The closure therefore touches only this spec's event, even while other venue specs
+// run in parallel, and earlier runs' holds and notifications cannot be mistaken for it.
 
 const VENUE_NAME = 'Mochtar Riady Auditorium'
 
@@ -44,17 +48,15 @@ async function localInput(page: Page, value: string): Promise<string> {
 }
 
 test('a closure over a live hold is saved, listed and notified', async ({ page }) => {
-  await signIn(page, 'coordinator@example.com')
-  const [event] = (
-    await api<{ id: string; name: string; start_at: string; end_at: string }[]>(
-      page,
-      '/api/event-requests/bookable',
-    )
-  ).filter((row) => row.name === 'Careers Fair')
+  const event = await createApprovedEvent(page.request, {
+    name: `E2E closure impact ${Date.now()}`,
+    lane: 2,
+  })
+  await signIn(page, VENUE_SPEC_ACCOUNT)
   const venue = (await api<{ id: string; name: string }[]>(page, '/api/venues')).find(
     (row) => row.name === VENUE_NAME,
   )
-  if (!event || !venue) throw new Error('Seeded Careers Fair or auditorium missing')
+  if (!venue) throw new Error('Seeded auditorium missing')
   const booking = await api<{ id: string }>(
     page,
     `/api/event-requests/${event.id}/venue-bookings`,
@@ -85,16 +87,21 @@ test('a closure over a live hold is saved, listed and notified', async ({ page }
 
   const status = section.getByRole('status')
   await expect(status).toContainText('It affects 1 live arrangement')
-  await expect(status).toContainText('Careers Fair, Closure impact session (tentative)')
+  await expect(status).toContainText(`${event.name}, Closure impact session (tentative)`)
   await expect(status).toContainText('Nothing was cancelled')
   await page.getByRole('button', { name: 'Sign out' }).click()
 
-  await signIn(page, 'coordinator@example.com')
+  await signIn(page, VENUE_SPEC_ACCOUNT)
+  // This event's own closure-impact notification: earlier runs left others in the inbox,
+  // and this event also has an assignment notification.
   await expect(
-    page.getByRole('region', { name: 'Notifications' }).getByText('venue_closure_impact'),
+    page
+      .getByRole('region', { name: 'Notifications' })
+      .getByRole('listitem', { name: new RegExp(`notification for event ${event.id}$`) })
+      .filter({ hasText: 'venue_closure_impact' }),
   ).toBeVisible()
   // AC2, AC3: the existing booking list shows the arrangement needs action.
-  const card = page.getByRole('article').filter({ hasText: 'Careers Fair' }).first()
+  const card = page.getByRole('article').filter({ hasText: event.name })
   await expect(card.getByText(/Needs attention\. The venue is closed/)).toBeVisible()
 
   // SCRUM-116 AC1 to AC3: start a linked replacement at another venue from the affected
@@ -111,7 +118,7 @@ test('a closure over a live hold is saved, listed and notified', async ({ page }
   ).toBeVisible()
   await page.getByRole('button', { name: 'Sign out' }).click()
 
-  // Clean up so later specs see the seeded Careers Fair without this closure. Removing
+  // Clean up so no closure is left on the auditorium for later runs or specs. Removing
   // it clears the derived marker with nothing else to undo (AC6).
   await signIn(page, 'venue-staff@example.com')
   const closures = await api<{ id: string }[]>(page, `/api/venues/${venue.id}/unavailabilities`)
