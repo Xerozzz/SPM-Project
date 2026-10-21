@@ -21,12 +21,14 @@ from domain.roles import Role
 from models.equipment import Equipment
 from models.equipment_requirement_change import EquipmentRequirementChange
 from models.equipment_reservation import EquipmentReservation
+from models.event_change_request import EventChangeItem, EventChangeRequest
 from models.event_clarification import EventClarification
 from models.event_coordinator_assignment import EventCoordinatorAssignment
 from models.event_equipment_requirement import EventEquipmentRequirement
 from models.event_request import EventRequest
 from models.notification import Notification
 from models.organisation import Organisation
+from models.safety_review import SafetyReview
 from models.user import User
 from models.venue import Venue
 from models.venue_booking import VenueBooking
@@ -289,6 +291,9 @@ def _seed_event_requests(db: Session) -> None:
 # because a fresh runner always starts from an empty volume.
 _DEPENDENTS = (
     EquipmentRequirementChange,
+    # SCRUM-37 and SCRUM-47. Its own children go first, in `_delete_dependents`, because
+    # they hang off the change request rather than off the event.
+    EventChangeRequest,
     # Before the requirements themselves: a reservation points at the requirement row,
     # so deleting that row first is refused (SCRUM-53). Order in this tuple is the
     # delete order, children first.
@@ -297,12 +302,26 @@ _DEPENDENTS = (
     EventClarification,
     EventCoordinatorAssignment,
     Notification,
+    # SCRUM-79, and the same trap a third time: a Safety Officer's decision points at the
+    # event it judged, so once one exists against a sample the next seed run cannot put
+    # that sample back in Draft. CI starts from an empty volume and never sees it; the
+    # team's second `docker compose up` does, and the API dies on startup.
+    SafetyReview,
     VenueBooking,
 )
 
 
 def _delete_dependents(db: Session, request_id: uuid.UUID) -> None:
     """Clear the rows that would otherwise refuse the delete, children first."""
+    # The one grandchild: a change item points at its change request, not at the event,
+    # so the loop below cannot reach it and deleting the request would be refused.
+    db.query(EventChangeItem).filter(
+        EventChangeItem.change_request_id.in_(
+            db.query(EventChangeRequest.id).filter(
+                EventChangeRequest.event_request_id == request_id
+            )
+        )
+    ).delete(synchronize_session=False)
     for model in _DEPENDENTS:
         db.query(model).filter(model.event_request_id == request_id).delete(
             synchronize_session=False
