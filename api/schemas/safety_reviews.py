@@ -3,11 +3,18 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from domain.equipment_requirement import RequirementReview
 from domain.equipment_reservation import ReservationState
-from domain.safety_review import PlanSnapshot, SafetyDecision, blockers, fingerprint
+from domain.safety_review import (
+    MAX_COMMENT_LENGTH,
+    PlanSnapshot,
+    SafetyDecision,
+    blockers,
+    fingerprint,
+    returns_to_coordinator,
+)
 from domain.venue_booking import BookingStatus
 from models.event_request import EventRequest
 from models.safety_review import SafetyReview
@@ -48,6 +55,24 @@ class SafetyReviewRead(BaseModel):
     plan_fingerprint: str
     decided_by_id: uuid.UUID
     decided_at: datetime
+    #: AC5: does this decision send the plan back to the Coordinator? Sent rather than
+    #: left for the client to work out from `decision`, because that would put the rule
+    #: in a second place: a fourth outcome added later would quietly read as an approval
+    #: on every screen that compared against "approve" itself.
+    returns_to_coordinator: bool
+
+    @classmethod
+    def of(cls, review: SafetyReview) -> "SafetyReviewRead":
+        return cls(
+            id=review.id,
+            event_request_id=review.event_request_id,
+            decision=SafetyDecision(review.decision),
+            comment=review.comment,
+            plan_fingerprint=review.plan_fingerprint,
+            decided_by_id=review.decided_by_id,
+            decided_at=review.decided_at,
+            returns_to_coordinator=returns_to_coordinator(SafetyDecision(review.decision)),
+        )
 
 
 class EventPlanRead(BaseModel):
@@ -72,7 +97,10 @@ class EventPlanRead(BaseModel):
     plan_fingerprint: str
     may_review: bool
     blockers: list[str]
-    #: AC5: the decision the Coordinator still has to act on, or null once cleared.
+    #: The newest decision on this event, whatever it was, or null if there has never
+    #: been one. Whether it is still outstanding is `latest_decision.returns_to_
+    #: coordinator`: an approval that follows a rejection clears it with no second
+    #: write, the same choice ADR-0033 made for a flagged reservation.
     latest_decision: SafetyReviewRead | None
 
     @classmethod
@@ -93,9 +121,7 @@ class EventPlanRead(BaseModel):
             plan_fingerprint=fingerprint(plan),
             may_review=not reasons,
             blockers=reasons,
-            latest_decision=(
-                SafetyReviewRead.model_validate(latest) if latest is not None else None
-            ),
+            latest_decision=(SafetyReviewRead.of(latest) if latest is not None else None),
         )
 
 
@@ -105,6 +131,8 @@ class SafetyDecisionCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     decision: SafetyDecision
-    comment: str
+    #: Capped like every other reason a decision carries (SCRUM-40's rejection reason),
+    #: so one screen cannot write something another cannot show.
+    comment: str = Field(max_length=MAX_COMMENT_LENGTH)
     #: Taken from the plan the screen was showing, so a stale decision can be refused.
     plan_fingerprint: str

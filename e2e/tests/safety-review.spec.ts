@@ -58,33 +58,28 @@ async function ownVenue(request: APIRequestContext, name: string) {
   })
 }
 
-test('a Safety Officer reviews an arranged plan and records a decision', async ({ page }) => {
+/**
+ * An event whose plan AC2 lets a review begin on: a held venue and reviewed, reserved
+ * equipment, each put there by the role that really does it.
+ */
+async function arrangedEvent(request: APIRequestContext, label: string) {
   const stamp = Date.now()
-  const event = await createApprovedEvent(page.request, {
-    name: `E2E safety review ${stamp}`,
-    lane: 2,
-  })
-  const venue = await ownVenue(page.request, `E2E Safety Hall ${stamp}`)
+  const event = await createApprovedEvent(request, { name: `${label} ${stamp}`, lane: 2 })
+  const venue = await ownVenue(request, `E2E Safety Hall ${label} ${stamp}`)
 
   // The Coordinator asks for the venue, and Venue Staff hold it (SCRUM-110: approving a
   // request places a tentative hold, which is what AC2 counts as arranged).
-  const coordinator = await tokenFor(page.request, VENUE_SPEC_ACCOUNT)
-  const booking = await call(
-    page.request,
-    coordinator,
-    'POST',
-    `/api/event-requests/${event.id}/venue-bookings`,
-    {
-      venue_id: venue.id,
-      session_label: 'Main session',
-      start_at: event.start_at,
-      end_at: event.end_at,
-    },
-  )
-  const staff = await tokenFor(page.request, 'venue-staff@example.com')
+  const coordinator = await tokenFor(request, VENUE_SPEC_ACCOUNT)
+  const booking = await call(request, coordinator, 'POST', `/api/event-requests/${event.id}/venue-bookings`, {
+    venue_id: venue.id,
+    session_label: 'Main session',
+    start_at: event.start_at,
+    end_at: event.end_at,
+  })
+  const staff = await tokenFor(request, 'venue-staff@example.com')
   // SCRUM-83: a hold may not outlast the event start, so it expires an hour before.
   const expiresAt = new Date(Date.parse(event.start_at) - 3_600_000).toISOString()
-  await call(page.request, staff, 'POST', `/api/venue-bookings/${booking.id}/hold`, {
+  await call(request, staff, 'POST', `/api/venue-bookings/${booking.id}/hold`, {
     expires_at: expiresAt,
   })
 
@@ -92,24 +87,29 @@ test('a Safety Officer reviews an arranged plan and records a decision', async (
   // Approving the event already turned the Organiser's stated need into a requirement
   // record, so this reviews the one that is there rather than adding a second.
   const requirements = (await call(
-    page.request,
+    request,
     coordinator,
     'GET',
     `/api/event-requests/${event.id}/equipment-requirements`,
-  )) as unknown as { id: string; equipment_type: string }[]
+  )) as unknown as { id: string }[]
   const requirement = requirements[0]
   expect(requirement, 'the approved event has an equipment requirement').toBeDefined()
-  const tech = await tokenFor(page.request, 'tech-support@example.com')
-  await call(page.request, tech, 'PATCH', `/api/equipment-requirements/${requirement.id}/review`, {
+  const tech = await tokenFor(request, 'tech-support@example.com')
+  await call(request, tech, 'PATCH', `/api/equipment-requirements/${requirement.id}/review`, {
     review_status: 'available',
   })
   await call(
-    page.request,
+    request,
     tech,
     'POST',
     `/api/event-requests/${event.id}/equipment-requirements/${requirement.id}/reserve`,
     {},
   )
+  return event
+}
+
+test('a Safety Officer reviews an arranged plan and records a decision', async ({ page }) => {
+  const event = await arrangedEvent(page.request, 'E2E safety review')
 
   await signIn(page, 'safety-officer@example.com')
 
@@ -122,7 +122,9 @@ test('a Safety Officer reviews an arranged plan and records a decision', async (
   await expect(card.getByText('This plan cannot be reviewed yet.')).toBeHidden()
 
   // AC4: a decision needs a reason, and the reason is what the Coordinator reads.
-  await expect(card.getByRole('button', { name: `Approve the plan for ${event.name}` })).toBeDisabled()
+  await expect(
+    card.getByRole('button', { name: `Approve the plan for ${event.name}` }),
+  ).toBeDisabled()
   await card.getByLabel('Reason for this decision').fill('Egress and capacity check out.')
   await card.getByRole('button', { name: `Approve the plan for ${event.name}` }).click()
 
@@ -132,4 +134,36 @@ test('a Safety Officer reviews an arranged plan and records a decision', async (
   // AC9: the decision is in the event's history, with the reason it was given for.
   await card.getByRole('button', { name: 'Past decisions' }).click()
   await expect(card.getByText('Egress and capacity check out.').first()).toBeVisible()
+})
+
+test('a rejection reaches the Coordinator who has to act on it', async ({ page }) => {
+  // AC5. Without the notification the decision is a row nobody is told about, and the
+  // plan "goes back to the Coordinator" only in the sense that they could go looking.
+  const event = await arrangedEvent(page.request, 'E2E safety rejection')
+
+  await signIn(page, 'safety-officer@example.com')
+  const card = page.getByRole('article').filter({ hasText: event.name })
+  await expect(card).toBeVisible({ timeout: 15000 })
+  await card.getByLabel('Reason for this decision').fill('Only one exit for this layout.')
+  await card.getByRole('button', { name: `Reject the plan for ${event.name}` }).click()
+  await expect(card.getByRole('status')).toContainText('The Coordinator has been notified.')
+
+  // The Coordinator finds it in their own inbox, and can read the reason in the history
+  // — a read the Organiser and everyone else is refused.
+  const coordinator = await tokenFor(page.request, VENUE_SPEC_ACCOUNT)
+  const inbox = (await call(page.request, coordinator, 'GET', '/api/notifications')) as unknown as {
+    type: string
+    event_request_id: string
+  }[]
+  const mine = inbox.filter((row) => row.event_request_id === event.id)
+  expect(mine.map((row) => row.type)).toContain('safety_rejected')
+
+  const history = (await call(
+    page.request,
+    coordinator,
+    'GET',
+    `/api/safety-reviews/${event.id}/history`,
+  )) as unknown as { comment: string; returns_to_coordinator: boolean }[]
+  expect(history.map((row) => row.comment)).toEqual(['Only one exit for this layout.'])
+  expect(history[0].returns_to_coordinator).toBe(true)
 })

@@ -67,6 +67,7 @@ const RECORDED = {
   plan_fingerprint: 'fingerprint-abc',
   decided_by_id: 'officer-1',
   decided_at: '2029-12-01T02:00:00Z',
+  returns_to_coordinator: false,
 }
 
 function json(body: unknown, status = 200) {
@@ -182,7 +183,15 @@ test('approving sends the fingerprint of the plan that was read, and says it con
 test('rejecting says the plan goes back to the Coordinator', async () => {
   renderQueue([READY], (key) =>
     key === 'POST /api/safety-reviews/event-1'
-      ? json({ ...RECORDED, decision: 'reject', comment: 'Exit route is blocked.' }, 201)
+      ? json(
+          {
+            ...RECORDED,
+            decision: 'reject',
+            comment: 'Exit route is blocked.',
+            returns_to_coordinator: true,
+          },
+          201,
+        )
       : undefined,
   )
 
@@ -191,7 +200,7 @@ test('rejecting says the plan goes back to the Coordinator', async () => {
 
   await waitFor(() => {
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Reject recorded for Orientation Day. It goes back to the Coordinator.',
+      'Reject recorded for Orientation Day. The Coordinator has been notified.',
     )
   })
 })
@@ -199,7 +208,15 @@ test('rejecting says the plan goes back to the Coordinator', async () => {
 test('requesting changes is offered as its own decision', async () => {
   renderQueue([READY], (key) =>
     key === 'POST /api/safety-reviews/event-1'
-      ? json({ ...RECORDED, decision: 'request_changes', comment: 'Add a second exit.' }, 201)
+      ? json(
+          {
+            ...RECORDED,
+            decision: 'request_changes',
+            comment: 'Add a second exit.',
+            returns_to_coordinator: true,
+          },
+          201,
+        )
       : undefined,
   )
 
@@ -208,7 +225,7 @@ test('requesting changes is offered as its own decision', async () => {
 
   await waitFor(() => {
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Request changes recorded for Orientation Day. It goes back to the Coordinator.',
+      'Request changes recorded for Orientation Day. The Coordinator has been notified.',
     )
   })
 })
@@ -266,6 +283,7 @@ test('the decision the Coordinator still has to act on stays on the card', async
         ...RECORDED,
         decision: 'request_changes',
         comment: 'Add a second exit.',
+        returns_to_coordinator: true,
       },
     },
   ])

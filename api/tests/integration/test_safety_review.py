@@ -472,3 +472,137 @@ async def test_a_request_still_waiting_on_venue_staff_blocks_the_review(
 
     assert response.json()["blockers"] == ["venue_not_held"]
     assert response.json()["may_review"] is False
+
+
+@pytest.mark.story("SCRUM-79")
+async def test_a_decision_notifies_the_coordinator_who_has_to_act_on_it(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """AC5: the plan going back to the Coordinator has to actually reach them.
+
+    Without this the decision is a row nobody is told about, and "it goes back to the
+    Coordinator" is true only in the sense that someone could go looking for it.
+    """
+    event, _, coordinator = arranged_event(db, make_user)
+
+    async with make_client(officer(make_user)) as client:
+        plan = (await client.get(f"/api/safety-reviews/{event.id}")).json()
+        response = await client.post(
+            f"/api/safety-reviews/{event.id}",
+            json=body(str(plan["plan_fingerprint"]), decision="reject", comment="Exit blocked."),
+        )
+    assert response.status_code == 201
+
+    async with make_client(coordinator) as client:
+        inbox = (await client.get("/api/notifications")).json()
+
+    safety = [row for row in inbox if str(row["type"]).startswith("safety")]
+    assert [row["type"] for row in safety] == ["safety_rejected"]
+    assert safety[0]["event_request_id"] == str(event.id)
+    # The reason itself stays in the authorised history, as SCRUM-94 keeps a rejection
+    # reason out of the notification.
+    assert "Exit blocked." not in str(safety[0])
+
+
+@pytest.mark.story("SCRUM-79")
+async def test_each_decision_notifies_once_and_names_itself(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """A later decision is a new row, so it is a new notification, not a swallowed one."""
+    event, _, coordinator = arranged_event(db, make_user)
+
+    async with make_client(officer(make_user)) as client:
+        plan = (await client.get(f"/api/safety-reviews/{event.id}")).json()
+        fingerprint = str(plan["plan_fingerprint"])
+        await client.post(
+            f"/api/safety-reviews/{event.id}",
+            json=body(fingerprint, decision="request_changes", comment="Widen the aisle."),
+        )
+        await client.post(
+            f"/api/safety-reviews/{event.id}",
+            json=body(fingerprint, decision="approve", comment="Aisle widened."),
+        )
+
+    async with make_client(coordinator) as client:
+        inbox = (await client.get("/api/notifications")).json()
+
+    safety = sorted(
+        (row for row in inbox if str(row["type"]).startswith("safety")),
+        key=lambda row: str(row["occurred_at"]),
+    )
+    assert {row["type"] for row in safety} == {"safety_changes_requested", "safety_approved"}
+
+
+@pytest.mark.story("SCRUM-79")
+async def test_an_unrelated_signed_in_user_cannot_read_an_events_safety_decisions(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """AC9 is for the people doing the work, not for anyone holding a token.
+
+    A decision's comment is an internal judgement about an event's arrangements, so an
+    attendee, an organiser and a coordinator the event is not assigned to are all
+    refused — the same line SCRUM-106 drew for clarification notes.
+    """
+    event, _, _ = arranged_event(db, make_user)
+
+    for role in ("attendee", "organiser", "venue_staff", "tech_support"):
+        async with make_client(make_user(role)) as client:
+            response = await client.get(f"/api/safety-reviews/{event.id}/history")
+        assert response.status_code == 403, f"{role} could read the decisions"
+
+    # A Coordinator who is not the one assigned to this event is refused too.
+    async with make_client(make_user("coordinator")) as client:
+        response = await client.get(f"/api/safety-reviews/{event.id}/history")
+    assert response.status_code == 403
+
+
+@pytest.mark.story("SCRUM-79")
+async def test_the_people_doing_the_work_can_read_the_decisions(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """AC5 and AC9: the assigned Coordinator, any Lead, and the Safety Officer."""
+    event, _, coordinator = arranged_event(db, make_user)
+
+    for who in (coordinator, officer(make_user), make_user("coordinator_lead")):
+        async with make_client(who) as client:
+            response = await client.get(f"/api/safety-reviews/{event.id}/history")
+        assert response.status_code == 200, f"{who.email} was refused"
+
+
+@pytest.mark.story("SCRUM-79")
+async def test_a_decision_says_whether_it_goes_back_to_the_coordinator(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """AC5, as the API's answer rather than something each screen works out again."""
+    event, _, _ = arranged_event(db, make_user)
+
+    async with make_client(officer(make_user)) as client:
+        plan = (await client.get(f"/api/safety-reviews/{event.id}")).json()
+        returned = (
+            await client.post(
+                f"/api/safety-reviews/{event.id}",
+                json=body(str(plan["plan_fingerprint"]), decision="reject", comment="Unsafe."),
+            )
+        ).json()
+        after = (await client.get(f"/api/safety-reviews/{event.id}")).json()
+
+    assert returned["returns_to_coordinator"] is True
+    assert after["latest_decision"]["returns_to_coordinator"] is True
+
+
+@pytest.mark.story("SCRUM-79")
+async def test_a_reason_longer_than_the_cap_is_refused(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """AC4: capped like SCRUM-40's rejection reason, so one screen cannot write
+    something another cannot show."""
+    event, _, _ = arranged_event(db, make_user)
+
+    async with make_client(officer(make_user)) as client:
+        plan = (await client.get(f"/api/safety-reviews/{event.id}")).json()
+        response = await client.post(
+            f"/api/safety-reviews/{event.id}",
+            json=body(str(plan["plan_fingerprint"]), comment="x" * 1001),
+        )
+
+    assert response.status_code == 422

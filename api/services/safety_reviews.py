@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from domain.equipment_requirement import RequirementReview
 from domain.event_status import EventStatus
+from domain.notifications import NotificationSource, NotificationType
 from domain.safety_review import (
     STANDING_STATUSES,
     PlannedEquipment,
@@ -35,9 +36,20 @@ from domain.venue_hold import is_due
 from models.event_request import EventRequest
 from models.safety_review import SafetyReview
 from repositories import equipment_requirements as requirement_repo
+from repositories import notifications as notifications_repo
 from repositories import safety_reviews as repo
 from repositories import venue_availability as booking_repo
 from services import equipment_requirements as requirement_service
+
+#: AC5: which notification each decision raises. The type names the decision, as
+#: SCRUM-94's do, so the Coordinator can tell whether the plan is back with them
+#: without opening the event. Keyed by every member, so a fourth outcome added later
+#: fails here rather than silently notifying nobody.
+_NOTIFICATION_OF: dict[SafetyDecision, NotificationType] = {
+    SafetyDecision.APPROVE: NotificationType.SAFETY_APPROVED,
+    SafetyDecision.REJECT: NotificationType.SAFETY_REJECTED,
+    SafetyDecision.REQUEST_CHANGES: NotificationType.SAFETY_CHANGES_REQUESTED,
+}
 
 #: AC2 and AC5: the codebase calls the planning phase APPROVED (see ACTIVE_STATUSES and
 #: the SCRUM-43 work). There is no separate Planning status to wait for.
@@ -160,7 +172,7 @@ def record(
     if is_stale(reviewed_fingerprint, current):
         raise StalePlanError(current)
 
-    return repo.save(
+    recorded = repo.add(
         db,
         SafetyReview(
             event_request_id=event.id,
@@ -171,6 +183,25 @@ def record(
             decided_at=now,
         ),
     )
+    # AC5: the plan going back to the Coordinator has to actually reach them. Without
+    # this the decision is recorded and nobody is told, which is the whole of AC5 left
+    # undone. An approval is sent too: the Coordinator is the one who acts on it next,
+    # and the customer's answer on confirmation makes safety approval a thing they have
+    # to wait for. The comment is deliberately not copied into the notification, as
+    # SCRUM-94 does with a rejection reason: it is read through the authorised history.
+    if event.coordinator_id is not None:
+        notifications_repo.stage(
+            db,
+            recipient_id=event.coordinator_id,
+            event_request_id=event.id,
+            type=_NOTIFICATION_OF[decision],
+            source_type=NotificationSource.SAFETY_REVIEW,
+            source_id=str(recorded.id),
+            occurred_at=now,
+        )
+    db.commit()
+    db.refresh(recorded)
+    return recorded
 
 
 def history_for_event(db: Session, event: EventRequest) -> list[SafetyReview]:

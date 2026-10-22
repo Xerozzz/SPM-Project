@@ -31,6 +31,8 @@ class EventAccess(StrEnum):
     the assignee keeps their notes after a decision — but it still needs the current
     assignment, so reassignment transfers access immediately. Assignment history
     (SCRUM-105) is readable by any Lead, the owning Organiser and the current assignee.
+    Safety decisions (SCRUM-79) are staff-side: the Safety Officer, any Lead and the
+    current assignee, but not the Organiser.
     """
 
     VIEW = "view"
@@ -46,6 +48,7 @@ class EventAccess(StrEnum):
     READ_CHANGE_REQUESTS = "read_change_requests"
     DECIDE_CHANGE_REQUEST = "decide_change_request"
     READ_ASSIGNMENT_HISTORY = "read_assignment_history"
+    READ_SAFETY_REVIEWS = "read_safety_reviews"
 
 
 def get_current_user(
@@ -195,6 +198,22 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
         if permission is EventAccess.CHECK_EQUIPMENT_AVAILABILITY:
             is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
             if is_assigned or Role.TECH_SUPPORT.value in roles:
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        # SCRUM-79 AC9: the Safety Officer who records decisions, the assigned
+        # Coordinator who has to act on one (AC5), and any Lead for oversight. Not the
+        # owning Organiser and not an attendee: a decision's comment is an internal
+        # operational judgement about an event's arrangements ("the exit route is
+        # blocked"), which SCRUM-106 already decided is staff-side rather than something
+        # the Organiser reads. No status pin — a decision stays readable afterwards.
+        if permission is EventAccess.READ_SAFETY_REVIEWS:
+            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+            if (
+                Role.SAFETY_OFFICER.value in roles
+                or Role.COORDINATOR_LEAD.value in roles
+                or is_assigned
+            ):
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 

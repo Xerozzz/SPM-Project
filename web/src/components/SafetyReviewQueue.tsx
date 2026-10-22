@@ -97,12 +97,11 @@ export default function SafetyReviewQueue() {
     onSuccess: (recorded, input) => {
       setOutcome({
         eventId: input.plan.event_request_id,
-        text:
-          recorded.decision === 'approve'
-            ? // AC8: approving the plan does not confirm the event. Saying so here keeps
-              // the Officer from thinking they have booked anything.
-              `Safety approved for ${name(input.plan)}. This does not confirm the event.`
-            : `${DECISION_LABELS[recorded.decision]} recorded for ${name(input.plan)}. It goes back to the Coordinator.`,
+        text: recorded.returns_to_coordinator
+          ? `${DECISION_LABELS[recorded.decision]} recorded for ${name(input.plan)}. The Coordinator has been notified.`
+          : // AC8: approving the plan does not confirm the event. Saying so here keeps
+            // the Officer from thinking they have booked anything.
+            `Safety approved for ${name(input.plan)}. This does not confirm the event.`,
         blockers: [],
       })
       setComments((all) => ({ ...all, [input.plan.event_request_id]: '' }))

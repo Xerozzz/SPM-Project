@@ -22,7 +22,6 @@ from domain.safety_review import (
     blockers,
     fingerprint,
     is_stale,
-    latest_outstanding,
     may_review,
     returns_to_coordinator,
 )
@@ -273,28 +272,3 @@ def test_the_three_decisions_are_the_whole_vocabulary() -> None:
         "reject",
         "request_changes",
     }
-
-
-@pytest.mark.story("SCRUM-79")
-def test_nothing_is_outstanding_before_any_decision() -> None:
-    assert latest_outstanding([]) is None
-
-
-@pytest.mark.story("SCRUM-79")
-def test_a_rejection_is_outstanding_until_something_follows_it() -> None:
-    assert latest_outstanding([SafetyDecision.REJECT]) is SafetyDecision.REJECT
-    assert latest_outstanding([SafetyDecision.REQUEST_CHANGES]) is SafetyDecision.REQUEST_CHANGES
-
-
-@pytest.mark.story("SCRUM-79")
-def test_an_approval_clears_what_came_before_it() -> None:
-    # Derived rather than stored (ADR-0033's choice for a flagged reservation): the
-    # approval clears the rejection with no second write, so nothing is left behind.
-    assert latest_outstanding([SafetyDecision.REJECT, SafetyDecision.APPROVE]) is None
-
-
-@pytest.mark.story("SCRUM-79")
-def test_only_the_latest_decision_counts() -> None:
-    history = [SafetyDecision.APPROVE, SafetyDecision.REJECT]
-
-    assert latest_outstanding(history) is SafetyDecision.REJECT

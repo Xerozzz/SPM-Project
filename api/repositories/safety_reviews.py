@@ -59,9 +59,13 @@ def reviewable_events(db: Session, status: str) -> list[EventRequest]:
     return list(db.scalars(statement))
 
 
-def save(db: Session, review: SafetyReview) -> SafetyReview:
-    """Add a decision and commit it. Decisions are never updated, only added."""
+def add(db: Session, review: SafetyReview) -> SafetyReview:
+    """Stage a decision and flush it, without committing.
+
+    Flushed rather than committed so the caller gets the row's id — which the AC5
+    notification needs as its source key — while the decision and the notification it
+    raises still land or roll back together. Decisions are never updated, only added.
+    """
     db.add(review)
-    db.commit()
-    db.refresh(review)
+    db.flush()
     return review

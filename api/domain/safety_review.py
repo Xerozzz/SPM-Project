@@ -19,7 +19,7 @@ status, not a comparison this module should make.
 
 import hashlib
 import json
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -42,6 +42,10 @@ class SafetyDecision(StrEnum):
     REJECT = "reject"
     REQUEST_CHANGES = "request_changes"
 
+
+#: AC4: how long a reason may be, matching SCRUM-40's rejection reason so the two
+#: screens that record a judgement on an event agree on what fits.
+MAX_COMMENT_LENGTH = 1000
 
 #: AC5: the two decisions that send the plan back to the Coordinator. Written down once
 #: so a third outcome cannot quietly behave like an approval.
@@ -239,20 +243,3 @@ def _moment(value: datetime | None) -> str | None:
 
 def _by_id(entry: Mapping[str, object]) -> str:
     return str(entry["id"])
-
-
-def latest_outstanding(
-    decisions: Iterable[SafetyDecision],
-) -> SafetyDecision | None:
-    """AC5: the decision the Coordinator still has to act on, or None.
-
-    Derived from the history rather than stored as a marker on the event, the same choice
-    ADR-0033 made for a flagged reservation: an approval that follows a rejection clears
-    it with no second write, so nothing can be left behind pointing at the wrong answer.
-    """
-    latest: SafetyDecision | None = None
-    for decision in decisions:
-        latest = decision
-    if latest is None or not returns_to_coordinator(latest):
-        return None
-    return latest

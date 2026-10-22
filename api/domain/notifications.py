@@ -29,6 +29,12 @@ class NotificationType(StrEnum):
     REQUEST_REJECTED = "request_rejected"
     # SCRUM-81 AC4: a venue closure now covers one of your event's arrangements.
     VENUE_CLOSURE_IMPACT = "venue_closure_impact"
+    # SCRUM-79 AC5: the Safety Officer decided on your event's plan. The type names
+    # the decision, as SCRUM-94's do, so the Coordinator can tell whether the plan is
+    # back with them without opening the event.
+    SAFETY_APPROVED = "safety_approved"
+    SAFETY_REJECTED = "safety_rejected"
+    SAFETY_CHANGES_REQUESTED = "safety_changes_requested"
 
 
 class NotificationSource(StrEnum):
@@ -60,3 +66,7 @@ class NotificationSource(StrEnum):
     # key of (closure, period, booking), so re-saving the same closure does not notify
     # twice, while moving it to a new period does (domain.venue_closure_impact).
     VENUE_CLOSURE = "venue_closure"
+    # SCRUM-79: one safety decision. Decisions are never updated, only added, so the
+    # review row's id is a stable key: the same decision cannot notify twice and a
+    # later decision on the same event is a new row and so a new notification.
+    SAFETY_REVIEW = "safety_review"

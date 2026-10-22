@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from core.database import get_db
-from core.dependencies import get_current_user, require_role
+from core.dependencies import EventAccess, require_event_access, require_role
 from domain.roles import Role
 from models.event_request import EventRequest
 from repositories import event_requests as event_repo
@@ -26,7 +26,11 @@ from services import safety_reviews as service
 router = APIRouter(prefix="/safety-reviews", tags=["safety-reviews"])
 
 SafetyOfficer = Annotated[dict[str, object], Depends(require_role(Role.SAFETY_OFFICER))]
-AnyOfficer = Annotated[dict[str, object], Depends(get_current_user)]
+#: AC9: who may read an event's decisions. Narrower than "anyone signed in", which is
+#: what this was: the comment is an internal judgement about an event's arrangements.
+ReadableEvent = Annotated[
+    EventRequest, Depends(require_event_access(EventAccess.READ_SAFETY_REVIEWS))
+]
 Db = Annotated[Session, Depends(get_db)]
 
 
@@ -67,16 +71,14 @@ def read_plan(request_id: uuid.UUID, _: SafetyOfficer, db: Db) -> EventPlanRead:
 
 
 @router.get("/{request_id}/history", response_model=list[SafetyReviewRead])
-def read_history(request_id: uuid.UUID, _: AnyOfficer, db: Db) -> list[SafetyReviewRead]:
+def read_history(event: ReadableEvent, db: Db) -> list[SafetyReviewRead]:
     """AC9: every decision on this event, oldest first.
 
-    Readable by any signed-in participant rather than Safety Officers alone: the
-    Coordinator has to act on a rejection (AC5), so they have to be able to read it.
+    Wider than the Safety Officer alone, because the Coordinator has to act on a
+    rejection (AC5), but not open to everyone signed in: the access rule names exactly
+    who, the same way every other read of an event does.
     """
-    event = event_repo.get(db, request_id)
-    if event is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found")
-    return [SafetyReviewRead.model_validate(row) for row in service.history_for_event(db, event)]
+    return [SafetyReviewRead.of(row) for row in service.history_for_event(db, event)]
 
 
 @router.post("/{request_id}", response_model=SafetyReviewRead, status_code=status.HTTP_201_CREATED)
@@ -112,4 +114,4 @@ def record_decision(
             status.HTTP_409_CONFLICT,
             {"reason": "plan_changed", "plan_fingerprint": exc.current_fingerprint},
         ) from exc
-    return SafetyReviewRead.model_validate(recorded)
+    return SafetyReviewRead.of(recorded)
