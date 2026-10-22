@@ -135,22 +135,54 @@ def test_a_hold_ending_exactly_when_a_request_starts_does_not_block() -> None:
 
 
 @pytest.mark.story("SCRUM-110")
-def test_a_hold_cannot_be_confirmed_through_approval() -> None:
-    """TC-110-03 at the domain level: SCRUM-107's confirm is removed. Venue Staff
-    approval creates a hold; SCRUM-80 owns the later event-confirmation step."""
+def test_a_pending_request_cannot_be_confirmed() -> None:
+    """TC-110-03 at the domain level: approval never confirms, it places a hold.
+
+    SCRUM-80 gave `confirm` a real body, so this no longer reads "confirm always
+    raises". The SCRUM-110 guarantee it was written for is unchanged and is what is
+    asserted: the row Venue Staff act on is Pending, and a Pending row has no route to
+    Confirmed. `services.venue_bookings.approve` delegates to `hold`, never here.
+    """
     with pytest.raises(InvalidBookingTransitionError) as raised:
-        confirm()
+        confirm(BookingStatus.PENDING, None, _NOW)
 
     assert (raised.value.current, raised.value.target) == (
-        BookingStatus.TENTATIVE,
+        BookingStatus.PENDING,
         BookingStatus.CONFIRMED,
     )
 
 
+@pytest.mark.story("SCRUM-80")
+def test_a_live_hold_becomes_a_confirmed_booking() -> None:
+    """AC4: the only route from Tentative to Confirmed, taken when the event confirms."""
+    assert confirm(BookingStatus.TENTATIVE, _NOW + timedelta(days=1), _NOW) is (
+        BookingStatus.CONFIRMED
+    )
+
+
+@pytest.mark.story("SCRUM-80")
+def test_a_hold_reaching_its_expiry_at_this_instant_cannot_be_confirmed() -> None:
+    """AC8: the boundary is the same one `is_due` uses, so the two cannot disagree.
+
+    Defensive rather than the first line of refusal — `domain.event_confirmation` stops
+    an expired hold before conversion is reached — but the transition has to hold on its
+    own for any future caller, which is the point of putting it in the domain.
+    """
+    with pytest.raises(InactiveHoldError):
+        confirm(BookingStatus.TENTATIVE, _NOW, _NOW)
+
+    with pytest.raises(InactiveHoldError):
+        confirm(BookingStatus.TENTATIVE, None, _NOW)
+
+
 @pytest.mark.story("SCRUM-110")
-def test_nothing_goes_through_hold_confirmation() -> None:
-    with pytest.raises(InvalidBookingTransitionError):
-        confirm()
+def test_only_a_tentative_hold_has_a_route_to_confirmed() -> None:
+    """Every other status is refused, so confirmation cannot be reached sideways."""
+    for status in BookingStatus:
+        if status is BookingStatus.TENTATIVE:
+            continue
+        with pytest.raises(InvalidBookingTransitionError):
+            confirm(status, None, _NOW)
 
 
 # ------------------------------------------------------------------ SCRUM-108: expiring

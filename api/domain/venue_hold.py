@@ -46,12 +46,25 @@ def ensure_active(status: BookingStatus, expires_at: datetime | None, now: datet
         raise InactiveHoldError("cannot update a venue hold whose expiry has been reached")
 
 
-def confirm() -> BookingStatus:
-    """SCRUM-110: removed. Venue Staff approval creates a tentative hold (AC4); no
-    Pending or Tentative row may become Confirmed through staff approval. SCRUM-80 owns
-    the later event-confirmation step. Kept as a refused transition so any leftover
-    caller fails loudly instead of confirming."""
-    raise InvalidBookingTransitionError(BookingStatus.TENTATIVE, BookingStatus.CONFIRMED)
+def confirm(status: BookingStatus, expires_at: datetime | None, now: datetime) -> BookingStatus:
+    """SCRUM-80 AC4: a live hold becomes a real booking when its event is confirmed.
+
+    This is the step SCRUM-110 reserved for this story. Venue Staff approval still only
+    ever places a hold (AC9: it is not asked a second time), and nothing else may move a
+    row to Confirmed — so the only route from Tentative to Confirmed is the Coordinator
+    confirming the whole event, with every prerequisite checked first.
+
+    AC8: a hold that reaches its expiry at this very instant is expired, which is the
+    comparison `is_due` already makes, so the two cannot disagree about the boundary.
+    """
+    if status is not BookingStatus.TENTATIVE:
+        raise InvalidBookingTransitionError(status, BookingStatus.CONFIRMED)
+    # A hold with no expiry is malformed rather than eternal, which is how
+    # `ensure_updatable` above already reads one. The database agrees: migration 0021's
+    # `venue_bookings_tentative_has_hold` refuses to store such a row.
+    if expires_at is None or is_due(status, expires_at, now):
+        raise InactiveHoldError("cannot confirm a venue hold whose expiry has been reached")
+    return BookingStatus.CONFIRMED
 
 
 def is_due(status: BookingStatus, expires_at: datetime | None, now: datetime) -> bool:
