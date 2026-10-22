@@ -135,6 +135,10 @@ class EventRequestRead(BaseModel):
     decided_by_id: uuid.UUID | None
     decided_at: datetime | None
     rejection_reason: str | None
+    # SCRUM-80 AC6: who confirmed the event and when. Separate from the decided_by/at
+    # pair above, which is SCRUM-31's decision on the request itself.
+    confirmed_by_id: uuid.UUID | None = None
+    confirmed_at: datetime | None = None
 
     @computed_field
     def status_permits(self) -> list[EventAction]:

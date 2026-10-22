@@ -73,3 +73,9 @@ class EventRequest(Base):
     )
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     rejection_reason: Mapped[str | None] = mapped_column(Text)
+    # SCRUM-80 AC6: who confirmed the event and when. Separate from the decided_by/at
+    # pair above, which is SCRUM-31's approve-or-reject decision on the request itself.
+    confirmed_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id")
+    )
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

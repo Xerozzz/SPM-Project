@@ -6,7 +6,7 @@ import type { BookingConflict } from './venueBookingDecisions'
 
 export type EventStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'confirmed'
 
-export type EventAction = 'edit' | 'submit' | 'approve' | 'reject' | 'replan'
+export type EventAction = 'edit' | 'submit' | 'approve' | 'reject' | 'replan' | 'confirm'
 
 export interface EventCalendarEntry {
   id: string
@@ -47,6 +47,8 @@ export interface EventRequest {
   coordinator_id: string | null
   decided_by_id: string | null
   decided_at: string | null
+  /** SCRUM-80 AC6: when the assigned Coordinator confirmed it, if they have. */
+  confirmed_at?: string | null
   rejection_reason: string | null
 }
 

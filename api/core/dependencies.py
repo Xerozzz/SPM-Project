@@ -32,7 +32,8 @@ class EventAccess(StrEnum):
     assignment, so reassignment transfers access immediately. Assignment history
     (SCRUM-105) is readable by any Lead, the owning Organiser and the current assignee.
     Safety decisions (SCRUM-79) are staff-side: the Safety Officer, any Lead and the
-    current assignee, but not the Organiser.
+    current assignee, but not the Organiser. Confirmation (SCRUM-80) is the current
+    assignee's alone.
     """
 
     VIEW = "view"
@@ -49,6 +50,7 @@ class EventAccess(StrEnum):
     DECIDE_CHANGE_REQUEST = "decide_change_request"
     READ_ASSIGNMENT_HISTORY = "read_assignment_history"
     READ_SAFETY_REVIEWS = "read_safety_reviews"
+    CONFIRM_EVENT = "confirm_event"
 
 
 def get_current_user(
@@ -198,6 +200,16 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
         if permission is EventAccess.CHECK_EQUIPMENT_AVAILABILITY:
             is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
             if is_assigned or Role.TECH_SUPPORT.value in roles:
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        # SCRUM-80 AC1: only the event's current assigned Coordinator may confirm it,
+        # or ask whether it can be. Deliberately not pinned to a status, following
+        # CHECK_EQUIPMENT_AVAILABILITY below: outside planning the service answers 409
+        # naming that, which tells the assignee more than a bare 403 would.
+        if permission is EventAccess.CONFIRM_EVENT:
+            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+            if is_assigned:
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 

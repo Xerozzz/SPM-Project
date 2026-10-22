@@ -36,7 +36,10 @@ test('a labelled session request shows its label and period everywhere', async (
   const card = page.getByRole('article').filter({ hasText: event.name })
   await expect(card).toBeVisible()
   await card.getByLabel('Active venue').selectOption({ label: 'Hall A' })
-  await card.getByLabel('Session label').fill(SESSION_LABEL)
+  // Exact, because `getByLabel` matches accessible names by substring and this spec
+  // names its own event "E2E session label …": any control whose label carries the
+  // event name — SCRUM-80's confirm button does — otherwise matches this query too.
+  await card.getByLabel('Session label', { exact: true }).fill(SESSION_LABEL)
   await card.getByRole('button', { name: 'Submit booking request' }).click()
   await expect(card.getByRole('status')).toContainText('Booking request submitted')
 

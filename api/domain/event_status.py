@@ -13,11 +13,11 @@ Stories add transitions here as they land, each with its own tests:
     SCRUM-35  allowed_actions: what a status permits
     SCRUM-47  confirmed -> approved                   (an approved change reopens planning)
 
-SCRUM-34 pre-declares the `CONFIRMED` value below, ahead of any story landing the
-transition into it: coordinator assignment needs to ask "does this coordinator already
-have a confirmed event that date", and that question has to name a real status. The
-transition into CONFIRMED itself — and who is allowed to make it — stays a later
-story's to add.
+SCRUM-34 pre-declared the `CONFIRMED` value ahead of any story landing the transition
+into it: coordinator assignment needs to ask "does this coordinator already have a
+confirmed event that date", and that question has to name a real status. SCRUM-80 adds
+the transition itself, approved -> confirmed, performed by the assigned Coordinator once
+`domain.event_confirmation` says the arrangements and the safety review allow it.
 """
 
 from enum import StrEnum
@@ -41,6 +41,9 @@ class EventAction(StrEnum):
     APPROVE = "approve"
     REJECT = "reject"
     REPLAN = "replan"
+    # SCRUM-80: the assigned Coordinator commits the event once every arrangement and
+    # the safety review are in order.
+    CONFIRM = "confirm"
 
 
 class InvalidTransitionError(Exception):
@@ -68,6 +71,7 @@ _ALLOWED_TRANSITIONS: dict[tuple[EventStatus, EventStatus], EventAction] = {
     (EventStatus.SUBMITTED, EventStatus.APPROVED): EventAction.APPROVE,
     (EventStatus.SUBMITTED, EventStatus.REJECTED): EventAction.REJECT,
     (EventStatus.REJECTED, EventStatus.SUBMITTED): EventAction.SUBMIT,
+    (EventStatus.APPROVED, EventStatus.CONFIRMED): EventAction.CONFIRM,
     (EventStatus.CONFIRMED, EventStatus.APPROVED): EventAction.REPLAN,
 }
 
@@ -92,6 +96,16 @@ def approve(current: EventStatus) -> EventStatus:
 def reject(current: EventStatus) -> EventStatus:
     """SCRUM-31: a coordinator returns a submitted request with a reason."""
     return transition(current, EventStatus.REJECTED)
+
+
+def confirm(current: EventStatus) -> EventStatus:
+    """SCRUM-80: the assigned Coordinator commits a planned event.
+
+    Only the status move lives here. Whether the arrangements and the safety review
+    allow it is `domain.event_confirmation`'s question, asked before this is called —
+    the same split SCRUM-110 made between `venue_booking.approve` and the hold rules.
+    """
+    return transition(current, EventStatus.CONFIRMED)
 
 
 def replan(current: EventStatus) -> EventStatus:
