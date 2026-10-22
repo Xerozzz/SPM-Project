@@ -14,6 +14,7 @@ import { acceptsOrdinaryUpdate } from '../validation/planningInfo'
 import { AssignmentHistoryToggle } from './AssignmentHistory'
 import ChangeRequestList from './ChangeRequestList'
 import ClarificationThread from './ClarificationThread'
+import ConfirmEvent from './ConfirmEvent'
 import EventEquipmentRequirements from './EventEquipmentRequirements'
 import PlanningInfoEditor from './PlanningInfoEditor'
 import VenueBookingRequest from './VenueBookingRequest'
@@ -79,6 +80,10 @@ export default function EventRequestReview() {
           onReasonChange={(value) => setReason({ ...reason, [request.id]: value })}
           onApprove={() => approve.mutate(request.id)}
           onReject={() => reject.mutate({ id: request.id, reason: reason[request.id] ?? '' })}
+          onConfirmed={(message) => {
+            setOutcome(message)
+            refresh()
+          }}
           pending={approve.isPending || reject.isPending}
         />
       ))}
@@ -102,6 +107,7 @@ function ReviewCard({
   onReasonChange,
   onApprove,
   onReject,
+  onConfirmed,
   pending,
 }: {
   request: EventRequest
@@ -109,6 +115,7 @@ function ReviewCard({
   onReasonChange: (value: string) => void
   onApprove: () => void
   onReject: () => void
+  onConfirmed: (message: string) => void
   pending: boolean
 }) {
   return (
@@ -199,6 +206,13 @@ function ReviewCard({
           the viewer, and `EventAccess.MAINTAIN_EQUIPMENT` is what actually refuses
           anyone else on the API. */}
       {request.status === 'approved' && <EventEquipmentRequirements event={request} />}
+      {/* SCRUM-80: the assigned Coordinator commits the event once every arrangement
+          and the Safety Officer's approval are in order. */}
+      {/* Only while the event is still being planned: `list_bookable_for_coordinator`
+          holds Approved events, so a confirmed one leaves this list altogether. */}
+      {request.status === 'approved' && (
+        <ConfirmEvent event={request} onConfirmed={onConfirmed} />
+      )}
     </article>
   )
 }

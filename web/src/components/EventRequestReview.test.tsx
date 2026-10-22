@@ -101,6 +101,16 @@ function renderReview(reviewable: unknown[], bookable: unknown[] = []) {
     // SCRUM-43 put an equipment editor on this card; empty is enough for these tests.
     if (key.endsWith('/equipment-requirements')) return json([])
     if (key.endsWith('/catalogue-types')) return json([])
+    // SCRUM-80 put a confirm control on this card. Ready with no blockers, so it adds
+    // no list items of its own to the booking lists these tests count.
+    if (key.endsWith('/confirmation')) {
+      return json({
+        event_request_id: 'req-1',
+        may_confirm: true,
+        arrangement_blockers: [],
+        safety_blockers: [],
+      })
+    }
     if (key === 'POST /api/event-requests/req-1/approve') {
       return json({ ...submitted, status: 'approved' })
     }
@@ -130,6 +140,16 @@ function renderBookingReview(submission: unknown, status = 200, existingBookings
     // SCRUM-43 put an equipment editor on this card; empty is enough for these tests.
     if (key.endsWith('/equipment-requirements')) return json([])
     if (key.endsWith('/catalogue-types')) return json([])
+    // SCRUM-80 put a confirm control on this card. Ready with no blockers, so it adds
+    // no list items of its own to the booking lists these tests count.
+    if (key.endsWith('/confirmation')) {
+      return json({
+        event_request_id: 'req-1',
+        may_confirm: true,
+        arrangement_blockers: [],
+        safety_blockers: [],
+      })
+    }
     if (key.includes('/venue-bookings/suitability?venue_id=venue-1')) return json(suitability)
     if (key === 'POST /api/event-requests/req-1/venue-bookings') {
       return submission instanceof Response ? submission : json(submission, status)
@@ -160,6 +180,16 @@ function renderExistingBookingReview(existingBookings: unknown[]) {
     // SCRUM-43 put an equipment editor on this card; empty is enough for these tests.
     if (key.endsWith('/equipment-requirements')) return json([])
     if (key.endsWith('/catalogue-types')) return json([])
+    // SCRUM-80 put a confirm control on this card. Ready with no blockers, so it adds
+    // no list items of its own to the booking lists these tests count.
+    if (key.endsWith('/confirmation')) {
+      return json({
+        event_request_id: 'req-1',
+        may_confirm: true,
+        arrangement_blockers: [],
+        safety_blockers: [],
+      })
+    }
     throw new Error(`unexpected request ${key}`)
   })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -318,6 +348,16 @@ test('SCRUM-78: adds another venue, retains both records on reload and accepts a
     // SCRUM-43 put an equipment editor on this card; empty is enough for these tests.
     if (key.endsWith('/equipment-requirements')) return json([])
     if (key.endsWith('/catalogue-types')) return json([])
+    // SCRUM-80 put a confirm control on this card. Ready with no blockers, so it adds
+    // no list items of its own to the booking lists these tests count.
+    if (key.endsWith('/confirmation')) {
+      return json({
+        event_request_id: 'req-1',
+        may_confirm: true,
+        arrangement_blockers: [],
+        safety_blockers: [],
+      })
+    }
     if (key.includes('/venue-bookings/suitability?venue_id=')) {
       return json(key.endsWith('venue-2') ? suitable : suitability)
     }
