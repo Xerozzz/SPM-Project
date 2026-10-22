@@ -23,8 +23,10 @@ Nothing here reads a clock or a database. Whether a hold has run out is decided 
 caller and arrives inside the snapshot, as it does for the safety rule.
 """
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from enum import StrEnum
+from uuid import UUID
 
 from domain.event_status import EventStatus
 from domain.safety_review import (
@@ -51,6 +53,11 @@ class ConfirmationBlocker(StrEnum):
 
     #: The event is not in planning: already confirmed, still submitted, or rejected.
     NOT_IN_PLANNING = "not_in_planning"
+    #: AC3's "unresolved issue": a closure or a buffer change has left a standing
+    #: arrangement clashing (SCRUM-81, SCRUM-89). The hold is still Tentative and has not
+    #: expired, so nothing about its status says anything is wrong — but Venue Staff have
+    #: already flagged it, and committing it would make a broken arrangement final.
+    ARRANGEMENT_NEEDS_ATTENTION = "arrangement_needs_attention"
     #: No Safety Officer has decided on this event at all.
     SAFETY_NOT_REVIEWED = "safety_not_reviewed"
     #: The latest decision sent the plan back rather than approving it.
@@ -82,7 +89,10 @@ class ConfirmationProblems:
     Coordinator's to trigger again by fixing the plan.
     """
 
-    arrangement: tuple[ReviewBlocker, ...]
+    #: What the plan is still missing. Mostly SCRUM-79's vocabulary, reused rather than
+    #: restated, plus AC3's unresolved-issue reason which only confirmation asks about.
+    arrangement: tuple[ReviewBlocker | ConfirmationBlocker, ...]
+    #: What confirmation additionally requires: a safety approval, about this plan.
     safety: tuple[ConfirmationBlocker, ...]
 
     @property
@@ -97,7 +107,10 @@ class ConfirmationProblems:
 
 
 def problems(
-    status: EventStatus, plan: PlanSnapshot, standing: SafetyStanding | None
+    status: EventStatus,
+    plan: PlanSnapshot,
+    standing: SafetyStanding | None,
+    needing_attention: Collection[UUID] = (),
 ) -> ConfirmationProblems:
     """AC2, AC3, AC7 and AC10: every reason this event cannot be confirmed right now.
 
@@ -111,8 +124,13 @@ def problems(
     if status is not PLANNING:
         return ConfirmationProblems((), (ConfirmationBlocker.NOT_IN_PLANNING,))
 
+    arrangement: list[ReviewBlocker | ConfirmationBlocker] = list(arrangement_blockers(plan))
+    # AC3: a hold that is held and unexpired can still be one Venue Staff have flagged.
+    if any(venue.booking_id in needing_attention for venue in plan.venues):
+        arrangement.append(ConfirmationBlocker.ARRANGEMENT_NEEDS_ATTENTION)
+
     return ConfirmationProblems(
-        tuple(arrangement_blockers(plan)),
+        tuple(arrangement),
         tuple(_safety_problems(plan, standing)),
     )
 

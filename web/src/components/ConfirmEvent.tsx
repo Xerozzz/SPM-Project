@@ -4,12 +4,12 @@ import { useState } from 'react'
 import type { EventRequest } from '../api/eventRequests'
 import {
   confirmEvent,
+  describeArrangementBlocker,
   describeBlockers,
   describeSafetyBlocker,
   NotConfirmableError,
   readConfirmationReadiness,
 } from '../api/eventConfirmation'
-import { describeBlocker } from '../api/safetyReviews'
 import { useAuth } from '../auth/useAuth'
 
 /**
@@ -54,7 +54,7 @@ export default function ConfirmEvent({
         reasons:
           error instanceof NotConfirmableError
             ? [
-                ...error.arrangementBlockers.map(describeBlocker),
+                ...error.arrangementBlockers.map(describeArrangementBlocker),
                 ...error.safetyBlockers.map(describeSafetyBlocker),
               ]
             : [],

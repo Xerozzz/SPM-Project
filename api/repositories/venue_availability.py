@@ -92,6 +92,29 @@ def list_bookings_for_event(db: Session, event_request_id: uuid.UUID) -> list[Ve
     return list(db.scalars(statement))
 
 
+def lock_bookings_for_event(db: Session, event_request_id: uuid.UUID) -> list[VenueBooking]:
+    """SCRUM-80 AC8/AC11: an event's bookings, locked until the transaction ends.
+
+    Confirmation converts live holds, and the ADR-0030 sweep expires them; the sweep
+    takes the same row lock (`due_holds_for_update`), so whichever gets there first makes
+    the other wait and read the committed result. Without this, a hold expiring at the
+    confirmation instant could be overwritten to Confirmed by an update that never saw
+    the expiry — a lost update rather than a refusal.
+
+    `populate_existing` refreshes the in-memory rows from the locked read, so a caller
+    that waited sees the other transaction's committed statuses rather than its own
+    stale copies.
+    """
+    statement = (
+        select(VenueBooking)
+        .where(VenueBooking.event_request_id == event_request_id)
+        .order_by(VenueBooking.created_at, VenueBooking.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return list(db.scalars(statement))
+
+
 def confirmed_bookings_from(db: Session, venue_id: uuid.UUID, now: datetime) -> list[VenueBooking]:
     """SCRUM-89 AC1: confirmed bookings at this venue still occupying it at or after `now`.
 

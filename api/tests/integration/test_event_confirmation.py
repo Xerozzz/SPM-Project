@@ -24,6 +24,7 @@ from domain.venue_booking import BookingStatus
 from models.event_request import EventRequest
 from models.user import User
 from models.venue_booking import VenueBooking
+from models.venue_unavailability import VenueUnavailability
 from services import equipment_requirements as requirement_service
 from services import safety_reviews as safety_service
 from tests.integration.test_equipment_requirements import catalogue
@@ -397,3 +398,35 @@ async def test_a_rejection_after_an_approval_withdraws_it(
     assert reasons_of(response.json()) == ["safety_not_approved"]
     db.expire_all()
     assert stored_event(db, event.id).status is EventStatus.APPROVED
+
+
+@pytest.mark.story("SCRUM-80")
+async def test_an_arrangement_with_an_unresolved_issue_blocks_confirmation(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """AC3: "an expired hold **or unresolved issue**" prevents confirmation.
+
+    A closure recorded over the venue leaves the hold needing attention — it is what
+    SCRUM-81 notifies the Coordinator about and what SCRUM-116 lets them replace. The
+    hold is still Tentative and has not expired, so nothing about its status says
+    anything is wrong; confirming it would commit a booking Venue Staff have already
+    flagged as broken.
+    """
+    event, booking, coordinator = ready_event(db, make_user)
+    db.add(
+        VenueUnavailability(
+            venue_id=booking.venue_id,
+            starts_at=booking.start_at - timedelta(hours=1),
+            ends_at=booking.end_at + timedelta(hours=1),
+            reason="Emergency electrical work",
+        )
+    )
+    db.flush()
+
+    async with make_client(coordinator) as client:
+        response = await client.post(f"/api/event-requests/{event.id}/confirm")
+
+    assert response.status_code == 409, "a closed venue's hold was committed"
+    db.expire_all()
+    assert stored_event(db, event.id).status is EventStatus.APPROVED
+    assert stored_booking(db, booking.id).status is BookingStatus.TENTATIVE

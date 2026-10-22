@@ -103,6 +103,19 @@ test('what is still missing is shown, in the words of whoever owes it', async ()
   expect(screen.getByLabelText('Confirm Orientation Day')).toBeDisabled()
 })
 
+test('an arrangement Venue Staff have flagged is explained, not shown as a raw code', async () => {
+  // AC3's unresolved issue arrives in the arrangement list but is SCRUM-80's own
+  // vocabulary, so it is looked up in both maps rather than assumed to be in one.
+  renderCard({
+    ...READY,
+    may_confirm: false,
+    arrangement_blockers: ['arrangement_needs_attention'],
+    safety_blockers: [],
+  })
+
+  expect(await screen.findByText(/closure or a buffer change now clashes/)).toBeInTheDocument()
+})
+
 test('an approval that no longer matches the plan is explained as needing review again', async () => {
   // AC7: the reason this is its own message rather than "not approved" is that the
   // Coordinator's next step differs — the plan moved, so the Officer has to look again.

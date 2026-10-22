@@ -26,7 +26,7 @@ from domain.event_confirmation import (
     SafetyStanding,
     problems,
 )
-from domain.safety_review import SafetyDecision
+from domain.safety_review import STANDING_STATUSES, SafetyDecision
 from domain.venue_booking import BookingStatus
 from domain.venue_hold import confirm as confirm_hold
 from models.event_request import EventRequest
@@ -35,6 +35,7 @@ from repositories import event_requests as event_repo
 from repositories import safety_reviews as safety_repo
 from repositories import venue_availability as booking_repo
 from services import safety_reviews as safety_service
+from services import venue_buffer_review
 
 
 class ConfirmationError(Exception):
@@ -66,6 +67,24 @@ def standing_of(db: Session, event: EventRequest) -> SafetyStanding | None:
     )
 
 
+def _needing_attention(db: Session, event: EventRequest, now: datetime) -> set[uuid.UUID]:
+    """AC3: the event's standing arrangements Venue Staff have flagged.
+
+    The same derived answer SCRUM-89's list and SCRUM-116's replacement check use, so the
+    three cannot disagree about what "needs attention" means. A closure or a buffer
+    change can leave a hold clashing while it is still Tentative and unexpired, which is
+    precisely the case nothing about the row's status would reveal.
+    """
+    standing = [
+        booking
+        for booking in booking_repo.list_bookings_for_event(db, event.id)
+        if booking.status in STANDING_STATUSES
+    ]
+    if not standing:
+        return set()
+    return set(venue_buffer_review.problems_by_booking(db, standing, now))
+
+
 def readiness(db: Session, event: EventRequest, now: datetime) -> ConfirmationProblems:
     """What still stands between this event and confirmation, for the screen to show.
 
@@ -73,7 +92,7 @@ def readiness(db: Session, event: EventRequest, now: datetime) -> ConfirmationPr
     it, which is exactly why `confirm` asks again under a lock rather than trusting it.
     """
     plan = safety_service.plan_of(db, event, now)
-    return problems(event.status, plan, standing_of(db, event))
+    return problems(event.status, plan, standing_of(db, event), _needing_attention(db, event, now))
 
 
 def confirm(db: Session, event: EventRequest, actor_id: uuid.UUID, now: datetime) -> EventRequest:
@@ -86,6 +105,10 @@ def confirm(db: Session, event: EventRequest, actor_id: uuid.UUID, now: datetime
     """
     locked = event_repo.get_for_update(db, event.id)
     assert locked is not None
+    # AC8 and AC11: lock the bookings before judging them, so the ADR-0030 sweep cannot
+    # expire a hold between the check and the conversion. The sweep takes the same lock,
+    # so one of the two waits and then reads what the other committed.
+    booking_repo.lock_bookings_for_event(db, locked.id)
 
     found = readiness(db, locked, now)
     if found.blocked:

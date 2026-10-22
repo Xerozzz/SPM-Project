@@ -49,6 +49,10 @@ export interface Confirmation {
  */
 const SAFETY_REASONS: Record<string, string> = {
   not_in_planning: 'This event is not in planning, so there is nothing to confirm.',
+  // AC3's unresolved issue. It arrives in the arrangement list, not the safety one, but
+  // the words live here because this is where SCRUM-80's own vocabulary is described.
+  arrangement_needs_attention:
+    'A venue arrangement needs attention: a closure or a buffer change now clashes with it.',
   safety_not_reviewed: 'The Safety Officer has not reviewed this event yet.',
   safety_not_approved: 'The Safety Officer sent the plan back rather than approving it.',
   safety_approval_stale:
@@ -99,10 +103,20 @@ async function failureOf(response: Response, fallback: string): Promise<Error> {
   return new Error(`${fallback} (${response.status})`)
 }
 
-/** Everything standing between this event and confirmation, as words. */
+/**
+ * Everything standing between this event and confirmation, as words.
+ *
+ * The arrangement list carries SCRUM-79's vocabulary plus AC3's unresolved-issue reason,
+ * so each value is looked up in both maps rather than assumed to be in one.
+ */
+export function describeArrangementBlocker(blocker: string): string {
+  const own = SAFETY_REASONS[blocker]
+  return own ?? describeBlocker(blocker)
+}
+
 export function describeBlockers(readiness: ConfirmationReadiness): string[] {
   return [
-    ...readiness.arrangement_blockers.map(describeBlocker),
+    ...readiness.arrangement_blockers.map(describeArrangementBlocker),
     ...readiness.safety_blockers.map(describeSafetyBlocker),
   ]
 }

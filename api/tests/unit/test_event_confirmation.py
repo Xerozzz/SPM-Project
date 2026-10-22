@@ -10,6 +10,8 @@ rule, tested there; what these tests check is that confirmation asks it at all, 
 confirmation adds on top (AC2's approval, AC7's staleness).
 """
 
+import uuid
+
 import pytest
 
 from domain.event_confirmation import (
@@ -97,6 +99,36 @@ def test_the_arrangement_rule_is_asked_rather_than_restated() -> None:
 
 
 @pytest.mark.story("SCRUM-80")
+def test_an_arrangement_venue_staff_have_flagged_blocks_confirmation() -> None:
+    """AC3: "an expired hold **or unresolved issue**" prevents confirmation.
+
+    A closure or a buffer change can leave a hold clashing while it is still held and
+    unexpired (SCRUM-81, SCRUM-89), so nothing about its status says anything is wrong.
+    Committing it would make a broken arrangement final.
+    """
+    held = venue()
+    found = problems(
+        EventStatus.APPROVED,
+        plan(venues=[held]),
+        approved_of(plan(venues=[held])),
+        needing_attention=[held.booking_id],
+    )
+
+    assert ConfirmationBlocker.ARRANGEMENT_NEEDS_ATTENTION in found.arrangement
+    assert found.blocked is True
+
+
+@pytest.mark.story("SCRUM-80")
+def test_a_flag_on_another_events_arrangement_is_not_this_events_problem() -> None:
+    """Matched by booking, not by "something somewhere is flagged"."""
+    found = problems(
+        EventStatus.APPROVED, plan(), approved_of(), needing_attention=[uuid.UUID(int=999)]
+    )
+
+    assert found.reasons() == []
+
+
+@pytest.mark.story("SCRUM-80")
 def test_an_expired_hold_blocks_confirmation() -> None:
     """AC3 and AC8: a hold that has run out is not an arrangement to commit."""
     found = problems(EventStatus.APPROVED, plan(venues=[venue(hold_expired=True)]), approved_of())
@@ -134,6 +166,7 @@ def test_the_blocker_vocabulary_is_closed() -> None:
     """The screen maps every value, so a new one must be a deliberate edit on both sides."""
     assert {blocker.value for blocker in ConfirmationBlocker} == {
         "not_in_planning",
+        "arrangement_needs_attention",
         "safety_not_reviewed",
         "safety_not_approved",
         "safety_approval_stale",
