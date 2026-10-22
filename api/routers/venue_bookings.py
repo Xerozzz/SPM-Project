@@ -9,11 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from core.database import get_db
-from core.dependencies import EventAccess, require_event_access, require_role
+from core.dependencies import EventAccess, get_current_user, require_event_access, require_role
 from domain.booking_conflict import BookingConflictError
 from domain.roles import Role
-from domain.venue_booking import InvalidBookingTransitionError
+from domain.venue_booking import BookingStatus, InvalidBookingTransitionError
 from domain.venue_buffer import effective_interval
+from domain.venue_cancellation import EventRefusal
 from models.event_request import EventRequest
 from models.venue import Venue
 from models.venue_booking import VenueBooking
@@ -22,6 +23,7 @@ from schemas.event_requests import FieldProblemRead
 from schemas.venue_booking_decisions import ConflictRead, VenueBookingHold
 from schemas.venue_bookings import (
     SuitabilityRead,
+    VenueBookingCancel,
     VenueBookingCreate,
     VenueBookingRead,
     VenueBookingSubmissionRead,
@@ -34,7 +36,32 @@ decisions = APIRouter(prefix="/venue-bookings", tags=["venue-bookings"])
 PlanningEvent = Annotated[
     EventRequest, Depends(require_event_access(EventAccess.SUBMIT_VENUE_BOOKING))
 ]
+# SCRUM-109: the current assigned Coordinator, in any event status, so the service can
+# say why a status is refused (ADR-0056).
+CancellableEvent = Annotated[
+    EventRequest, Depends(require_event_access(EventAccess.CANCEL_VENUE_ARRANGEMENT))
+]
+AuthenticatedUser = Annotated[dict[str, object], Depends(get_current_user)]
 Db = Annotated[Session, Depends(get_db)]
+
+# SCRUM-109 AC7, AC9: what the Coordinator is told when the event's status refuses.
+_EVENT_REFUSALS = {
+    EventRefusal.CONFIRMED_NEEDS_VENUE_CHANGE: (
+        "This event is confirmed: change its venue through the venue-change process"
+    ),
+    EventRefusal.NOT_IN_PLANNING: (
+        "Venue arrangements can only be cancelled while the event is being planned"
+    ),
+}
+# SCRUM-109 AC5, AC10: what the Coordinator is told when the arrangement itself refuses.
+# A hold at or past its expiry is still 'tentative' until the minute timer runs, but it
+# has expired, so it is told the same as an Expired one.
+_ARRANGEMENT_REFUSALS = {
+    BookingStatus.CANCELLED: "This arrangement has already been cancelled",
+    BookingStatus.REJECTED: "This arrangement was rejected and cannot be cancelled",
+    BookingStatus.EXPIRED: "This hold has expired and cannot be cancelled",
+    BookingStatus.TENTATIVE: "This hold has expired and cannot be cancelled",
+}
 VenueStaff = Annotated[dict[str, object], Depends(require_role(Role.VENUE_STAFF))]
 
 
@@ -127,6 +154,47 @@ def submit_venue_booking(
         suitability=SuitabilityRead.model_validate(suitability),
         replaces_booking_id=booking.replaces_booking_id,
     )
+
+
+_CANCELLATION_REFUSALS = (
+    service.BookingNotFoundError,
+    service.EventNotInPlanningError,
+    service.InvalidCancellationError,
+    InvalidBookingTransitionError,
+)
+
+
+def _cancellation_error(exc: Exception) -> HTTPException:
+    """SCRUM-109: the one mapping from a refused cancellation to a status code."""
+    if isinstance(exc, service.BookingNotFoundError):
+        return HTTPException(status.HTTP_404_NOT_FOUND, "Venue booking not found")
+    if isinstance(exc, service.InvalidCancellationError):
+        problems = [FieldProblemRead(field=p.field, reason=p.reason) for p in exc.problems]
+        return HTTPException(422, [p.model_dump() for p in problems])
+    if isinstance(exc, service.EventNotInPlanningError):
+        return HTTPException(status.HTTP_409_CONFLICT, _EVENT_REFUSALS[exc.refusal])
+    assert isinstance(exc, InvalidBookingTransitionError)
+    return HTTPException(status.HTTP_409_CONFLICT, _ARRANGEMENT_REFUSALS[exc.current])
+
+
+@router.post("/{request_id}/venue-bookings/{booking_id}/cancel", response_model=VenueBookingRead)
+def cancel_venue_arrangement(
+    event: CancellableEvent,
+    booking_id: uuid.UUID,
+    body: VenueBookingCancel,
+    user: AuthenticatedUser,
+    db: Db,
+) -> VenueBookingRead:
+    """SCRUM-109: the assigned Coordinator cancels one arrangement of a planning event."""
+    try:
+        booking = service.cancel_arrangement(
+            db, event.id, booking_id, _user_id(user), body.reason, datetime.now(UTC)
+        )
+    except _CANCELLATION_REFUSALS as exc:
+        raise _cancellation_error(exc) from exc
+    venue = venue_repo.get(db, booking.venue_id)
+    assert venue is not None  # a booking cannot exist without its venue.
+    return _booking_read(booking, venue, None)
 
 
 @decisions.post("/{booking_id}/approve", response_model=VenueBookingRead)

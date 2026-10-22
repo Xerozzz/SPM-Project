@@ -11,6 +11,7 @@ from models.user import User
 from models.venue import Venue
 from models.venue_booking import VenueBooking
 from models.venue_unavailability import VenueUnavailability
+from tests.integration.cancelled_rows import cancellation_record
 from tests.integration.test_submit_event_request import MakeClient, MakeUser
 from tests.integration.test_submit_venue_booking import approved_event
 from tests.integration.test_venue_search import effective_for, make_venue
@@ -40,6 +41,7 @@ def booking(
         effective_start_at=effective_start,
         effective_end_at=effective_end,
         status=status,
+        **cancellation_record(status, coordinator.id),
     )
     db.add(row)
     db.flush()

@@ -65,6 +65,7 @@ someone else made two weeks ago.
 | [0053](0053-closure-returns-confirmed-events-to-planning.md) | A venue closure returns the Confirmed events it affects to planning | Proposed |
 | [0054](0054-attendee-registration-records.md) | Keep attendee registrations and their status history as separate records | Proposed |
 | [0055](0055-registration-history-actors.md) | Record the actor on registration status history | Proposed |
+| [0056](0056-cancel-one-venue-arrangement.md) | Cancel one venue arrangement as a staged, row-locked transition | Proposed |
 
 ## When to write one
 

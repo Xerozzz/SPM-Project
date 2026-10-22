@@ -7,7 +7,8 @@ parameters, never string SQL. SCRUM-38 writes pending requests; SCRUM-74 confirm
 Migration 0012 adds the ADR-0002 exclusion constraint
 `venue_bookings_no_confirmed_overlap`: no two confirmed rows for one venue may overlap.
 Migration 0021 widens it to tentative holds (SCRUM-83). It is declared only in the
-migration, because Alembic autogenerate does not reflect EXCLUDE constraints.
+migration, because Alembic autogenerate does not reflect EXCLUDE constraints. A cancelled
+row (SCRUM-109) is outside it, so cancelling frees the slot; migration 0038.
 """
 
 import uuid
@@ -85,3 +86,11 @@ class VenueBooking(Base):
     )
     held_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     held_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # SCRUM-109: the assigned Coordinator who cancelled this arrangement, when and why.
+    # Required together once the status is cancelled (venue_bookings_cancelled_has_record);
+    # the decision and hold columns above are left as they were. Migration 0038, ADR-0056.
+    cancelled_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id")
+    )
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancellation_reason: Mapped[str | None] = mapped_column(Text)
