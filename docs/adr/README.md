@@ -58,6 +58,7 @@ someone else made two weeks ago.
 | [0046](0046-layout-and-accessibility-need-change-control.md) | Layout and accessibility changes need change control | Proposed |
 | [0047](0047-assignment-history-for-owner-and-assignee.md) | Let the owning Organiser and the current Coordinator read assignment history | Proposed |
 | [0048](0048-safety-decisions-against-a-plan-fingerprint.md) | Record a safety decision against a fingerprint of the plan it judged | Proposed |
+| [0049](0049-confirmation-commits-the-event-and-its-holds.md) | Confirmation commits an event and its holds in one transaction | Proposed |
 
 ## When to write one
 
