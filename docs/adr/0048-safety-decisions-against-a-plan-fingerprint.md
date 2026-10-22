@@ -78,3 +78,22 @@ Technical Support, so they can break between the Officer loading the screen and 
 The "standing arrangements only" half came out of arranging a real event through the
 running stack: a single rejected venue request made the plan permanently unreviewable,
 because the rejected row is kept forever and nobody can clear it.
+
+### An open dependency, for whoever builds confirmation
+
+Customer Clarification 3, which the sheet says takes precedence where the clarifications
+differ, answers the confirmation question twice and both times the same way:
+
+> The Event Coordinator marks the event Confirmed only after required venue and technical
+> approvals **and the Safety Officer's operational safety approval** are complete. An
+> event cannot proceed to preparation before safety approval.
+
+> All event-specific essential arrangements [...] must be approved. The Safety Officer
+> must then approve the operational safety check; the Coordinator marks the event
+> Confirmed after all approvals are complete.
+
+That gate is not in this change, and it cannot be: nothing in the codebase sets an event
+to `CONFIRMED`. `domain/event_status.py` says so outright — the transition into it "stays
+a later story's to add". So AC8 holds trivially today, and the decision recorded here is
+the record that story has to check before it lets a Coordinator confirm. Until it lands,
+a safety approval is a judgement nobody downstream consults.
