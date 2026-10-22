@@ -27,6 +27,7 @@ from models.event_equipment_requirement import (
 from models.event_request import EventRequest as EventRequest
 from models.notification import Notification as Notification
 from models.organisation import Organisation as Organisation
+from models.safety_review import SafetyReview as SafetyReview
 from models.user import User as User
 from models.venue import Venue as Venue
 from models.venue_booking import VenueBooking as VenueBooking

@@ -57,6 +57,7 @@ someone else made two weeks ago.
 | [0045](0045-link-replacement-venue-requests.md) | Link a replacement venue request to the arrangement it replaces | Proposed |
 | [0046](0046-layout-and-accessibility-need-change-control.md) | Layout and accessibility changes need change control | Proposed |
 | [0047](0047-assignment-history-for-owner-and-assignee.md) | Let the owning Organiser and the current Coordinator read assignment history | Proposed |
+| [0048](0048-safety-decisions-against-a-plan-fingerprint.md) | Record a safety decision against a fingerprint of the plan it judged | Proposed |
 
 ## When to write one
 
