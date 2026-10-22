@@ -27,9 +27,11 @@ from models.venue_booking import VenueBooking
 from models.venue_unavailability import VenueUnavailability
 from services import equipment_requirements as requirement_service
 from services import safety_reviews as safety_service
+from services import venue_bookings as booking_service
 from tests.integration.test_equipment_requirements import catalogue
 from tests.integration.test_safety_review import _NOW, _START, arranged_event
 from tests.integration.test_submit_event_request import MakeClient, MakeUser
+from tests.integration.test_submit_venue_booking import approved_event
 from tests.integration.test_venue_search import effective_for, make_venue
 
 
@@ -430,3 +432,96 @@ async def test_an_arrangement_with_an_unresolved_issue_blocks_confirmation(
     db.expire_all()
     assert stored_event(db, event.id).status is EventStatus.APPROVED
     assert stored_booking(db, booking.id).status is BookingStatus.TENTATIVE
+
+
+@pytest.mark.story("SCRUM-80")
+async def test_an_event_that_needs_no_equipment_can_still_be_confirmed(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """AC10: "a legitimate empty equipment-requirement set does not require an invented
+    equipment approval".
+
+    An event with nothing to set up is arranged as soon as its venue is held. Treating
+    "no requirements" as "nothing assessed" would leave it unconfirmable with nothing
+    anyone could do about it.
+    """
+    coordinator = make_user("coordinator")
+    event = approved_event(
+        db, make_user("organiser"), coordinator, start_at=_START, end_at=_START + timedelta(hours=2)
+    )
+    venue = make_venue(db, name=f"Hall {uuid.uuid4()}")
+    effective_start, effective_end = effective_for(venue, _START, _START + timedelta(hours=2))
+    booking = VenueBooking(
+        venue_id=venue.id,
+        event_request_id=event.id,
+        requested_by_id=coordinator.id,
+        session_label="Main hall",
+        start_at=_START,
+        end_at=_START + timedelta(hours=2),
+        effective_start_at=effective_start,
+        effective_end_at=effective_end,
+        status=BookingStatus.PENDING,
+    )
+    db.add(booking)
+    db.flush()
+    booking_service.hold(
+        db, booking.id, make_user("venue_staff").id, _START - timedelta(days=1), _NOW
+    )
+    approve_safety(db, event, make_user)
+    db.flush()
+
+    async with make_client(coordinator) as client:
+        readiness = (await client.get(f"/api/event-requests/{event.id}/confirmation")).json()
+        response = await client.post(f"/api/event-requests/{event.id}/confirm")
+
+    assert readiness["arrangement_blockers"] == []
+    assert response.status_code == 200, "an event needing no equipment was refused"
+    db.expire_all()
+    assert stored_event(db, event.id).status is EventStatus.CONFIRMED
+
+
+@pytest.mark.story("SCRUM-80")
+async def test_a_booking_already_confirmed_is_left_exactly_as_it_was(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """AC9: "unaffected existing confirmed bookings remain intact".
+
+    A second session of the same event may already have been confirmed by an earlier
+    round. Confirmation converts the live holds and must not rewrite what is already
+    committed — not its status, and not the record of who committed it.
+    """
+    # Arranged first, then the settled booking, and the safety approval last: adding a
+    # booking changes the plan, so approving before it would legitimately be stale (AC7).
+    event, held, coordinator = arranged_event(db, make_user)
+    other_venue = make_venue(db, name=f"Hall {uuid.uuid4()}")
+    later = _START + timedelta(days=1)
+    effective_start, effective_end = effective_for(other_venue, later, later + timedelta(hours=2))
+    settled = VenueBooking(
+        venue_id=other_venue.id,
+        event_request_id=event.id,
+        requested_by_id=coordinator.id,
+        session_label="Evening session",
+        start_at=later,
+        end_at=later + timedelta(hours=2),
+        effective_start_at=effective_start,
+        effective_end_at=effective_end,
+        status=BookingStatus.CONFIRMED,
+        held_by_id=make_user("venue_staff").id,
+        held_at=_NOW,
+    )
+    db.add(settled)
+    db.flush()
+    approve_safety(db, event, make_user)
+    db.flush()
+    settled_id, settled_held_by, settled_held_at = settled.id, settled.held_by_id, settled.held_at
+
+    async with make_client(coordinator) as client:
+        response = await client.post(f"/api/event-requests/{event.id}/confirm")
+
+    assert response.status_code == 200, reasons_of(response.json())
+    db.expire_all()
+    after = stored_booking(db, settled_id)
+    assert after.status is BookingStatus.CONFIRMED
+    assert (after.held_by_id, after.held_at) == (settled_held_by, settled_held_at)
+    # And the hold really was the thing that changed.
+    assert stored_booking(db, held.id).status is BookingStatus.CONFIRMED
