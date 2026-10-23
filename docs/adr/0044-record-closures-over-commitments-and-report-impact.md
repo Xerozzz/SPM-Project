@@ -1,6 +1,6 @@
 # ADR-0044: Record venue closures over live commitments and report their impact
 
-- **Status:** Proposed
+- **Status:** Proposed, event status rule superseded by ADR-0053
 - **Date:** 2026-10-20
 - **Deciders:** Parikshit
 - **Related stories:** SCRUM-81, SCRUM-62, SCRUM-82, SCRUM-89, SCRUM-116, SCRUM-132

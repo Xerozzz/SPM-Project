@@ -3,7 +3,8 @@
 A closure is always recordable once it is valid, even over confirmed bookings and live
 holds (SCRUM-81 AC1). Saving one works out which of those it affects, keeps a snapshot
 of them, and notifies each affected event's assigned Coordinator, all in one commit
-(AC8). Nothing is cancelled and no booking or event is changed (AC3). See ADR-0044.
+(AC8). Nothing is cancelled and no booking is changed (AC3). See ADR-0044. A Confirmed
+event it affects goes back to planning in the same commit (SCRUM-132, ADR-0053).
 """
 
 import uuid
@@ -12,6 +13,7 @@ from datetime import datetime
 
 from core.database import Session
 from domain.booking_conflict import BookedPeriod
+from domain.event_replanning import ReplanCause, needs_replanning
 from domain.notifications import NotificationSource, NotificationType
 from domain.validation import FieldProblem
 from domain.venue_buffer import VenueBuffers
@@ -28,6 +30,7 @@ from repositories import venue_availability as booking_repo
 from repositories import venue_closure_impacts as impact_repo
 from repositories import venue_unavailabilities as repo
 from services import venues
+from services.event_replanning import return_to_planning
 
 
 class VenueUnavailabilityError(Exception):
@@ -189,6 +192,21 @@ def _record_impact(
             source_id=impact_key(record.id, record.starts_at, record.ends_at, item.booking.id),
             occurred_at=now,
         )
+    _replan_confirmed(db, affected, now)
     db.commit()
     db.refresh(record)
     return SavedClosure(record=record, affected=affected)
+
+
+def _replan_confirmed(db: Session, affected: list[AffectedArrangement], now: datetime) -> None:
+    """SCRUM-132: return each affected Confirmed event to planning (ADR-0053).
+
+    Each event once, however many of its arrangements the closure hits. Locked in id
+    order and checked again on the locked row, so two closures never wait on each other
+    in opposite orders, and a retry finds the event already in planning and leaves it.
+    """
+    event_ids = sorted({item.event.id for item in affected if item.event is not None})
+    for event_id in event_ids:
+        event = event_repo.get_for_update(db, event_id)
+        if event is not None and needs_replanning(event.status):
+            return_to_planning(db, event, ReplanCause.VENUE_CLOSURE, now)

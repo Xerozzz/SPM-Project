@@ -53,7 +53,7 @@ someone else made two weeks ago.
 | [0041](0041-significant-changes-as-change-request-records.md) | Record a significant change as a change request with one row per changed value | Proposed |
 | [0042](0042-confirmed-events-refuse-ordinary-updates.md) | Confirmed events refuse ordinary updates | Proposed |
 | [0043](0043-decide-change-requests-apply-event-fields-only.md) | Deciding a change request applies the event fields and flags arrangements | Proposed |
-| [0044](0044-record-closures-over-commitments-and-report-impact.md) | Record venue closures over live commitments and report their impact | Proposed |
+| [0044](0044-record-closures-over-commitments-and-report-impact.md) | Record venue closures over live commitments and report their impact | Proposed, event status rule superseded by ADR-0053 |
 | [0045](0045-link-replacement-venue-requests.md) | Link a replacement venue request to the arrangement it replaces | Proposed |
 | [0046](0046-layout-and-accessibility-need-change-control.md) | Layout and accessibility changes need change control | Proposed |
 | [0047](0047-assignment-history-for-owner-and-assignee.md) | Let the owning Organiser and the current Coordinator read assignment history | Proposed |
@@ -62,6 +62,7 @@ someone else made two weeks ago.
 | [0050](0050-registration-intake-controls.md) | Store operational registration intake controls apart from event planning | Proposed |
 | [0051](0051-manual-registration-close-marker.md) | Record manual registration closure separately from suspension and deadlines | Proposed |
 | [0052](0052-mark-a-safety-approval-invalid-on-replanning.md) | Mark a safety approval invalid when a Confirmed event goes back to planning | Proposed |
+| [0053](0053-closure-returns-confirmed-events-to-planning.md) | A venue closure returns the Confirmed events it affects to planning | Proposed |
 
 ## When to write one
 
