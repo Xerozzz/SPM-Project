@@ -1,19 +1,22 @@
 """SCRUM-131: an approved change to a Confirmed event suspends registration intake."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from domain.change_decision import Decision
+from domain.registration import RegistrationStatus
 from domain.registration_intake import RegistrationIntakeError
 from domain.roles import Role
 from domain.safety_review import SafetyDecision, fingerprint
 from models.event_change_request import EventChangeRequest
+from models.event_registration import EventRegistration
 from models.event_request import EventRequest
 from models.user import User
 from models.venue_booking import VenueBooking
-from services import event_confirmations
+from services import event_confirmations, event_registrations
 from services import registration_intake as intake_service
 from services import safety_reviews as safety_service
 from tests.integration.test_event_confirmation import ready_event
@@ -128,3 +131,28 @@ def test_a_failed_suspension_rolls_the_whole_decision_back(
     assert change is not None and change.status == "pending"
     assert stored.registration_suspended_at is None
     assert stored.status == "confirmed"
+
+
+def _register(db: Session, event: EventRequest, attendee: User, at: datetime) -> EventRegistration:
+    return event_registrations.submit(
+        db, event.id, attendee.id, "Ada Lovelace", 24, "+65 8123 4567", None, at
+    )
+
+
+@pytest.mark.story("SCRUM-131")
+def test_existing_registrations_are_kept_and_new_ones_are_refused(
+    db: Session, make_user: MakeUser
+) -> None:
+    """AC2 with real SCRUM-42 registrations."""
+    event, booking, coordinator = _open(db, make_user)
+    kept = _register(db, event, make_user("attendee"), _NOW)
+
+    _decide(db, event, _session_change(db, event, booking), coordinator, Decision.APPROVE)
+
+    db.expire_all()
+    stored = db.get(EventRegistration, kept.id)
+    assert stored is not None and stored.status is RegistrationStatus.PENDING
+    with pytest.raises(event_registrations.RegistrationError):
+        _register(db, event, make_user("attendee"), _LATER)
+    others = select(EventRegistration).where(EventRegistration.event_request_id == event.id)
+    assert [row.id for row in db.scalars(others)] == [kept.id]

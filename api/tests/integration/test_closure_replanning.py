@@ -7,16 +7,20 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from domain.event_status import EventStatus
+from domain.registration import RegistrationStatus
 from domain.venue_unavailability import VenueUnavailabilityFields
+from models.event_registration import EventRegistration
 from models.event_request import EventRequest
 from models.safety_review import SafetyReview
 from models.user import User
 from models.venue_booking import VenueBooking
 from models.venue_unavailability import VenueUnavailability
 from repositories import safety_reviews as safety_repo
+from services import event_registrations
 from services import registration_intake as intake_service
 from services import venue_unavailabilities as closures
 from tests.integration.test_event_confirmation import ready_event
+from tests.integration.test_intake_suspension_on_replan import _register
 from tests.integration.test_safety_approval_invalidation import _confirmed
 from tests.integration.test_safety_review import _NOW
 from tests.integration.test_submit_event_request import MakeUser
@@ -69,6 +73,24 @@ def test_a_closure_returns_a_confirmed_event_to_planning(db: Session, make_user:
     assert stored.registration_closes_at == _NOW + timedelta(days=1)
     approval = _approval(db, event)
     assert (approval.invalidated_at, approval.invalidation_cause) == (_NOW, "venue_closure")
+
+
+@pytest.mark.story("SCRUM-132")
+def test_a_closure_keeps_existing_registrations_and_refuses_new_ones(
+    db: Session, make_user: MakeUser
+) -> None:
+    """AC1 with real SCRUM-42 registrations."""
+    event, booking, _ = _confirmed(db, make_user)
+    _open_intake(db, event)
+    kept = _register(db, event, make_user("attendee"), _NOW)
+
+    _close(db, booking, make_user("venue_staff"))
+
+    db.expire_all()
+    stored = db.get(EventRegistration, kept.id)
+    assert stored is not None and stored.status is RegistrationStatus.PENDING
+    with pytest.raises(event_registrations.RegistrationError):
+        _register(db, event, make_user("attendee"), _LATER)
 
 
 @pytest.mark.story("SCRUM-132")
