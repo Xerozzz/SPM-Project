@@ -71,6 +71,9 @@ class EventRegistrationHistory(Base):
     registration_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("event_registrations.id"), nullable=False, index=True
     )
+    actor_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+    )
     previous_status: Mapped[RegistrationStatus | None] = mapped_column(
         Enum(
             RegistrationStatus,

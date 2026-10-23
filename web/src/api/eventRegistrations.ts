@@ -8,6 +8,7 @@ export interface AttendeeEvent {
   description: string | null
   start_at: string | null
   end_at: string | null
+  intake_open: boolean
 }
 
 export interface EventRegistration {
@@ -23,6 +24,10 @@ export interface RegistrationSubmission {
   age: number
   phone_number: string
   dietary_accessibility_notes: string | null
+}
+
+export interface WithdrawalResult extends EventRegistration {
+  already_withdrawn: boolean
 }
 
 export class RegistrationValidationError extends Error {
@@ -86,4 +91,24 @@ export async function readMyRegistration(
   if (response.status === 404) return null
   if (!response.ok) throw new Error(`Could not load registration (${response.status})`)
   return (await response.json()) as EventRegistration
+}
+
+export async function withdrawRegistration(
+  token: string,
+  eventId: string,
+): Promise<WithdrawalResult> {
+  const response = await fetch(`/api/attendee/events/${eventId}/registration/withdraw`, {
+    method: 'POST',
+    headers: headers(token),
+  })
+  if (!response.ok) {
+    const detail = await response
+      .json()
+      .then((body: { detail?: unknown }) =>
+        typeof body.detail === 'string' ? body.detail : `Withdrawal failed (${response.status})`,
+      )
+      .catch(() => `Withdrawal failed (${response.status})`)
+    throw new Error(detail)
+  }
+  return (await response.json()) as WithdrawalResult
 }

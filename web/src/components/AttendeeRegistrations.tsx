@@ -6,6 +6,7 @@ import {
   listOpenEvents,
   readMyRegistration,
   submitRegistration,
+  withdrawRegistration,
 } from '../api/eventRegistrations'
 import { useAuth } from '../auth/useAuth'
 
@@ -26,6 +27,11 @@ export default function AttendeeRegistrations() {
         client.invalidateQueries({ queryKey: ['attendee-registration', eventId, token] }),
         client.invalidateQueries({ queryKey: ['attendee-events', token] }),
       ]),
+  })
+  const withdraw = useMutation({
+    mutationFn: (eventId: string) => withdrawRegistration(token ?? '', eventId),
+    onSuccess: (_registration, eventId) =>
+      void client.invalidateQueries({ queryKey: ['attendee-registration', eventId, token] }),
   })
 
   return (
@@ -53,13 +59,20 @@ export default function AttendeeRegistrations() {
             event={event}
             token={token ?? ''}
             submitting={submit.isPending}
+            withdrawing={withdraw.isPending}
             onSubmit={(eventId, values) => submit.mutate({ eventId, values })}
+            onWithdraw={(eventId) => withdraw.mutate(eventId)}
           />
         ))}
       </div>
       {submit.isError && (
         <p role="alert" className="mt-2 text-sm text-red-600">
           {submit.error.message}
+        </p>
+      )}
+      {withdraw.isError && (
+        <p role="alert" className="mt-2 text-sm text-red-600">
+          {withdraw.error.message}
         </p>
       )}
     </section>
@@ -70,12 +83,16 @@ function EventCard({
   event,
   token,
   submitting,
+  withdrawing,
   onSubmit,
+  onWithdraw,
 }: {
   event: Awaited<ReturnType<typeof listOpenEvents>>[number]
   token: string
   submitting: boolean
+  withdrawing: boolean
   onSubmit: (eventId: string, values: RegistrationSubmission) => void
+  onWithdraw: (eventId: string) => void
 }) {
   const [values, setValues] = useState({
     full_name: '',
@@ -97,11 +114,24 @@ function EventCard({
           Starts {new Date(event.start_at).toLocaleString()}
         </p>
       )}
-      {registration.data ? (
-        <p className="mt-2 text-sm" role="status">
-          Registration status: {label(registration.data.status)}
-        </p>
-      ) : (
+      {registration.data && (
+        <>
+          <p className="mt-2 text-sm" role="status">
+            Registration status: {label(registration.data.status)}
+          </p>
+          {canWithdraw(registration.data.status) && (
+            <button
+              type="button"
+              disabled={withdrawing}
+              onClick={() => onWithdraw(event.id)}
+              className="mt-2 rounded border border-slate-400 px-3 py-1.5 text-sm disabled:opacity-50"
+            >
+              Withdraw registration
+            </button>
+          )}
+        </>
+      )}
+      {(!registration.data || registration.data.status === 'withdrawn') && event.intake_open && (
         <form
           className="mt-3 space-y-3"
           onSubmit={(submit) => {
@@ -198,4 +228,8 @@ function validate(values: { full_name: string; age: string; phone_number: string
 
 function label(status: 'pending' | 'waitlisted' | 'accepted' | 'withdrawn' | 'cancelled') {
   return status.charAt(0).toUpperCase() + status.slice(1)
+}
+
+function canWithdraw(status: 'pending' | 'waitlisted' | 'accepted' | 'withdrawn' | 'cancelled') {
+  return status === 'pending' || status === 'waitlisted' || status === 'accepted'
 }

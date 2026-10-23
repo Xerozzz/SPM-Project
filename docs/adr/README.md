@@ -64,6 +64,7 @@ someone else made two weeks ago.
 | [0052](0052-mark-a-safety-approval-invalid-on-replanning.md) | Mark a safety approval invalid when a Confirmed event goes back to planning | Proposed |
 | [0053](0053-closure-returns-confirmed-events-to-planning.md) | A venue closure returns the Confirmed events it affects to planning | Proposed |
 | [0054](0054-attendee-registration-records.md) | Keep attendee registrations and their status history as separate records | Proposed |
+| [0055](0055-registration-history-actors.md) | Record the actor on registration status history | Proposed |
 
 ## When to write one
 

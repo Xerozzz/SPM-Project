@@ -26,6 +26,7 @@ test('SCRUM-42: an attendee registers and sees the pending status', async () => 
           description: 'Campus tours',
           start_at: '2030-03-04T10:00:00Z',
           end_at: '2030-03-04T12:00:00Z',
+          intake_open: true,
         },
       ])
     }
@@ -69,6 +70,7 @@ test('SCRUM-42: invalid fields are named and entered values stay in the form', a
           description: null,
           start_at: null,
           end_at: null,
+          intake_open: true,
         },
       ])
     }
@@ -92,6 +94,49 @@ test('SCRUM-42: invalid fields are named and entered values stay in the form', a
   expect(screen.getByText('Age must be a whole number.')).toBeInTheDocument()
   expect(screen.getByText('Phone number is required.')).toBeInTheDocument()
   expect(screen.getByLabelText('Full name')).toHaveValue('Ada Lovelace')
+})
+
+test('SCRUM-128: an attendee withdraws and sees the withdrawn status', async () => {
+  localStorage.setItem(
+    'connectsphere.token',
+    JSON.stringify({ token: 'token', userId: 'attendee-1', roles: ['attendee'] }),
+  )
+  let withdrawn = false
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const request = `${init?.method ?? 'GET'} ${String(input)}`
+    if (request === 'GET /api/attendee/events') {
+      return json([
+        {
+          id: 'event-1',
+          name: 'Open Day',
+          description: null,
+          start_at: null,
+          end_at: null,
+          intake_open: true,
+        },
+      ])
+    }
+    if (request === 'GET /api/attendee/events/event-1/registration') {
+      return json({ ...registration(), status: withdrawn ? 'withdrawn' : 'pending' })
+    }
+    if (request === 'POST /api/attendee/events/event-1/registration/withdraw') {
+      withdrawn = true
+      return json({ ...registration(), status: 'withdrawn', already_withdrawn: false })
+    }
+    throw new Error(`unexpected request ${request}`)
+  })
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={client}>
+      <AuthProvider>
+        <AttendeeRegistrations />
+      </AuthProvider>
+    </QueryClientProvider>,
+  )
+
+  expect(await screen.findByRole('status')).toHaveTextContent('Registration status: Pending')
+  fireEvent.click(screen.getByRole('button', { name: 'Withdraw registration' }))
+  expect(await screen.findByRole('status')).toHaveTextContent('Registration status: Withdrawn')
 })
 
 function registration() {

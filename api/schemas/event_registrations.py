@@ -19,6 +19,7 @@ class AttendeeEventRead(BaseModel):
     description: str | None
     start_at: datetime | None
     end_at: datetime | None
+    intake_open: bool = False
 
 
 class RegistrationSubmit(BaseModel):
@@ -60,3 +61,9 @@ class RegistrationRead(BaseModel):
     @classmethod
     def of(cls, registration: EventRegistration) -> "RegistrationRead":
         return cls.model_validate(registration)
+
+
+class WithdrawalRead(RegistrationRead):
+    """Withdrawal outcome, including the idempotent-repeat signal."""
+
+    already_withdrawn: bool = False
