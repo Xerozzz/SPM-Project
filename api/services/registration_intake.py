@@ -68,8 +68,17 @@ def extend_intake(
 def suspend_intake(db: Session, event_id: uuid.UUID, now: datetime) -> EventRequest:
     """Suspend intake for replanning; reconfirmation never clears this marker."""
     event = _locked(db, event_id)
-    event.registration_suspended_at = now
+    suspend(event, now)
     return event_repo.save(db, event)
+
+
+def suspend(event: EventRequest, now: datetime) -> None:
+    """Stage the suspension without committing (SCRUM-131).
+
+    For callers that already hold the event's lock and commit once, so the suspension
+    lands or rolls back with the replanning that caused it. Registrations are untouched.
+    """
+    event.registration_suspended_at = now
 
 
 def close_intake(db: Session, event_id: uuid.UUID, now: datetime) -> EventRequest:
