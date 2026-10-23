@@ -79,3 +79,8 @@ class EventRequest(Base):
         UUID(as_uuid=True), ForeignKey("users.id")
     )
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # SCRUM-113: operational intake controls are deliberately separate from the
+    # organiser's locked planning requirement above.
+    registration_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    registration_closes_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    registration_suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

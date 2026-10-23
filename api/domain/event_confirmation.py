@@ -124,6 +124,21 @@ def problems(
     if status is not PLANNING:
         return ConfirmationProblems((), (ConfirmationBlocker.NOT_IN_PLANNING,))
 
+    return current_plan_problems(plan, standing, needing_attention)
+
+
+def current_plan_problems(
+    plan: PlanSnapshot,
+    standing: SafetyStanding | None,
+    needing_attention: Collection[UUID] = (),
+    *,
+    require_current_safety_fingerprint: bool = True,
+) -> ConfirmationProblems:
+    """The current arrangement and safety checks shared with registration opening.
+
+    Confirmation additionally requires that the event is in planning; registration
+    instead requires it already be Confirmed. Both must judge the same live plan.
+    """
     arrangement: list[ReviewBlocker | ConfirmationBlocker] = list(arrangement_blockers(plan))
     # AC3: a hold that is held and unexpired can still be one Venue Staff have flagged.
     if any(venue.booking_id in needing_attention for venue in plan.venues):
@@ -131,12 +146,14 @@ def problems(
 
     return ConfirmationProblems(
         tuple(arrangement),
-        tuple(_safety_problems(plan, standing)),
+        tuple(_safety_problems(plan, standing, require_current_safety_fingerprint)),
     )
 
 
 def _safety_problems(
-    plan: PlanSnapshot, standing: SafetyStanding | None
+    plan: PlanSnapshot,
+    standing: SafetyStanding | None,
+    require_current_safety_fingerprint: bool = True,
 ) -> list[ConfirmationBlocker]:
     """AC2 and AC7: is there an approval, and is it about the plan in front of us?"""
     if standing is None:
@@ -146,7 +163,7 @@ def _safety_problems(
     # The approval named a plan. If the plan has moved since — a session retimed, a
     # requirement added, a hold replaced — then nobody has judged what is in front of us
     # now, and an approval of something else cannot stand in for that (ADR-0048).
-    if standing.plan_fingerprint != fingerprint(plan):
+    if require_current_safety_fingerprint and standing.plan_fingerprint != fingerprint(plan):
         return [ConfirmationBlocker.SAFETY_APPROVAL_STALE]
     return []
 
