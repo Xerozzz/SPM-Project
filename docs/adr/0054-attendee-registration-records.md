@@ -13,10 +13,12 @@ attendee's repeated lifecycle history.
 
 ## Decision
 
-We will store one registration row for each submission lifecycle and an append-only status
-history row for every transition. A locked event row assigns a monotonically increasing
-per-event submission order. PostgreSQL enforces one live (`pending`, `waitlisted`, or
-`accepted`) registration per attendee and event with a partial unique index.
+We will store one registration row for each submission lifecycle, including the attendee's
+submitted full name, age, phone number and optional dietary/accessibility notes, and an
+append-only status history row for every transition. A locked event row assigns a
+monotonically increasing per-event submission order. PostgreSQL enforces one live
+(`pending`, `waitlisted`, or `accepted`) registration per attendee and event with a partial
+unique index.
 
 ## Alternatives considered
 

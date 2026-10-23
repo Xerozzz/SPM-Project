@@ -1,6 +1,12 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { listOpenEvents, readMyRegistration, submitRegistration } from '../api/eventRegistrations'
+import {
+  type RegistrationSubmission,
+  listOpenEvents,
+  readMyRegistration,
+  submitRegistration,
+} from '../api/eventRegistrations'
 import { useAuth } from '../auth/useAuth'
 
 /** Minimal attendee intake: identity is the signed-in account, not browser input. */
@@ -13,8 +19,9 @@ export default function AttendeeRegistrations() {
     enabled: token !== null,
   })
   const submit = useMutation({
-    mutationFn: (eventId: string) => submitRegistration(token ?? '', eventId),
-    onSuccess: (_registration, eventId) =>
+    mutationFn: ({ eventId, values }: { eventId: string; values: RegistrationSubmission }) =>
+      submitRegistration(token ?? '', eventId, values),
+    onSuccess: (_registration, { eventId }) =>
       void Promise.all([
         client.invalidateQueries({ queryKey: ['attendee-registration', eventId, token] }),
         client.invalidateQueries({ queryKey: ['attendee-events', token] }),
@@ -46,7 +53,7 @@ export default function AttendeeRegistrations() {
             event={event}
             token={token ?? ''}
             submitting={submit.isPending}
-            onSubmit={submit.mutate}
+            onSubmit={(eventId, values) => submit.mutate({ eventId, values })}
           />
         ))}
       </div>
@@ -68,8 +75,15 @@ function EventCard({
   event: Awaited<ReturnType<typeof listOpenEvents>>[number]
   token: string
   submitting: boolean
-  onSubmit: (eventId: string) => void
+  onSubmit: (eventId: string, values: RegistrationSubmission) => void
 }) {
+  const [values, setValues] = useState({
+    full_name: '',
+    age: '',
+    phone_number: '',
+    dietary_accessibility_notes: '',
+  })
+  const [errors, setErrors] = useState<Partial<Record<keyof RegistrationSubmission, string>>>({})
   const registration = useQuery({
     queryKey: ['attendee-registration', event.id, token],
     queryFn: () => readMyRegistration(token, event.id),
@@ -88,17 +102,98 @@ function EventCard({
           Registration status: {label(registration.data.status)}
         </p>
       ) : (
-        <button
-          type="button"
-          disabled={submitting}
-          onClick={() => onSubmit(event.id)}
-          className="mt-2 rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+        <form
+          className="mt-3 space-y-3"
+          onSubmit={(submit) => {
+            submit.preventDefault()
+            const nextErrors = validate(values)
+            if (Object.keys(nextErrors).length > 0) {
+              setErrors(nextErrors)
+              return
+            }
+            setErrors({})
+            onSubmit(event.id, {
+              full_name: values.full_name,
+              age: Number(values.age),
+              phone_number: values.phone_number,
+              dietary_accessibility_notes: values.dietary_accessibility_notes || null,
+            })
+          }}
         >
-          Register
-        </button>
+          <Field label="Full name" error={errors.full_name}>
+            <input
+              value={values.full_name}
+              onChange={(change) => setValues({ ...values, full_name: change.target.value })}
+              className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm"
+            />
+          </Field>
+          <Field label="Age" error={errors.age}>
+            <input
+              type="number"
+              min="0"
+              value={values.age}
+              onChange={(change) => setValues({ ...values, age: change.target.value })}
+              className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm"
+            />
+          </Field>
+          <Field label="Phone number" error={errors.phone_number}>
+            <input
+              type="tel"
+              value={values.phone_number}
+              onChange={(change) => setValues({ ...values, phone_number: change.target.value })}
+              className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm"
+            />
+          </Field>
+          <Field label="Dietary or accessibility notes (optional)">
+            <textarea
+              value={values.dietary_accessibility_notes}
+              onChange={(change) =>
+                setValues({ ...values, dietary_accessibility_notes: change.target.value })
+              }
+              className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm"
+            />
+          </Field>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+          >
+            Register
+          </button>
+        </form>
       )}
     </article>
   )
+}
+
+function Field({
+  label,
+  error,
+  children,
+}: {
+  label: string
+  error?: string
+  children: React.ReactNode
+}) {
+  return (
+    <label className="block text-sm">
+      {label}
+      {children}
+      {error && (
+        <span role="alert" className="block text-red-600">
+          {error}
+        </span>
+      )}
+    </label>
+  )
+}
+
+function validate(values: { full_name: string; age: string; phone_number: string }) {
+  const errors: Partial<Record<keyof RegistrationSubmission, string>> = {}
+  if (!values.full_name.trim()) errors.full_name = 'Full name is required.'
+  if (!/^\d+$/.test(values.age)) errors.age = 'Age must be a whole number.'
+  if (!values.phone_number.trim()) errors.phone_number = 'Phone number is required.'
+  return errors
 }
 
 function label(status: 'pending' | 'waitlisted' | 'accepted' | 'withdrawn' | 'cancelled') {

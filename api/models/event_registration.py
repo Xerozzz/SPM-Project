@@ -3,7 +3,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, text
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -56,6 +56,10 @@ class EventRegistration(Base):
         DateTime(timezone=True), nullable=False, default=_now
     )
     submission_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    full_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    age: Mapped[int] = mapped_column(Integer, nullable=False)
+    phone_number: Mapped[str] = mapped_column(String(50), nullable=False)
+    dietary_accessibility_notes: Mapped[str | None] = mapped_column(Text)
 
 
 class EventRegistrationHistory(Base):

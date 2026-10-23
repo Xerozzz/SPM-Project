@@ -48,6 +48,10 @@ def add_submission(
     attendee_id: uuid.UUID,
     submitted_at: datetime,
     submission_order: int,
+    full_name: str,
+    age: int,
+    phone_number: str,
+    dietary_accessibility_notes: str | None,
 ) -> EventRegistration:
     registration = EventRegistration(
         event_request_id=event_request_id,
@@ -55,6 +59,10 @@ def add_submission(
         status=RegistrationStatus.PENDING,
         submitted_at=submitted_at,
         submission_order=submission_order,
+        full_name=full_name,
+        age=age,
+        phone_number=phone_number,
+        dietary_accessibility_notes=dietary_accessibility_notes,
     )
     db.add(registration)
     db.flush()

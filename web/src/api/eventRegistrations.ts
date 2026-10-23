@@ -18,6 +18,20 @@ export interface EventRegistration {
   submission_order: number
 }
 
+export interface RegistrationSubmission {
+  full_name: string
+  age: number
+  phone_number: string
+  dietary_accessibility_notes: string | null
+}
+
+export class RegistrationValidationError extends Error {
+  constructor(readonly fields: Partial<Record<keyof RegistrationSubmission, string>>) {
+    super('Please correct the highlighted registration information.')
+    this.name = 'RegistrationValidationError'
+  }
+}
+
 function headers(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}` }
 }
@@ -31,11 +45,23 @@ export async function listOpenEvents(token: string): Promise<AttendeeEvent[]> {
 export async function submitRegistration(
   token: string,
   eventId: string,
+  submission: RegistrationSubmission,
 ): Promise<EventRegistration> {
   const response = await fetch(`/api/attendee/events/${eventId}/registrations`, {
     method: 'POST',
-    headers: headers(token),
+    headers: { ...headers(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(submission),
   })
+  if (response.status === 422) {
+    const body = (await response.json()) as { detail?: Array<{ loc?: unknown[]; msg?: string }> }
+    const fields = Object.fromEntries(
+      (body.detail ?? []).flatMap((problem) => {
+        const field = problem.loc?.at(-1)
+        return typeof field === 'string' ? [[field, problem.msg ?? 'is not valid']] : []
+      }),
+    ) as Partial<Record<keyof RegistrationSubmission, string>>
+    throw new RegistrationValidationError(fields)
+  }
   if (!response.ok) {
     const detail = await response
       .json()

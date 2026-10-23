@@ -21,6 +21,16 @@ def open_event(db: Session, make_user: MakeUser) -> tuple[EventRequest, object]:
     return event, organiser
 
 
+def submission(overrides: dict[str, object] | None = None) -> dict[str, object]:
+    return {
+        "full_name": "Ada Lovelace",
+        "age": 24,
+        "phone_number": "+65 8123 4567",
+        "dietary_accessibility_notes": "Vegetarian meal, step-free access.",
+        **(overrides or {}),
+    }
+
+
 @pytest.mark.story("SCRUM-42")
 async def test_attendee_can_view_open_event_and_create_one_pending_registration(
     db: Session, make_user: MakeUser, make_client: MakeClient
@@ -30,7 +40,9 @@ async def test_attendee_can_view_open_event_and_create_one_pending_registration(
 
     async with make_client(attendee) as client:
         listed = await client.get("/api/attendee/events")
-        created = await client.post(f"/api/attendee/events/{event.id}/registrations")
+        created = await client.post(
+            f"/api/attendee/events/{event.id}/registrations", json=submission()
+        )
 
     assert listed.status_code == 200
     [visible] = listed.json()
@@ -48,6 +60,10 @@ async def test_attendee_can_view_open_event_and_create_one_pending_registration(
     registration = db.get(EventRegistration, body["id"])
     assert registration is not None and registration.attendee_id == attendee.id
     assert registration.status is RegistrationStatus.PENDING
+    assert registration.full_name == "Ada Lovelace"
+    assert registration.age == 24
+    assert registration.phone_number == "+65 8123 4567"
+    assert registration.dietary_accessibility_notes == "Vegetarian meal, step-free access."
     assert (
         db.scalar(
             select(func.count())
@@ -66,9 +82,13 @@ async def test_only_an_authenticated_attendee_can_view_or_submit(
     organiser = make_user("organiser")
 
     async with make_client(None) as client:
-        anonymous = await client.post(f"/api/attendee/events/{event.id}/registrations")
+        anonymous = await client.post(
+            f"/api/attendee/events/{event.id}/registrations", json=submission()
+        )
     async with make_client(organiser) as client:
-        forbidden = await client.post(f"/api/attendee/events/{event.id}/registrations")
+        forbidden = await client.post(
+            f"/api/attendee/events/{event.id}/registrations", json=submission()
+        )
 
     assert anonymous.status_code == 401
     assert forbidden.status_code == 403
@@ -92,7 +112,9 @@ async def test_closed_suspended_or_expired_intake_creates_no_registration(
         db.commit()
 
     async with make_client(attendee) as client:
-        refused = await client.post(f"/api/attendee/events/{event.id}/registrations")
+        refused = await client.post(
+            f"/api/attendee/events/{event.id}/registrations", json=submission()
+        )
 
     assert refused.status_code == 409
     assert db.scalar(select(func.count()).select_from(EventRegistration)) == 0
@@ -108,7 +130,9 @@ async def test_non_confirmed_event_cannot_receive_a_registration(
     db.commit()
 
     async with make_client(attendee) as client:
-        refused = await client.post(f"/api/attendee/events/{event.id}/registrations")
+        refused = await client.post(
+            f"/api/attendee/events/{event.id}/registrations", json=submission()
+        )
 
     assert refused.status_code == 409
     assert db.scalar(select(func.count()).select_from(EventRegistration)) == 0
@@ -124,8 +148,12 @@ async def test_retry_is_a_conflict_with_no_second_record_history_or_capacity_dec
     attendee = make_user("attendee")
 
     async with make_client(attendee) as client:
-        first = await client.post(f"/api/attendee/events/{event.id}/registrations")
-        retry = await client.post(f"/api/attendee/events/{event.id}/registrations")
+        first = await client.post(
+            f"/api/attendee/events/{event.id}/registrations", json=submission()
+        )
+        retry = await client.post(
+            f"/api/attendee/events/{event.id}/registrations", json=submission()
+        )
 
     assert first.status_code == 201
     assert retry.status_code == 409
@@ -143,7 +171,9 @@ async def test_attendee_can_read_only_their_registration_after_intake_closes(
     attendee = make_user("attendee")
     other = make_user("attendee")
     async with make_client(attendee) as client:
-        created = await client.post(f"/api/attendee/events/{event.id}/registrations")
+        created = await client.post(
+            f"/api/attendee/events/{event.id}/registrations", json=submission()
+        )
     registration_intake.close_intake(db, event.id, datetime.now(UTC))
 
     async with make_client(attendee) as client:
@@ -154,6 +184,23 @@ async def test_attendee_can_read_only_their_registration_after_intake_closes(
     assert mine.status_code == 200
     assert mine.json()["id"] == created.json()["id"]
     assert theirs.status_code == 404
+
+
+@pytest.mark.story("SCRUM-42")
+async def test_invalid_required_information_creates_no_registration(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    event, _ = open_event(db, make_user)
+    attendee = make_user("attendee")
+    invalid = submission({"full_name": " ", "age": -1, "phone_number": ""})
+
+    async with make_client(attendee) as client:
+        refused = await client.post(f"/api/attendee/events/{event.id}/registrations", json=invalid)
+
+    assert refused.status_code == 422
+    fields = {problem["loc"][-1] for problem in refused.json()["detail"]}
+    assert fields == {"full_name", "age", "phone_number"}
+    assert db.scalar(select(func.count()).select_from(EventRegistration)) == 0
 
 
 @pytest.mark.story("SCRUM-42")

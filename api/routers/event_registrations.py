@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.dependencies import require_role
 from domain.roles import Role
-from schemas.event_registrations import AttendeeEventRead, RegistrationRead
+from schemas.event_registrations import AttendeeEventRead, RegistrationRead, RegistrationSubmit
 from services import event_registrations as service
 
 router = APIRouter(prefix="/attendee", tags=["attendee-registrations"])
@@ -44,9 +44,20 @@ def read_event(event_id: uuid.UUID, _user: Attendee, db: Db) -> AttendeeEventRea
     response_model=RegistrationRead,
     status_code=status.HTTP_201_CREATED,
 )
-def submit(event_id: uuid.UUID, user: Attendee, db: Db) -> RegistrationRead:
+def submit(
+    event_id: uuid.UUID, body: RegistrationSubmit, user: Attendee, db: Db
+) -> RegistrationRead:
     try:
-        registration = service.submit(db, event_id, _attendee_id(user), datetime.now(UTC))
+        registration = service.submit(
+            db,
+            event_id,
+            _attendee_id(user),
+            body.full_name,
+            body.age,
+            body.phone_number,
+            body.dietary_accessibility_notes,
+            datetime.now(UTC),
+        )
     except service.EventNotFoundError as exc:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, "Event is not open for registration"

@@ -47,9 +47,51 @@ test('SCRUM-42: an attendee registers and sees the pending status', async () => 
     </QueryClientProvider>,
   )
 
+  fireEvent.change(await screen.findByLabelText('Full name'), { target: { value: 'Ada Lovelace' } })
+  fireEvent.change(screen.getByLabelText('Age'), { target: { value: '24' } })
+  fireEvent.change(screen.getByLabelText('Phone number'), { target: { value: '+65 8123 4567' } })
   fireEvent.click(await screen.findByRole('button', { name: 'Register' }))
 
   expect(await screen.findByRole('status')).toHaveTextContent('Registration status: Pending')
+})
+
+test('SCRUM-42: invalid fields are named and entered values stay in the form', async () => {
+  localStorage.setItem(
+    'connectsphere.token',
+    JSON.stringify({ token: 'token', userId: 'attendee-1', roles: ['attendee'] }),
+  )
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    if (String(input) === '/api/attendee/events') {
+      return json([
+        {
+          id: 'event-1',
+          name: 'Open Day',
+          description: null,
+          start_at: null,
+          end_at: null,
+        },
+      ])
+    }
+    if (String(input) === '/api/attendee/events/event-1/registration') {
+      return json({ detail: 'Registration not found' }, 404)
+    }
+    throw new Error(`unexpected request ${String(input)}`)
+  })
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={client}>
+      <AuthProvider>
+        <AttendeeRegistrations />
+      </AuthProvider>
+    </QueryClientProvider>,
+  )
+
+  fireEvent.change(await screen.findByLabelText('Full name'), { target: { value: 'Ada Lovelace' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Register' }))
+
+  expect(screen.getByText('Age must be a whole number.')).toBeInTheDocument()
+  expect(screen.getByText('Phone number is required.')).toBeInTheDocument()
+  expect(screen.getByLabelText('Full name')).toHaveValue('Ada Lovelace')
 })
 
 function registration() {

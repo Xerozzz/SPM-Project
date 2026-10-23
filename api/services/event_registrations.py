@@ -40,7 +40,14 @@ def event_for_registration(db: Session, event_id: uuid.UUID, now: datetime) -> E
 
 
 def submit(
-    db: Session, event_id: uuid.UUID, attendee_id: uuid.UUID, now: datetime
+    db: Session,
+    event_id: uuid.UUID,
+    attendee_id: uuid.UUID,
+    full_name: str,
+    age: int,
+    phone_number: str,
+    dietary_accessibility_notes: str | None,
+    now: datetime,
 ) -> EventRegistration:
     """Create one Pending record or return the pre-existing live record as a conflict."""
     event = event_repo.get_for_update(db, event_id)
@@ -54,7 +61,15 @@ def submit(
     if existing is not None:
         raise DuplicateRegistrationError(existing)
     registration = repo.add_submission(
-        db, event.id, attendee_id, now, repo.next_submission_order(db, event.id)
+        db,
+        event.id,
+        attendee_id,
+        now,
+        repo.next_submission_order(db, event.id),
+        full_name,
+        age,
+        phone_number,
+        dietary_accessibility_notes,
     )
     try:
         db.commit()
