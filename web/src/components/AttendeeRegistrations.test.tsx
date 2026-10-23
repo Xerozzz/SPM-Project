@@ -96,7 +96,7 @@ test('SCRUM-42: invalid fields are named and entered values stay in the form', a
   expect(screen.getByLabelText('Full name')).toHaveValue('Ada Lovelace')
 })
 
-test('SCRUM-115: an attendee withdraws and sees the withdrawn status', async () => {
+test('SCRUM-128: an attendee withdraws and sees the withdrawn status', async () => {
   localStorage.setItem(
     'connectsphere.token',
     JSON.stringify({ token: 'token', userId: 'attendee-1', roles: ['attendee'] }),

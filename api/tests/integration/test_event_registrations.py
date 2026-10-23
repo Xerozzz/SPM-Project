@@ -187,7 +187,7 @@ async def test_attendee_can_read_only_their_registration_after_intake_closes(
     assert theirs.status_code == 404
 
 
-@pytest.mark.story("SCRUM-115")
+@pytest.mark.story("SCRUM-128")
 @pytest.mark.parametrize(
     "registration_status",
     [RegistrationStatus.PENDING, RegistrationStatus.WAITLISTED, RegistrationStatus.ACCEPTED],
@@ -227,7 +227,7 @@ async def test_attendee_can_withdraw_each_live_registration_state(
     assert withdrawal.occurred_at.tzinfo is not None
 
 
-@pytest.mark.story("SCRUM-115")
+@pytest.mark.story("SCRUM-128")
 async def test_attendee_cannot_withdraw_another_attendees_registration(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -246,7 +246,7 @@ async def test_attendee_cannot_withdraw_another_attendees_registration(
     assert registration is not None and registration.status is RegistrationStatus.PENDING
 
 
-@pytest.mark.story("SCRUM-115")
+@pytest.mark.story("SCRUM-128")
 async def test_withdrawal_is_allowed_after_intake_closes_but_not_after_event_leaves_active_state(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -270,7 +270,7 @@ async def test_withdrawal_is_allowed_after_intake_closes_but_not_after_event_lea
     assert db.get(EventRegistration, created.json()["id"]).status is RegistrationStatus.WITHDRAWN
 
 
-@pytest.mark.story("SCRUM-115")
+@pytest.mark.story("SCRUM-128")
 async def test_repeated_withdrawal_is_idempotent_and_does_not_duplicate_history(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -296,7 +296,7 @@ async def test_repeated_withdrawal_is_idempotent_and_does_not_duplicate_history(
     )
 
 
-@pytest.mark.story("SCRUM-115")
+@pytest.mark.story("SCRUM-128")
 async def test_attendee_can_reregister_after_withdrawal_with_new_submission_priority(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -325,7 +325,7 @@ async def test_attendee_can_reregister_after_withdrawal_with_new_submission_prio
     assert len(repo.list_history(db, original_record.id)) == 2
 
 
-@pytest.mark.story("SCRUM-115")
+@pytest.mark.story("SCRUM-128")
 @pytest.mark.parametrize("state", ["closed", "suspended", "expired"])
 async def test_reregistration_reuses_intake_refusals(
     db: Session, make_user: MakeUser, make_client: MakeClient, state: str

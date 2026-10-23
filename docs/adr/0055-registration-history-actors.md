@@ -2,7 +2,7 @@
 
 - **Status:** Proposed
 - **Date:** 2026-10-23
-- **Related stories:** SCRUM-115, SCRUM-42, SCRUM-51, SCRUM-114
+- **Related stories:** SCRUM-128, SCRUM-42, SCRUM-51, SCRUM-114
 
 ## Context
 
