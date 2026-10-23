@@ -267,7 +267,8 @@ async def test_withdrawal_is_allowed_after_intake_closes_but_not_after_event_lea
         inactive = await client.post(f"/api/attendee/events/{event.id}/registration/withdraw")
 
     assert inactive.status_code == 409
-    assert db.get(EventRegistration, created.json()["id"]).status is RegistrationStatus.WITHDRAWN
+    stored = db.get(EventRegistration, created.json()["id"])
+    assert stored is not None and stored.status is RegistrationStatus.WITHDRAWN
 
 
 @pytest.mark.story("SCRUM-128")
