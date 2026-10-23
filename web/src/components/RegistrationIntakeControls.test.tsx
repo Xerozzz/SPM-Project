@@ -37,6 +37,7 @@ const openSettings = {
   closes_at: null,
   suspended_at: null,
   closed_at: null,
+  deadline_expired: false,
   intake_open: true,
 }
 
@@ -80,6 +81,36 @@ test('SCRUM-113: owner can close registration and sees its closed state', async 
 
   await waitFor(() => expect(screen.getByText(/Closed at/)).toBeInTheDocument())
   expect(screen.queryByRole('button', { name: 'Close registration' })).not.toBeInTheDocument()
+})
+
+test('SCRUM-113: a passed deadline is displayed as an automatic closure', async () => {
+  localStorage.setItem(
+    'connectsphere.token',
+    JSON.stringify({ token: 'token', userId: 'owner', roles: ['organiser'] }),
+  )
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    json({
+      ...openSettings,
+      closes_at: '2030-01-02T00:00:00Z',
+      deadline_expired: true,
+      intake_open: false,
+    }),
+  )
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={client}>
+      <AuthProvider>
+        <RegistrationIntakeControls event={event} />
+      </AuthProvider>
+    </QueryClientProvider>,
+  )
+
+  expect(await screen.findByText(/Closed automatically at/)).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Close registration' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Open registration' })).not.toBeInTheDocument()
+  expect(
+    screen.queryByLabelText('Closing deadline (optional when opening)'),
+  ).not.toBeInTheDocument()
 })
 
 function json(body: unknown) {

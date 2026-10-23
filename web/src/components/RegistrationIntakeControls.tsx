@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import type { EventRequest } from '../api/eventRequests'
 import {
@@ -33,9 +33,24 @@ export default function RegistrationIntakeControls({ event }: { event: EventRequ
     onSuccess: () => void client.invalidateQueries({ queryKey: key }),
   })
 
+  const closingDeadline = settings.data?.closes_at
+  const deadlineExpired = settings.data?.deadline_expired
+  useEffect(() => {
+    if (!closingDeadline || deadlineExpired) return
+    const milliseconds = new Date(closingDeadline).getTime() - Date.now()
+    if (milliseconds <= 0) return
+    const timer = window.setTimeout(
+      () => void client.invalidateQueries({ queryKey: ['registration-settings', event.id, token] }),
+      milliseconds,
+    )
+    return () => window.clearTimeout(timer)
+  }, [client, closingDeadline, deadlineExpired, event.id, token])
+
   if (!settings.data?.registration_enabled) return null
   const isOpen = settings.data.intake_open
   const manuallyClosed = settings.data.closed_at !== null
+  const controlsAvailable = !manuallyClosed && !settings.data.deadline_expired
+
   return (
     <section className="mt-3 rounded border border-slate-200 p-3">
       <h3 className="text-sm font-medium">Registration</h3>
@@ -46,9 +61,11 @@ export default function RegistrationIntakeControls({ event }: { event: EventRequ
             : 'Open with no closing deadline.'
           : settings.data.closed_at
             ? `Closed at ${new Date(settings.data.closed_at).toLocaleString()}.`
-            : 'Not open for attendee intake.'}
+            : settings.data.deadline_expired
+              ? `Closed automatically at ${new Date(settings.data.closes_at ?? '').toLocaleString()}.`
+              : 'Not open for attendee intake.'}
       </p>
-      {!manuallyClosed && (
+      {controlsAvailable && (
         <>
           <label className="mt-2 block text-sm" htmlFor={`registration-deadline-${event.id}`}>
             Closing deadline (optional when opening)

@@ -7,6 +7,7 @@ export interface RegistrationSettings {
   closes_at: string | null
   suspended_at: string | null
   closed_at: string | null
+  deadline_expired: boolean
   intake_open: boolean
 }
 
