@@ -10,7 +10,12 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.dependencies import require_role
 from domain.roles import Role
-from schemas.event_registrations import AttendeeEventRead, RegistrationRead, RegistrationSubmit
+from schemas.event_registrations import (
+    AttendeeEventRead,
+    RegistrationRead,
+    RegistrationSubmit,
+    WithdrawalRead,
+)
 from services import event_registrations as service
 
 router = APIRouter(prefix="/attendee", tags=["attendee-registrations"])
@@ -23,9 +28,12 @@ def _attendee_id(user: dict[str, object]) -> uuid.UUID:
 
 
 @router.get("/events", response_model=list[AttendeeEventRead])
-def list_events(_user: Attendee, db: Db) -> list[AttendeeEventRead]:
-    events = service.list_open_events(db, datetime.now(UTC))
-    return [AttendeeEventRead.model_validate(event) for event in events]
+def list_events(user: Attendee, db: Db) -> list[AttendeeEventRead]:
+    events = service.list_events_for_attendee(db, _attendee_id(user), datetime.now(UTC))
+    return [
+        AttendeeEventRead.model_validate(event).model_copy(update={"intake_open": intake_open})
+        for event, intake_open in events
+    ]
 
 
 @router.get("/events/{event_id}", response_model=AttendeeEventRead)
@@ -36,7 +44,7 @@ def read_event(event_id: uuid.UUID, _user: Attendee, db: Db) -> AttendeeEventRea
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, "Event is not open for registration"
         ) from exc
-    return AttendeeEventRead.model_validate(event)
+    return AttendeeEventRead.model_validate(event).model_copy(update={"intake_open": True})
 
 
 @router.post(
@@ -78,3 +86,20 @@ def read_mine(event_id: uuid.UUID, user: Attendee, db: Db) -> RegistrationRead:
     if registration is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Registration not found")
     return RegistrationRead.of(registration)
+
+
+@router.post("/events/{event_id}/registration/withdraw", response_model=WithdrawalRead)
+def withdraw(event_id: uuid.UUID, user: Attendee, db: Db) -> WithdrawalRead:
+    try:
+        registration, already_withdrawn = service.withdraw(
+            db, event_id, _attendee_id(user), datetime.now(UTC)
+        )
+    except service.EventNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Event not found") from exc
+    except service.RegistrationNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Registration not found") from exc
+    except service.WithdrawalNotAllowedError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    return WithdrawalRead.model_validate(registration).model_copy(
+        update={"already_withdrawn": already_withdrawn}
+    )

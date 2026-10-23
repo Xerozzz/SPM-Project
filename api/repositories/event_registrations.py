@@ -69,9 +69,28 @@ def add_submission(
     db.add(
         EventRegistrationHistory(
             registration_id=registration.id,
+            actor_id=attendee_id,
             previous_status=None,
             status=RegistrationStatus.PENDING,
             occurred_at=submitted_at,
+        )
+    )
+    return registration
+
+
+def withdraw(
+    db: Session, registration: EventRegistration, actor_id: uuid.UUID, occurred_at: datetime
+) -> EventRegistration:
+    """Append the attendee's withdrawal source action and stage its new current state."""
+    previous_status = registration.status
+    registration.status = RegistrationStatus.WITHDRAWN
+    db.add(
+        EventRegistrationHistory(
+            registration_id=registration.id,
+            actor_id=actor_id,
+            previous_status=previous_status,
+            status=RegistrationStatus.WITHDRAWN,
+            occurred_at=occurred_at,
         )
     )
     return registration
