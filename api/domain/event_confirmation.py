@@ -124,6 +124,19 @@ def problems(
     if status is not PLANNING:
         return ConfirmationProblems((), (ConfirmationBlocker.NOT_IN_PLANNING,))
 
+    return current_plan_problems(plan, standing, needing_attention)
+
+
+def current_plan_problems(
+    plan: PlanSnapshot,
+    standing: SafetyStanding | None,
+    needing_attention: Collection[UUID] = (),
+) -> ConfirmationProblems:
+    """The current arrangement and safety checks shared with registration opening.
+
+    Confirmation additionally requires that the event is in planning; registration
+    instead requires it already be Confirmed. Both must judge the same live plan.
+    """
     arrangement: list[ReviewBlocker | ConfirmationBlocker] = list(arrangement_blockers(plan))
     # AC3: a hold that is held and unexpired can still be one Venue Staff have flagged.
     if any(venue.booking_id in needing_attention for venue in plan.venues):

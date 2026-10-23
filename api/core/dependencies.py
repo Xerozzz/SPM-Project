@@ -51,6 +51,8 @@ class EventAccess(StrEnum):
     READ_ASSIGNMENT_HISTORY = "read_assignment_history"
     READ_SAFETY_REVIEWS = "read_safety_reviews"
     CONFIRM_EVENT = "confirm_event"
+    READ_REGISTRATION_SETTINGS = "read_registration_settings"
+    MANAGE_REGISTRATION = "manage_registration"
 
 
 def get_current_user(
@@ -210,6 +212,19 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
         if permission is EventAccess.CONFIRM_EVENT:
             is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
             if is_assigned:
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        # SCRUM-113: the owner controls intake; the current assigned Coordinator may
+        # inspect its state but cannot change it merely by holding that assignment.
+        if permission is EventAccess.MANAGE_REGISTRATION:
+            if is_owner:
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        if permission is EventAccess.READ_REGISTRATION_SETTINGS:
+            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+            if is_owner or is_assigned:
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 

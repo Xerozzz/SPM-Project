@@ -15,6 +15,7 @@ import { acceptsChangeRequest } from '../validation/eventChange'
 import { AssignmentHistoryToggle } from './AssignmentHistory'
 import ChangeRequestList from './ChangeRequestList'
 import ProposeChange from './ProposeChange'
+import RegistrationIntakeControls from './RegistrationIntakeControls'
 
 /**
  * SCRUM-46: an organiser's event requests, each with a Submit action while it is a draft.
@@ -165,6 +166,11 @@ export default function MyEventRequests({
                       <ProposeChange eventId={request.id} onClose={() => setProposing(null)} />
                     )}
                     <ChangeRequestList eventId={request.id} />
+                  </div>
+                )}
+                {request.status === 'confirmed' && (
+                  <div className="w-full">
+                    <RegistrationIntakeControls event={request} />
                   </div>
                 )}
                 {/* SCRUM-105: a draft has never been submitted, so it has no history. */}

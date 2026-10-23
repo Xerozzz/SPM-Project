@@ -95,6 +95,14 @@ def readiness(db: Session, event: EventRequest, now: datetime) -> ConfirmationPr
     return problems(event.status, plan, standing_of(db, event), _needing_attention(db, event, now))
 
 
+def current_plan_readiness(db: Session, event: EventRequest, now: datetime) -> ConfirmationProblems:
+    """The live confirmation prerequisites without its planning-status requirement."""
+    plan = safety_service.plan_of(db, event, now)
+    from domain.event_confirmation import current_plan_problems
+
+    return current_plan_problems(plan, standing_of(db, event), _needing_attention(db, event, now))
+
+
 def confirm(db: Session, event: EventRequest, actor_id: uuid.UUID, now: datetime) -> EventRequest:
     """AC4: commit the event and its holds, or change nothing at all.
 

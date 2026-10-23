@@ -199,7 +199,11 @@ def fingerprint(plan: PlanSnapshot) -> str:
                     "session": venue.session_label,
                     "starts": _moment(venue.start_at),
                     "ends": _moment(venue.end_at),
-                    "status": venue.status.value,
+                    # Confirmation changes a live hold into the same live commitment.
+                    # That operational conversion is not a new safety plan for an
+                    # already-approved event, so it must not spend the approval that
+                    # made confirmation possible in the first place.
+                    "status": "held" if venue.status in _HELD_STATUSES else venue.status.value,
                     "expired": venue.hold_expired,
                 }
                 for venue in plan.venues
