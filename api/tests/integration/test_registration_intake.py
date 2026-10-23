@@ -50,6 +50,25 @@ async def test_owner_opens_then_extends_registration_and_coordinator_can_read(
 
 
 @pytest.mark.story("SCRUM-113")
+async def test_assigned_coordinator_can_list_confirmed_event_for_registration_settings(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """The Coordinator's read-only settings view discovers only their confirmed events."""
+    event, _, coordinator = confirmed_event(db, make_user)
+    other = make_user("coordinator")
+
+    async with make_client(coordinator) as client:
+        mine = await client.get("/api/event-requests/assigned-confirmed")
+    async with make_client(other) as client:
+        theirs = await client.get("/api/event-requests/assigned-confirmed")
+
+    assert mine.status_code == 200
+    assert [row["id"] for row in mine.json()] == [str(event.id)]
+    assert theirs.status_code == 200
+    assert theirs.json() == []
+
+
+@pytest.mark.story("SCRUM-113")
 async def test_non_owner_cannot_change_settings_but_dual_role_owner_can(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:

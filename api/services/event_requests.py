@@ -87,6 +87,11 @@ def list_bookable_for_coordinator(db: Session, coordinator_id: uuid.UUID) -> lis
     return repo.list_bookable_for_coordinator(db, coordinator_id)
 
 
+def list_confirmed_for_coordinator(db: Session, coordinator_id: uuid.UUID) -> list[EventRequest]:
+    """Confirmed events assigned to this Coordinator for read-only operational views."""
+    return repo.list_confirmed_for_coordinator(db, coordinator_id)
+
+
 def create(
     db: Session, organiser_id: uuid.UUID, fields: EventRequestFields, now: datetime
 ) -> EventRequest:

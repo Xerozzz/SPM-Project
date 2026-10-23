@@ -109,6 +109,19 @@ def list_bookable_for_coordinator(db: Session, coordinator_id: uuid.UUID) -> lis
     return list(db.scalars(statement))
 
 
+def list_confirmed_for_coordinator(db: Session, coordinator_id: uuid.UUID) -> list[EventRequest]:
+    """Confirmed events whose current assigned Coordinator may read intake settings."""
+    statement = (
+        select(EventRequest)
+        .where(
+            EventRequest.status == EventStatus.CONFIRMED,
+            EventRequest.coordinator_id == coordinator_id,
+        )
+        .order_by(EventRequest.start_at.asc(), EventRequest.id.asc())
+    )
+    return list(db.scalars(statement))
+
+
 def list_active_for_lead(db: Session) -> list[ActiveRow]:
     """SCRUM-100: every active request with its current coordinator (or Unassigned).
 

@@ -230,6 +230,15 @@ export async function listRequestsForReview(token: string): Promise<EventRequest
   return (await response.json()) as EventRequest[]
 }
 
+/** Confirmed events assigned to this Coordinator for read-only operational settings. */
+export async function listConfirmedEventRequests(token: string): Promise<EventRequest[]> {
+  const response = await fetch('/api/event-requests/assigned-confirmed', {
+    headers: authHeaders(token),
+  })
+  if (!response.ok) throw new Error(`Could not load confirmed events (${response.status})`)
+  return (await response.json()) as EventRequest[]
+}
+
 export async function listBookableEventRequests(token: string): Promise<EventRequest[]> {
   const response = await fetch('/api/event-requests/bookable', { headers: authHeaders(token) })
   if (!response.ok) throw new Error(`Could not load bookable requests (${response.status})`)

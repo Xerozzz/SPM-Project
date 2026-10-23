@@ -89,11 +89,24 @@ function signInAsCoordinator() {
   )
 }
 
-function renderReview(reviewable: unknown[], bookable: unknown[] = []) {
+function renderReview(reviewable: unknown[], bookable: unknown[] = [], confirmed: unknown[] = []) {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const key = `${init?.method ?? 'GET'} ${String(input)}`
     if (key === 'GET /api/event-requests/reviewable') return json(reviewable)
     if (key === 'GET /api/event-requests/bookable') return json(bookable)
+    if (key === 'GET /api/event-requests/assigned-confirmed') return json(confirmed)
+    if (key.endsWith('/registration')) {
+      return json({
+        event_request_id: 'req-3',
+        registration_enabled: true,
+        opened_at: '2026-10-23T07:00:00Z',
+        closes_at: '2026-10-24T07:00:00Z',
+        suspended_at: null,
+        closed_at: null,
+        deadline_expired: false,
+        intake_open: true,
+      })
+    }
     if (key.startsWith('GET ') && key.endsWith('/venue-bookings')) return json([])
     if (key === 'GET /api/venues') return json([])
     if (key.endsWith('/clarifications')) return json([])
@@ -131,6 +144,7 @@ function renderBookingReview(submission: unknown, status = 200, existingBookings
     const key = `${init?.method ?? 'GET'} ${String(input)}`
     if (key === 'GET /api/event-requests/reviewable') return json([])
     if (key === 'GET /api/event-requests/bookable') return json([approved])
+    if (key === 'GET /api/event-requests/assigned-confirmed') return json([])
     if (key.startsWith('GET ') && key.endsWith('/venue-bookings')) return json(existingBookings)
     if (key === 'GET /api/venues') {
       return json([{ id: 'venue-1', name: 'Small Hall', is_active: true }])
@@ -171,6 +185,7 @@ function renderExistingBookingReview(existingBookings: unknown[]) {
     const key = `${init?.method ?? 'GET'} ${String(input)}`
     if (key === 'GET /api/event-requests/reviewable') return json([])
     if (key === 'GET /api/event-requests/bookable') return json([approved])
+    if (key === 'GET /api/event-requests/assigned-confirmed') return json([])
     if (key.startsWith('GET ') && key.endsWith('/venue-bookings')) return json(existingBookings)
     if (key === 'GET /api/venues') {
       return json([{ id: 'venue-1', name: 'Small Hall', is_active: true }])
@@ -244,6 +259,20 @@ test('coordinator events include submitted and approved bookable requests', asyn
   expect(screen.getByText('Awards Night')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
   expect(await screen.findByRole('heading', { name: 'Venue booking request' })).toBeInTheDocument()
+})
+
+test('SCRUM-113: assigned coordinator sees confirmed registration settings without controls', async () => {
+  signInAsCoordinator()
+  const confirmed = { ...submitted, id: 'req-3', name: 'Alumni Dinner', status: 'confirmed' }
+  renderReview([], [], [confirmed])
+
+  const settings = await screen.findByRole('region', { name: 'Registration settings' })
+  expect(within(settings).getByText(/Open until/)).toBeInTheDocument()
+  expect(within(settings).getByText(/Opened:/)).toBeInTheDocument()
+  expect(within(settings).getByText(/Closing deadline:/)).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Open registration' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Extend deadline' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Close registration' })).not.toBeInTheDocument()
 })
 
 // SCRUM-71: coordinators see retained venue booking requests, while submission
@@ -335,6 +364,7 @@ test('SCRUM-78: adds another venue, retains both records on reload and accepts a
     const key = `${init?.method ?? 'GET'} ${String(input)}`
     if (key === 'GET /api/event-requests/reviewable') return json([])
     if (key === 'GET /api/event-requests/bookable') return json([approved])
+    if (key === 'GET /api/event-requests/assigned-confirmed') return json([])
     if (key.startsWith('GET ') && key.endsWith('/venue-bookings')) return json(retainedBookings)
     if (key === 'GET /api/venues') {
       return json([
@@ -635,6 +665,7 @@ describe('SCRUM-105 assigned coordinator views assignment history (frontend unit
       const key = `${init?.method ?? 'GET'} ${String(input)}`
       if (key === 'GET /api/event-requests/reviewable') return json([submitted])
       if (key === 'GET /api/event-requests/bookable') return json([])
+      if (key === 'GET /api/event-requests/assigned-confirmed') return json([])
       if (key.endsWith('/clarifications')) return json([])
       if (key === `GET ${historyUrl}`) return history
       throw new Error(`unexpected request ${key}`)
