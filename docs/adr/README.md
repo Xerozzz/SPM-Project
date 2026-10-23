@@ -63,6 +63,7 @@ someone else made two weeks ago.
 | [0051](0051-manual-registration-close-marker.md) | Record manual registration closure separately from suspension and deadlines | Proposed |
 | [0052](0052-mark-a-safety-approval-invalid-on-replanning.md) | Mark a safety approval invalid when a Confirmed event goes back to planning | Proposed |
 | [0053](0053-closure-returns-confirmed-events-to-planning.md) | A venue closure returns the Confirmed events it affects to planning | Proposed |
+| [0054](0054-attendee-registration-records.md) | Keep attendee registrations and their status history as separate records | Proposed |
 
 ## When to write one
 

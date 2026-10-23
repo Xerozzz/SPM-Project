@@ -122,6 +122,16 @@ def list_confirmed_for_coordinator(db: Session, coordinator_id: uuid.UUID) -> li
     return list(db.scalars(statement))
 
 
+def list_confirmed(db: Session) -> list[EventRequest]:
+    """Confirmed events; the registration service applies the time-sensitive intake guard."""
+    statement = (
+        select(EventRequest)
+        .where(EventRequest.status == EventStatus.CONFIRMED)
+        .order_by(EventRequest.start_at.asc(), EventRequest.id.asc())
+    )
+    return list(db.scalars(statement))
+
+
 def list_active_for_lead(db: Session) -> list[ActiveRow]:
     """SCRUM-100: every active request with its current coordinator (or Unassigned).
 

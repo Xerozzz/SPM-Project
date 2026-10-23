@@ -23,6 +23,7 @@ from routers import (
     event_change_requests,
     event_clarifications,
     event_confirmations,
+    event_registrations,
     event_requests,
     notifications,
     registration_intake,
@@ -89,6 +90,7 @@ def create_app() -> FastAPI:
     app.include_router(notifications.router)
     app.include_router(event_confirmations.router, prefix="/api")
     app.include_router(event_requests.router, prefix="/api")
+    app.include_router(event_registrations.router, prefix="/api")
     app.include_router(registration_intake.router, prefix="/api")
     app.include_router(safety_reviews.router, prefix="/api")
     app.include_router(venue_bookings.router, prefix="/api")

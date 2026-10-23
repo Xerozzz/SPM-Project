@@ -25,6 +25,7 @@ from models.event_change_request import EventChangeItem, EventChangeRequest
 from models.event_clarification import EventClarification
 from models.event_coordinator_assignment import EventCoordinatorAssignment
 from models.event_equipment_requirement import EventEquipmentRequirement
+from models.event_registration import EventRegistration, EventRegistrationHistory
 from models.event_request import EventRequest
 from models.notification import Notification
 from models.organisation import Organisation
@@ -302,6 +303,9 @@ _DEPENDENTS = (
     EventClarification,
     EventCoordinatorAssignment,
     Notification,
+    # SCRUM-42. History points at a registration rather than the event, so it is
+    # cleared explicitly in `_delete_dependents` before this event-scoped row.
+    EventRegistration,
     # SCRUM-79, and the same trap a third time: a Safety Officer's decision points at the
     # event it judged, so once one exists against a sample the next seed run cannot put
     # that sample back in Draft. CI starts from an empty volume and never sees it; the
@@ -320,6 +324,13 @@ def _delete_dependents(db: Session, request_id: uuid.UUID) -> None:
             db.query(EventChangeRequest.id).filter(
                 EventChangeRequest.event_request_id == request_id
             )
+        )
+    ).delete(synchronize_session=False)
+    # SCRUM-42: registration history hangs off the registration, not directly off the
+    # event, so clear it before the event-scoped registration row below.
+    db.query(EventRegistrationHistory).filter(
+        EventRegistrationHistory.registration_id.in_(
+            db.query(EventRegistration.id).filter(EventRegistration.event_request_id == request_id)
         )
     ).delete(synchronize_session=False)
     for model in _DEPENDENTS:

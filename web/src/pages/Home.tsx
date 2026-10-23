@@ -19,6 +19,7 @@ import VenueBookingDecisions from '../components/VenueBookingDecisions'
 import VenueCalendar from '../components/VenueCalendar'
 import VenueCatalogue from '../components/VenueCatalogue'
 import VenueSearch from '../components/VenueSearch'
+import AttendeeRegistrations from '../components/AttendeeRegistrations'
 
 /**
  * Home page, visible only after sign-in. Shows the session roles and a sign-out button.
@@ -57,6 +58,8 @@ export default function HomePage() {
       )}
 
       {hasRole('coordinator') && <EventRequestReview />}
+
+      {hasRole('attendee') && <AttendeeRegistrations />}
 
       {/* SCRUM-101: Coordinator Leads triage newly submitted requests. */}
       {hasRole('coordinator_lead') && <UnassignedQueue />}
