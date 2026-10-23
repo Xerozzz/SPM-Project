@@ -49,6 +49,7 @@ function renderPanel(request: unknown, update: () => Response = () => json(reque
     const key = `${init?.method ?? 'GET'} ${String(input)}`
     if (key === 'GET /api/event-requests/reviewable') return json([current])
     if (key === 'GET /api/event-requests/bookable') return json([])
+    if (key === 'GET /api/event-requests/assigned-confirmed') return json([])
     if (key.endsWith('/clarifications')) return json([])
     if (key === 'PATCH /api/event-requests/req-1/planning-info') {
       const response = update()
@@ -167,6 +168,7 @@ test('SCRUM-104: someone else\u2019s event never reaches the coordinator list', 
     const key = `${init?.method ?? 'GET'} ${String(input)}`
     if (key === 'GET /api/event-requests/reviewable') return json([])
     if (key === 'GET /api/event-requests/bookable') return json([])
+    if (key === 'GET /api/event-requests/assigned-confirmed') return json([])
     throw new Error(`unexpected request ${key}`)
   })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
