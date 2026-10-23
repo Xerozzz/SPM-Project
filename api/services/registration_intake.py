@@ -25,7 +25,10 @@ class RegistrationReadinessError(RegistrationIntakeError):
 
 def settings_of(event: EventRequest) -> Settings:
     return Settings(
-        event.registration_opened_at, event.registration_closes_at, event.registration_suspended_at
+        event.registration_opened_at,
+        event.registration_closes_at,
+        event.registration_suspended_at,
+        event.registration_closed_at,
     )
 
 
@@ -66,6 +69,22 @@ def suspend_intake(db: Session, event_id: uuid.UUID, now: datetime) -> EventRequ
     """Suspend intake for replanning; reconfirmation never clears this marker."""
     event = _locked(db, event_id)
     event.registration_suspended_at = now
+    return event_repo.save(db, event)
+
+
+def close_intake(db: Session, event_id: uuid.UUID, now: datetime) -> EventRequest:
+    """Close current intake without touching its registrations or event plan.
+
+    This intentionally has no actor check: manual routes authorise before calling it,
+    while event-completion and cancellation services can reuse this trusted operation.
+    Repeating a close returns the original marker unchanged.
+    """
+    event = _locked(db, event_id)
+    if event.registration_closed_at is not None:
+        return event
+    if not intake_is_open(event.status, settings_of(event), now):
+        raise RegistrationIntakeError("registration intake is not open")
+    event.registration_closed_at = now
     return event_repo.save(db, event)
 
 

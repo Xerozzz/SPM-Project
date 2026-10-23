@@ -34,6 +34,7 @@ class RegistrationSettingsRead(BaseModel):
     opened_at: datetime | None
     closes_at: datetime | None
     suspended_at: datetime | None
+    closed_at: datetime | None
     intake_open: bool
 
     @classmethod
@@ -45,5 +46,6 @@ class RegistrationSettingsRead(BaseModel):
             opened_at=settings.opened_at,
             closes_at=settings.closes_at,
             suspended_at=settings.suspended_at,
+            closed_at=settings.closed_at,
             intake_open=intake_is_open(event.status, settings, now),
         )

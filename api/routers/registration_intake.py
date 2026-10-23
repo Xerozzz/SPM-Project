@@ -58,3 +58,13 @@ def extend_settings(
     except RegistrationIntakeError as exc:
         raise _refusal(exc) from exc
     return RegistrationSettingsRead.of(extended, now)
+
+
+@router.post("/{request_id}/registration/close", response_model=RegistrationSettingsRead)
+def close_settings(event: ManageableEvent, db: Db) -> RegistrationSettingsRead:
+    now = datetime.now(UTC)
+    try:
+        closed = service.close_intake(db, event.id, now)
+    except RegistrationIntakeError as exc:
+        raise _refusal(exc) from exc
+    return RegistrationSettingsRead.of(closed, now)

@@ -6,6 +6,7 @@ export interface RegistrationSettings {
   opened_at: string | null
   closes_at: string | null
   suspended_at: string | null
+  closed_at: string | null
   intake_open: boolean
 }
 
@@ -46,6 +47,15 @@ export async function extendRegistration(token: string, eventId: string, closesA
       method: 'POST',
       headers: headers(token),
       body: JSON.stringify({ closes_at: new Date(closesAt).toISOString() }),
+    }),
+  )
+}
+
+export async function closeRegistration(token: string, eventId: string) {
+  return result(
+    await fetch(`/api/event-requests/${eventId}/registration/close`, {
+      method: 'POST',
+      headers: headers(token),
     }),
   )
 }
