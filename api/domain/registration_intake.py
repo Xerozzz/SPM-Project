@@ -17,6 +17,7 @@ class Settings:
     opened_at: datetime | None
     closes_at: datetime | None
     suspended_at: datetime | None
+    closed_at: datetime | None = None
 
 
 def is_enabled(requirement: str | None) -> bool:
@@ -30,6 +31,7 @@ def intake_is_open(status: EventStatus, settings: Settings, now: datetime) -> bo
         status is EventStatus.CONFIRMED
         and settings.opened_at is not None
         and settings.suspended_at is None
+        and settings.closed_at is None
         and (settings.closes_at is None or now < settings.closes_at)
     )
 

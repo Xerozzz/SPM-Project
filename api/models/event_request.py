@@ -84,3 +84,4 @@ class EventRequest(Base):
     registration_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     registration_closes_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     registration_suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    registration_closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

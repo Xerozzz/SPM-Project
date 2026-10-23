@@ -296,6 +296,7 @@ test('SCRUM-83 AC2: the Coordinator sees their request is on a tentative hold', 
     const url = String(input)
     if (url === '/api/event-requests/reviewable') return json([])
     if (url === '/api/event-requests/bookable') return json([approved])
+    if (url === '/api/event-requests/assigned-confirmed') return json([])
     if (url === '/api/venues') return json([{ id: 'venue-1', name: 'Hall A', is_active: true }])
     if (url.endsWith('/clarifications')) return json([])
     if (url.endsWith('/venue-bookings')) {
@@ -462,6 +463,7 @@ test('SCRUM-108: the Coordinator sees that their hold expired', async () => {
         },
       ])
     }
+    if (url === '/api/event-requests/assigned-confirmed') return json([])
     if (url === '/api/venues') return json([{ id: 'venue-1', name: 'Hall A', is_active: true }])
     if (url.endsWith('/clarifications')) return json([])
     if (url.endsWith('/venue-bookings')) {

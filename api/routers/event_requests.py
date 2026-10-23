@@ -216,6 +216,13 @@ def list_bookable_events(user: Coordinator, db: Db) -> list[EventRequestRead]:
     return [EventRequestRead.model_validate(row) for row in rows]
 
 
+@router.get("/assigned-confirmed", response_model=list[EventRequestRead])
+def list_confirmed_events(user: Coordinator, db: Db) -> list[EventRequestRead]:
+    """Confirmed events assigned to this Coordinator for read-only operational settings."""
+    rows = service.list_confirmed_for_coordinator(db, _coordinator_id(user))
+    return [EventRequestRead.model_validate(row) for row in rows]
+
+
 @router.get("/organisation-calendar", response_model=list[EventCalendarEntryRead])
 def organisation_calendar(user: Organiser, db: Db) -> list[EventCalendarEntryRead]:
     """SCRUM-87: dated events in the signed-in organiser's organisation."""

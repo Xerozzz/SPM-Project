@@ -5,6 +5,7 @@ import {
   approveEventRequest,
   type EventRequest,
   listBookableEventRequests,
+  listConfirmedEventRequests,
   listRequestsForReview,
   rejectEventRequest,
 } from '../api/eventRequests'
@@ -17,6 +18,7 @@ import ClarificationThread from './ClarificationThread'
 import ConfirmEvent from './ConfirmEvent'
 import EventEquipmentRequirements from './EventEquipmentRequirements'
 import PlanningInfoEditor from './PlanningInfoEditor'
+import RegistrationSettingsCard from './RegistrationSettingsCard'
 import VenueBookingRequest from './VenueBookingRequest'
 
 /**
@@ -35,12 +37,13 @@ export default function EventRequestReview() {
   const requests = useQuery({
     queryKey,
     queryFn: async () => {
-      const [reviewable, bookable] = await Promise.all([
+      const [reviewable, bookable, confirmed] = await Promise.all([
         listRequestsForReview(token ?? ''),
         listBookableEventRequests(token ?? ''),
+        listConfirmedEventRequests(token ?? ''),
       ])
-      // Disjoint by construction: /reviewable is SUBMITTED only, /bookable is APPROVED only.
-      return [...reviewable, ...bookable]
+      // The routes return disjoint Submitted, Approved, and Confirmed sets.
+      return [...reviewable, ...bookable, ...confirmed]
     },
     enabled: token !== null,
   })
@@ -210,9 +213,8 @@ function ReviewCard({
           and the Safety Officer's approval are in order. */}
       {/* Only while the event is still being planned: `list_bookable_for_coordinator`
           holds Approved events, so a confirmed one leaves this list altogether. */}
-      {request.status === 'approved' && (
-        <ConfirmEvent event={request} onConfirmed={onConfirmed} />
-      )}
+      {request.status === 'approved' && <ConfirmEvent event={request} onConfirmed={onConfirmed} />}
+      {request.status === 'confirmed' && <RegistrationSettingsCard event={request} />}
     </article>
   )
 }
