@@ -1,7 +1,8 @@
 """A Safety Officer's decision on an event's plan (SCRUM-79).
 
-One row per decision, never updated. AC9 asks for chronological decisions retained for
-authorised participants, and AC6 for the plan to be reviewed again after changes, so a
+One row per decision, never updated apart from the ADR-0052 invalidation marker. AC9 asks
+for chronological decisions retained for authorised participants, and AC6 for the plan to
+be reviewed again after changes, so a
 later decision is a new row rather than an edit of the last one. That also makes AC5's
 "what does the Coordinator still have to act on" a question about the newest row rather
 than a marker someone has to remember to clear.
@@ -28,6 +29,11 @@ class SafetyReview(Base):
         # AC4: a decision without a reason is not a review. Enforced here as well as in
         # the domain, because an empty comment is the easy mistake for any future caller.
         CheckConstraint("btrim(comment) <> ''", name="safety_reviews_comment_not_blank"),
+        # SCRUM-130: an invalidation always says why.
+        CheckConstraint(
+            "(invalidated_at IS NULL) = (invalidation_cause IS NULL)",
+            name="safety_reviews_invalidation_complete",
+        ),
         # AC9 and AC5 both read the newest decision for an event, so the index matches
         # the order they ask for it in.
         Index("ix_safety_reviews_event_decided_at", "event_request_id", "decided_at"),
@@ -48,3 +54,8 @@ class SafetyReview(Base):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
     decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    #: SCRUM-130 (ADR-0052): set when the event went back to planning after this
+    #: approval. The row itself is kept, so who approved and when stay in the history.
+    invalidated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: Why it stopped counting, as a `domain.event_replanning.ReplanCause` value.
+    invalidation_cause: Mapped[str | None] = mapped_column(String(32))

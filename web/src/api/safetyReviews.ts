@@ -59,6 +59,9 @@ export interface SafetyReview {
   /** AC5: the API's answer, not ours. Comparing against 'approve' here would put the
    *  rule in a second place, and a fourth outcome would read as an approval. */
   returns_to_coordinator: boolean
+  /** SCRUM-130: set when the event went back to planning after this approval. */
+  invalidated_at?: string | null
+  invalidation_cause?: string | null
 }
 
 /** AC1, AC2 and AC3: one event's plan, whether it may be judged, and the last word. */
