@@ -77,6 +77,8 @@ class SafetyStanding:
 
     decision: SafetyDecision
     plan_fingerprint: str
+    #: SCRUM-130: the event went back to planning after this approval (ADR-0052).
+    invalidated: bool = False
 
 
 @dataclass(frozen=True)
@@ -160,6 +162,10 @@ def _safety_problems(
         return [ConfirmationBlocker.SAFETY_NOT_REVIEWED]
     if standing.decision is not SafetyDecision.APPROVE:
         return [ConfirmationBlocker.SAFETY_NOT_APPROVED]
+    # SCRUM-130: the event went back to planning since, so the approval judged a plan
+    # that is no longer the confirmed one, even if its fingerprint still matches.
+    if standing.invalidated:
+        return [ConfirmationBlocker.SAFETY_APPROVAL_STALE]
     # The approval named a plan. If the plan has moved since — a session retimed, a
     # requirement added, a hold replaced — then nobody has judged what is in front of us
     # now, and an approval of something else cannot stand in for that (ADR-0048).

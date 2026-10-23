@@ -64,6 +64,7 @@ def standing_of(db: Session, event: EventRequest) -> SafetyStanding | None:
     return SafetyStanding(
         decision=SafetyDecision(latest.decision),
         plan_fingerprint=latest.plan_fingerprint,
+        invalidated=latest.invalidated_at is not None,
     )
 
 

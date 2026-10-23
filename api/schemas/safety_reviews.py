@@ -60,6 +60,9 @@ class SafetyReviewRead(BaseModel):
     #: in a second place: a fourth outcome added later would quietly read as an approval
     #: on every screen that compared against "approve" itself.
     returns_to_coordinator: bool
+    #: SCRUM-130: set when the event went back to planning after this approval.
+    invalidated_at: datetime | None = None
+    invalidation_cause: str | None = None
 
     @classmethod
     def of(cls, review: SafetyReview) -> "SafetyReviewRead":
@@ -72,6 +75,8 @@ class SafetyReviewRead(BaseModel):
             decided_by_id=review.decided_by_id,
             decided_at=review.decided_at,
             returns_to_coordinator=returns_to_coordinator(SafetyDecision(review.decision)),
+            invalidated_at=review.invalidated_at,
+            invalidation_cause=review.invalidation_cause,
         )
 
 

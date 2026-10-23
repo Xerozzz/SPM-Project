@@ -16,6 +16,7 @@ import {
 import { STATUS_LABELS } from '../api/venueBookingDecisions'
 import { formatSingaporeTime } from '../api/venueCalendar'
 import { useAuth } from '../auth/useAuth'
+import InvalidatedNote from './InvalidatedNote'
 
 function name(plan: EventPlan): string {
   return plan.event_name ?? 'Untitled event'
@@ -280,6 +281,7 @@ function PlanCard({
           <span className="font-medium">{DECISION_LABELS[plan.latest_decision.decision]}</span>{' '}
           on {formatSingaporeTime(plan.latest_decision.decided_at)}:{' '}
           {plan.latest_decision.comment}
+          <InvalidatedNote review={plan.latest_decision} />
         </p>
       )}
 
@@ -409,6 +411,7 @@ function History({ eventId }: { eventId: string }) {
         <li key={review.id}>
           <span className="font-medium">{DECISION_LABELS[review.decision]}</span> on{' '}
           {formatSingaporeTime(review.decided_at)}: {review.comment}
+          <InvalidatedNote review={review} />
         </li>
       ))}
     </ul>

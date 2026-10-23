@@ -61,6 +61,7 @@ someone else made two weeks ago.
 | [0049](0049-confirmation-commits-the-event-and-its-holds.md) | Confirmation commits an event and its holds in one transaction | Proposed |
 | [0050](0050-registration-intake-controls.md) | Store operational registration intake controls apart from event planning | Proposed |
 | [0051](0051-manual-registration-close-marker.md) | Record manual registration closure separately from suspension and deadlines | Proposed |
+| [0052](0052-mark-a-safety-approval-invalid-on-replanning.md) | Mark a safety approval invalid when a Confirmed event goes back to planning | Proposed |
 
 ## When to write one
 

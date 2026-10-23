@@ -11,7 +11,6 @@ import uuid
 from datetime import datetime
 
 from core.database import Session
-from domain import event_status
 from domain.change_decision import (
     Decision,
     ItemOutcome,
@@ -35,7 +34,7 @@ from domain.event_change import (
     accepts_change_request,
     plan_change,
 )
-from domain.event_status import EventStatus
+from domain.event_replanning import ReplanCause, needs_replanning
 from domain.validation import FieldProblem
 from domain.venue_booking import BookingStatus
 from models.event_change_request import EventChangeItem, EventChangeRequest
@@ -46,6 +45,7 @@ from repositories import event_change_requests as repo
 from repositories import event_requests as event_repo
 from repositories import venue_availability
 from services import venues as venues_service
+from services.event_replanning import return_to_planning
 from services.event_requests import EventRequestNotFoundError, NotAuthorisedError
 
 # Venue requests that still stand. Rejected, cancelled and expired ones are history.
@@ -174,8 +174,8 @@ def _approve(db: Session, event: EventRequest, change: EventChangeRequest, now: 
         if outcome is ItemOutcome.APPLIED:
             setattr(event, item.field, event_value(item))
         row.outcome = outcome.value
-    if event.status == EventStatus.CONFIRMED:
-        event.status = event_status.replan(event.status)
+    if needs_replanning(event.status):
+        return_to_planning(db, event, ReplanCause.CHANGE_REQUEST, now)
 
 
 def list_for_event(db: Session, event_request_id: uuid.UUID) -> list[EventChangeRequest]:
