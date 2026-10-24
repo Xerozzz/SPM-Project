@@ -6,8 +6,8 @@ the status moves to Completed through the shared machine, who and when are recor
 the first version of the closure record is written. Bookings, equipment reservations and
 registrations are left exactly as they were (AC7).
 
-Notifying anyone about it is SCRUM-50's job. `completed_by_id` and `completed_at` are
-the committed source action it reads (AC8).
+`completed_by_id` and `completed_at` are the committed source action SCRUM-50
+notifies on (AC8), in the same commit.
 """
 
 import uuid
@@ -28,6 +28,7 @@ from models.event_closure_note import EventClosureNote
 from models.event_request import EventRequest
 from repositories import event_closures as repo
 from repositories import event_requests as event_repo
+from services import lifecycle_notifications as lifecycle
 from services import registration_intake
 
 
@@ -80,6 +81,8 @@ def complete(
     event.completed_by_id = actor_id
     event.completed_at = now
     repo.add_note(db, _note(event.id, 1, actual_attendance, notes, actor_id, now))
+    # SCRUM-50 AC7: the Organiser and the Coordinator hear it, in the same commit.
+    lifecycle.completed(db, event, now)
     db.commit()
     db.refresh(event)
     return event

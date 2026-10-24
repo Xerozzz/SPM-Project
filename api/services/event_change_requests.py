@@ -44,6 +44,7 @@ from repositories import equipment_requirements as requirements_repo
 from repositories import event_change_requests as repo
 from repositories import event_requests as event_repo
 from repositories import venue_availability
+from services import lifecycle_notifications as lifecycle
 from services import venues as venues_service
 from services.event_replanning import return_to_planning
 from services.event_requests import EventRequestNotFoundError, NotAuthorisedError
@@ -86,6 +87,8 @@ def submit(
     if problems:
         raise InvalidChangeRequestError(problems)
     change = EventChangeRequest(
+        # Set here rather than on flush, so the SCRUM-50 notification can name it.
+        id=uuid.uuid4(),
         event_request_id=event.id,
         requested_by_id=organiser_id,
         submission_key=submission_key,
@@ -95,6 +98,7 @@ def submit(
         created_at=now,
         items=[_row(position, item) for position, item in enumerate(items)],
     )
+    lifecycle.change_proposed(db, event, change.id, now)
     try:
         return repo.save(db, change), True
     except repo.DuplicateSubmissionError:
@@ -147,6 +151,7 @@ def decide(
 
     if decision is Decision.APPROVE:
         _approve(db, event, change, now)
+    lifecycle.change_decided(db, event, change.id, decision is Decision.APPROVE, now)
     change.status = decided_status(decision)
     change.decided_by_id = coordinator_id
     change.decided_at = now
@@ -175,7 +180,7 @@ def _approve(db: Session, event: EventRequest, change: EventChangeRequest, now: 
             setattr(event, item.field, event_value(item))
         row.outcome = outcome.value
     if needs_replanning(event.status):
-        return_to_planning(db, event, ReplanCause.CHANGE_REQUEST, now)
+        return_to_planning(db, event, ReplanCause.CHANGE_REQUEST, change.id, now)
 
 
 def list_for_event(db: Session, event_request_id: uuid.UUID) -> list[EventChangeRequest]:
