@@ -12,6 +12,7 @@ Stories add transitions here as they land, each with its own tests:
     SCRUM-30  submitted -> clarification_requested    (request clarification)
     SCRUM-35  allowed_actions: what a status permits
     SCRUM-47  confirmed -> approved                   (an approved change reopens planning)
+    SCRUM-86  confirmed -> completed                  (the event has run, terminal)
 
 SCRUM-34 pre-declared the `CONFIRMED` value ahead of any story landing the transition
 into it: coordinator assignment needs to ask "does this coordinator already have a
@@ -31,6 +32,8 @@ class EventStatus(StrEnum):
     CONFIRMED = "confirmed"
     APPROVED = "approved"
     REJECTED = "rejected"
+    # SCRUM-86: the event has run and its Coordinator closed it. Terminal, nothing leaves it.
+    COMPLETED = "completed"
 
 
 class EventAction(StrEnum):
@@ -44,6 +47,8 @@ class EventAction(StrEnum):
     # SCRUM-80: the assigned Coordinator commits the event once every arrangement and
     # the safety review are in order.
     CONFIRM = "confirm"
+    # SCRUM-86: the assigned Coordinator closes an event that has run.
+    COMPLETE = "complete"
 
 
 class InvalidTransitionError(Exception):
@@ -73,6 +78,7 @@ _ALLOWED_TRANSITIONS: dict[tuple[EventStatus, EventStatus], EventAction] = {
     (EventStatus.REJECTED, EventStatus.SUBMITTED): EventAction.SUBMIT,
     (EventStatus.APPROVED, EventStatus.CONFIRMED): EventAction.CONFIRM,
     (EventStatus.CONFIRMED, EventStatus.APPROVED): EventAction.REPLAN,
+    (EventStatus.CONFIRMED, EventStatus.COMPLETED): EventAction.COMPLETE,
 }
 
 
@@ -119,6 +125,16 @@ def replan(current: EventStatus) -> EventStatus:
     return EventStatus.APPROVED
 
 
+def complete(current: EventStatus) -> EventStatus:
+    """SCRUM-86: the assigned Coordinator closes a Confirmed event that has run.
+
+    Only the status move lives here. Whether the event has ended is
+    `domain.event_completion`'s question. Completed has no way out, so it cannot be
+    reconfirmed or replanned.
+    """
+    return transition(current, EventStatus.COMPLETED)
+
+
 def is_editable(status: EventStatus) -> bool:
     """Drafts and rejected requests may be edited directly; an approved or submitted
     request remains locked."""
@@ -142,8 +158,8 @@ def allowed_actions(status: EventStatus) -> frozenset[EventAction]:
 # SCRUM-100: which statuses count as "active" for the Lead assignment overview.
 # Active means the request still needs coordinator ownership or planning attention:
 # SUBMITTED (awaiting review/assignment), APPROVED (planning), CONFIRMED (committed).
-# DRAFT (never submitted) and REJECTED (terminal) are inactive. Completed/cancelled
-# statuses do not exist yet; when added they join the inactive set, not this one.
+# DRAFT (never submitted), REJECTED and COMPLETED (terminal) are inactive. A cancelled
+# status does not exist yet; when added it joins the inactive set, not this one.
 ACTIVE_STATUSES: frozenset[EventStatus] = frozenset(
     {EventStatus.SUBMITTED, EventStatus.APPROVED, EventStatus.CONFIRMED}
 )

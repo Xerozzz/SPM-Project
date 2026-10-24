@@ -22,6 +22,7 @@ from routers import (
     equipment_requirements,
     event_change_requests,
     event_clarifications,
+    event_completions,
     event_confirmations,
     event_registrations,
     event_requests,
@@ -89,6 +90,7 @@ def create_app() -> FastAPI:
     app.include_router(event_clarifications.router, prefix="/api")
     app.include_router(notifications.router)
     app.include_router(event_confirmations.router, prefix="/api")
+    app.include_router(event_completions.router, prefix="/api")
     app.include_router(event_requests.router, prefix="/api")
     app.include_router(event_registrations.router, prefix="/api")
     app.include_router(event_registrations.review_router, prefix="/api")

@@ -13,13 +13,20 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.security import decode_access_token
 from domain.event_change import accepts_change_request
+from domain.event_completion import may_read_closure
 from domain.event_request import accepts_ordinary_update
 from domain.event_status import EventStatus
 from domain.roles import Role
 from models.event_request import EventRequest
+from repositories import event_closures
 from repositories import event_requests as event_request_repo
 
 _bearer = HTTPBearer(auto_error=False)
+
+# SCRUM-86 AC4: the staff roles whose participation in an event can be recorded.
+_CLOSURE_STAFF_ROLES = frozenset(
+    {Role.VENUE_STAFF.value, Role.TECH_SUPPORT.value, Role.SAFETY_OFFICER.value}
+)
 
 
 class EventAccess(StrEnum):
@@ -34,7 +41,8 @@ class EventAccess(StrEnum):
     Safety decisions (SCRUM-79) are staff-side: the Safety Officer, any Lead and the
     current assignee, but not the Organiser. Confirmation (SCRUM-80) is the current
     assignee's alone. Cancelling one venue arrangement (SCRUM-109) is for the current
-    assignee only.
+    assignee only. Completing an event (SCRUM-86) is the current assignee's, and its
+    closure record is for the owner, the assignee, any Lead and staff who took part.
     """
 
     VIEW = "view"
@@ -56,6 +64,8 @@ class EventAccess(StrEnum):
     READ_REGISTRATIONS = "read_registrations"
     MANAGE_REGISTRATION = "manage_registration"
     CANCEL_VENUE_ARRANGEMENT = "cancel_venue_arrangement"
+    COMPLETE_EVENT = "complete_event"
+    READ_EVENT_CLOSURE = "read_event_closure"
 
 
 def get_current_user(
@@ -225,6 +235,31 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
         if permission is EventAccess.CANCEL_VENUE_ARRANGEMENT:
             is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
             if is_assigned:
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        # SCRUM-86 AC1: only the current assigned Coordinator completes the event or
+        # corrects its closure record. No status pin: the service says why an event that
+        # is not Confirmed, or has not ended, is refused.
+        if permission is EventAccess.COMPLETE_EVENT:
+            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+            if is_assigned:
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        # SCRUM-86 AC4 (ADR-0059): the owner, the current assignee, any Lead, and venue,
+        # technical or safety staff recorded as acting on this event. A past assignment
+        # alone gives nothing, because only the current coordinator_id is compared.
+        if permission is EventAccess.READ_EVENT_CLOSURE:
+            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+            is_staff = bool(roles & _CLOSURE_STAFF_ROLES)
+            if may_read_closure(
+                is_owner=is_owner,
+                is_assigned=is_assigned,
+                is_lead=Role.COORDINATOR_LEAD.value in roles,
+                is_participating_staff=is_staff
+                and viewer_id in event_closures.acted_on_event(db, request.id),
+            ):
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 

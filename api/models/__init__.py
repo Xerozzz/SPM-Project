@@ -18,6 +18,7 @@ from models.equipment_reservation import EquipmentReservation as EquipmentReserv
 from models.event_change_request import EventChangeItem as EventChangeItem
 from models.event_change_request import EventChangeRequest as EventChangeRequest
 from models.event_clarification import EventClarification as EventClarification
+from models.event_closure_note import EventClosureNote as EventClosureNote
 from models.event_coordinator_assignment import (
     EventCoordinatorAssignment as EventCoordinatorAssignment,
 )
