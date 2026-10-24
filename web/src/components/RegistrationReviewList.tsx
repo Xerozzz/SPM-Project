@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { decideRegistration, listEventRegistrations, type RegistrationStatus } from '../api/eventRegistrations'
 import { useAuth } from '../auth/useAuth'
 
-/** SCRUM-114's ordered list, with SCRUM-115's owner-only manual decisions. */
+/** SCRUM-114's ordered list, with SCRUM-134's owner-only manual decisions. */
 export default function RegistrationReviewList({
   eventId,
   canDecide = false,

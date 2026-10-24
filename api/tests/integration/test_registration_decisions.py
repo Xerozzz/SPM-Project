@@ -1,4 +1,4 @@
-"""SCRUM-115 evidence for Organiser-managed registration outcomes."""
+"""SCRUM-134 evidence for Organiser-managed registration outcomes."""
 
 import uuid
 from datetime import UTC, datetime
@@ -52,7 +52,7 @@ async def decide(
     )
 
 
-@pytest.mark.story("SCRUM-115")
+@pytest.mark.story("SCRUM-134")
 @pytest.mark.parametrize(
     ("current", "target"),
     [
@@ -87,7 +87,7 @@ async def test_owner_records_each_permitted_manual_outcome(
     assert action.occurred_at.tzinfo is not None
 
 
-@pytest.mark.story("SCRUM-115")
+@pytest.mark.story("SCRUM-134")
 async def test_only_owner_can_record_a_decision_and_list_access_is_unchanged(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -108,7 +108,7 @@ async def test_only_owner_can_record_a_decision_and_list_access_is_unchanged(
     assert stored is not None and stored.status is RegistrationStatus.PENDING
 
 
-@pytest.mark.story("SCRUM-115")
+@pytest.mark.story("SCRUM-134")
 async def test_decision_preserves_history_submission_order_and_attendee_status_view(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -129,7 +129,7 @@ async def test_decision_preserves_history_submission_order_and_attendee_status_v
     assert mine.json()["status"] == "accepted"
 
 
-@pytest.mark.story("SCRUM-115")
+@pytest.mark.story("SCRUM-134")
 async def test_stale_and_concurrent_withdrawal_decisions_are_refused_without_new_actions(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -148,7 +148,7 @@ async def test_stale_and_concurrent_withdrawal_decisions_are_refused_without_new
     assert len(registrations.list_history(db, row.id)) == 2
 
 
-@pytest.mark.story("SCRUM-115")
+@pytest.mark.story("SCRUM-134")
 async def test_exact_retry_is_idempotent_but_another_action_is_stale(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -169,7 +169,7 @@ async def test_exact_retry_is_idempotent_but_another_action_is_stale(
     assert len(registrations.list_history(db, row.id)) == 2
 
 
-@pytest.mark.story("SCRUM-115")
+@pytest.mark.story("SCRUM-134")
 @pytest.mark.parametrize("state", [RegistrationStatus.WITHDRAWN, RegistrationStatus.CANCELLED])
 async def test_terminal_registration_states_cannot_be_decided(
     db: Session, make_user: MakeUser, make_client: MakeClient, state: RegistrationStatus
@@ -184,7 +184,7 @@ async def test_terminal_registration_states_cannot_be_decided(
     assert len(registrations.list_history(db, row.id)) == before
 
 
-@pytest.mark.story("SCRUM-115")
+@pytest.mark.story("SCRUM-134")
 async def test_closed_intake_allows_decisions_but_replanning_requires_reconfirmation(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -219,7 +219,7 @@ async def test_closed_intake_allows_decisions_but_replanning_requires_reconfirma
     assert suspended.status_code == 409
 
 
-@pytest.mark.story("SCRUM-115")
+@pytest.mark.story("SCRUM-134")
 async def test_decisions_do_not_allocate_or_promote_other_registrations(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:

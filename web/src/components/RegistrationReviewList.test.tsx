@@ -49,7 +49,7 @@ test('SCRUM-114: shows the server-provided submission order without decision con
   expect(screen.queryByRole('button')).toBeNull()
 })
 
-test('SCRUM-115: owner sees decision controls on the existing list', async () => {
+test('SCRUM-134: owner sees decision controls on the existing list', async () => {
   renderList([
     {
       id: 'registration-1', event_request_id: 'event-1', full_name: 'Ada Lovelace', age: 24,

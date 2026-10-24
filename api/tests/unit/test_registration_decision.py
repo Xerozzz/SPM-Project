@@ -1,4 +1,4 @@
-"""Pure SCRUM-115 manual registration-decision transition evidence."""
+"""Pure SCRUM-134 manual registration-decision transition evidence."""
 
 import pytest
 
@@ -6,7 +6,7 @@ from domain.registration import RegistrationStatus
 from domain.registration_decision import RegistrationDecisionError, decide
 
 
-@pytest.mark.story("SCRUM-115")
+@pytest.mark.story("SCRUM-134")
 @pytest.mark.parametrize(
     ("current", "target"),
     [
@@ -22,7 +22,7 @@ def test_manual_decision_allows_only_the_four_requested_transitions(
     assert decide(current, target) is target
 
 
-@pytest.mark.story("SCRUM-115")
+@pytest.mark.story("SCRUM-134")
 @pytest.mark.parametrize(
     ("current", "target"),
     [

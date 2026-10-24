@@ -6,7 +6,7 @@ Proposed
 
 ## Context
 
-SCRUM-115 lets an Event Organiser accept or waitlist an existing attendee registration and
+SCRUM-134 lets an Event Organiser accept or waitlist an existing attendee registration and
 optionally explain that decision. SCRUM-42 already made `event_registration_history` the
 append-only source action for every registration status transition, but it cannot retain a note.
 
