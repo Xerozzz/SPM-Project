@@ -132,6 +132,9 @@ export interface VenueBooking {
   expires_at?: string | null
   /** SCRUM-116 AC3: the affected arrangement this request replaces, if it is one. */
   replaces_booking_id?: string | null
+  /** SCRUM-133: who adopted this replacement and when, if it has been adopted. */
+  adopted_by_id?: string | null
+  adopted_at?: string | null
   /**
    * SCRUM-89 AC4: what this booking now clashes with at its venue, or null when nothing.
    * Derived by the API on every read, so it appears and clears on its own as the venue's

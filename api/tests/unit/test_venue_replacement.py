@@ -1,4 +1,4 @@
-"""SCRUM-116: when a venue request may replace an affected arrangement."""
+"""SCRUM-116 and SCRUM-133: when a venue request may replace, or be adopted."""
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -7,7 +7,12 @@ import pytest
 
 from domain.validation import FieldProblem
 from domain.venue_booking import BookingStatus
-from domain.venue_replacement import Original, replacement_problems
+from domain.venue_replacement import (
+    AdoptionRefusal,
+    Original,
+    adoption_refusal,
+    replacement_problems,
+)
 
 START = datetime(2030, 3, 1, 9, tzinfo=UTC)
 END = START + timedelta(hours=2)
@@ -79,3 +84,44 @@ def test_the_session_and_period_are_carried_over_unchanged() -> None:
         FieldProblem("start_at", "must match the arrangement replaced"),
         FieldProblem("end_at", "must match the arrangement replaced"),
     ]
+
+
+# --------------------------------------------------------------------------- SCRUM-133
+
+
+_NOW = datetime(2030, 3, 1, tzinfo=UTC)
+
+
+@pytest.mark.story("SCRUM-133")
+def test_an_approved_replacement_may_be_adopted() -> None:
+    later = _NOW + timedelta(days=1)
+    assert adoption_refusal("old", BookingStatus.TENTATIVE, later, _NOW) is None
+    assert adoption_refusal("old", BookingStatus.CONFIRMED, None, _NOW) is None
+
+
+@pytest.mark.story("SCRUM-133")
+@pytest.mark.parametrize(
+    "status",
+    [BookingStatus.PENDING, BookingStatus.REJECTED, BookingStatus.CANCELLED, BookingStatus.EXPIRED],
+)
+def test_a_replacement_venue_staff_have_not_approved_cannot_be_adopted(
+    status: BookingStatus,
+) -> None:
+    assert adoption_refusal("old", status, None, _NOW) is AdoptionRefusal.NOT_APPROVED
+
+
+@pytest.mark.story("SCRUM-133")
+def test_a_hold_that_has_run_out_cannot_be_adopted() -> None:
+    assert adoption_refusal("old", BookingStatus.TENTATIVE, _NOW, _NOW) is (
+        AdoptionRefusal.NOT_APPROVED
+    )
+    assert adoption_refusal("old", BookingStatus.TENTATIVE, None, _NOW) is (
+        AdoptionRefusal.NOT_APPROVED
+    )
+
+
+@pytest.mark.story("SCRUM-133")
+def test_a_request_that_replaces_nothing_cannot_be_adopted() -> None:
+    assert adoption_refusal(None, BookingStatus.CONFIRMED, None, _NOW) is (
+        AdoptionRefusal.NOT_A_REPLACEMENT
+    )
