@@ -2,7 +2,7 @@ import { expect, type Page, test } from '@playwright/test'
 
 import { createApprovedEvent, VENUE_SPEC_ACCOUNT } from '../support/approved-event'
 
-// SCRUM-81 and SCRUM-116: Venue Staff record a closure over a live venue hold. The closure is saved,
+// SCRUM-81, SCRUM-116 and SCRUM-133: Venue Staff record a closure over a live venue hold. The closure is saved,
 // the affected arrangement is listed, nothing is cancelled, and the assigned
 // Coordinator gets a closure-impact notification.
 //
@@ -116,6 +116,30 @@ test('a closure over a live hold is saved, listed and notified', async ({ page }
   await expect(
     card.getByText('Replacement requested at SCIS Seminar Room 2-1 (pending).'),
   ).toBeVisible()
+  const replacement = (
+    await api<{ id: string; replaces_booking_id: string | null }[]>(
+      page,
+      `/api/event-requests/${event.id}/venue-bookings`,
+    )
+  ).find((row) => row.replaces_booking_id === booking.id)
+  if (!replacement) throw new Error('Replacement request missing')
+  await page.getByRole('button', { name: 'Sign out' }).click()
+
+  // SCRUM-133: Venue Staff approve the replacement (a hold), then the Coordinator adopts
+  // it. The original is cancelled and the link between the two stays.
+  await signIn(page, 'venue-staff@example.com')
+  await api(page, `/api/venue-bookings/${replacement.id}/approve`, 'POST', { expires_at: expires })
+  await page.getByRole('button', { name: 'Sign out' }).click()
+
+  await signIn(page, VENUE_SPEC_ACCOUNT)
+  const adoptCard = page.getByRole('article').filter({ hasText: event.name })
+  await adoptCard
+    .getByRole('button', { name: 'Adopt this replacement for Closure impact session' })
+    .click()
+  await expect(
+    adoptCard.getByText(/Adopted on .* The original booking was cancelled\./),
+  ).toBeVisible()
+  await expect(adoptCard.getByText('cancelled', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Sign out' }).click()
 
   // Clean up so no closure is left on the auditorium for later runs or specs. Removing

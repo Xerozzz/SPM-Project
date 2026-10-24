@@ -92,6 +92,9 @@ class VenueBookingRead(BaseModel):
     cancelled_by_id: uuid.UUID | None = None
     cancelled_at: datetime | None = None
     cancellation_reason: str | None = None
+    # SCRUM-133: who adopted this replacement and when. Empty unless it was adopted.
+    adopted_by_id: uuid.UUID | None = None
+    adopted_at: datetime | None = None
     # SCRUM-89 AC4: set when the venue's current buffers mean this booking can no longer
     # stand beside everything else at that venue. Derived on every read rather than
     # stored, so it appears and disappears on its own as the venue changes (AC3, AC7).

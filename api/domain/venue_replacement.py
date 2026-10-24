@@ -5,11 +5,13 @@ When a closure or buffer change leaves a live booking or hold needing attention
 session. The replacement is an ordinary Pending venue request (SCRUM-78) that also names
 the arrangement it would replace, so the two stay linked (AC1, AC2, AC3).
 
-Adopting the replacement and retiring the original is SCRUM-133, not this module.
+Adopting the replacement and retiring the original is SCRUM-133. Its one rule, which
+replacement may be adopted, is at the end of this module (ADR-0057).
 """
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 
 from domain.validation import FieldProblem
 from domain.venue_booking import BookingStatus
@@ -64,3 +66,30 @@ def replacement_problems(
     if end_at != original.end_at:
         problems.append(FieldProblem("end_at", "must match the arrangement replaced"))
     return problems
+
+
+class AdoptionRefusal(StrEnum):
+    """SCRUM-133 AC2: why this request cannot be adopted."""
+
+    #: It does not replace anything, so there is nothing to retire.
+    NOT_A_REPLACEMENT = "not_a_replacement"
+    #: Venue Staff have not approved it (SCRUM-110), or its hold has run out.
+    NOT_APPROVED = "not_approved"
+
+
+def adoption_refusal(
+    replaces_booking_id: object, status: BookingStatus, expires_at: datetime | None, now: datetime
+) -> AdoptionRefusal | None:
+    """SCRUM-133 AC2: None when this replacement may be adopted, otherwise why not.
+
+    Approval through SCRUM-110 places a hold, so an active hold or a confirmed booking
+    counts. A hold at or past its expiry does not, even before the timer marks it Expired,
+    the same "active" rule cancelling uses.
+    """
+    if replaces_booking_id is None:
+        return AdoptionRefusal.NOT_A_REPLACEMENT
+    if status is BookingStatus.CONFIRMED:
+        return None
+    if status is BookingStatus.TENTATIVE and expires_at is not None and expires_at > now:
+        return None
+    return AdoptionRefusal.NOT_APPROVED

@@ -94,3 +94,9 @@ class VenueBooking(Base):
     )
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancellation_reason: Mapped[str | None] = mapped_column(Text)
+    # SCRUM-133: set on a replacement when the assigned Coordinator adopted it and the
+    # original was cancelled. Migration 0039, ADR-0057.
+    adopted_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id")
+    )
+    adopted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

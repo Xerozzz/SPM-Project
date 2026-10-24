@@ -14,6 +14,7 @@ import { listVenues, type Venue } from '../api/venues'
 import { describeConflict } from '../api/venueBookingDecisions'
 import { formatSingaporeTime } from '../api/venueCalendar'
 import { useAuth } from '../auth/useAuth'
+import AdoptReplacement from './AdoptReplacement'
 
 export default function VenueBookingRequest({ event }: { event: EventRequest }) {
   const { token } = useAuth()
@@ -78,6 +79,7 @@ export default function VenueBookingRequest({ event }: { event: EventRequest }) 
     <div className="mt-3 border-t border-slate-200 pt-3">
       {venueBookings.data.length > 0 && (
         <ExistingVenueBookings
+          eventId={event.id}
           bookings={venueBookings.data}
           venues={venues.data ?? []}
           onReplace={(booking) => {
@@ -252,10 +254,12 @@ function VenueBookingForm({
 }
 
 function ExistingVenueBookings({
+  eventId,
   bookings,
   venues,
   onReplace,
 }: {
+  eventId: string
   bookings: VenueBooking[]
   venues: Venue[]
   onReplace: (booking: VenueBooking) => void
@@ -322,6 +326,13 @@ function ExistingVenueBookings({
               replacement={liveReplacementOf(booking)}
               venueNames={venueNames}
             />
+            {booking.replaces_booking_id && (
+              <AdoptReplacement
+                eventId={eventId}
+                replacement={booking}
+                original={byId.get(booking.replaces_booking_id)}
+              />
+            )}
             {booking.conflict &&
               ['confirmed', 'tentative'].includes(booking.status) &&
               !liveReplacementOf(booking) && (

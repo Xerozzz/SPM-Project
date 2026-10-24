@@ -15,6 +15,7 @@ from domain.roles import Role
 from domain.venue_booking import BookingStatus, InvalidBookingTransitionError
 from domain.venue_buffer import effective_interval
 from domain.venue_cancellation import EventRefusal
+from domain.venue_replacement import AdoptionRefusal
 from models.event_request import EventRequest
 from models.venue import Venue
 from models.venue_booking import VenueBooking
@@ -30,6 +31,7 @@ from schemas.venue_bookings import (
 )
 from services import venue_bookings as service
 from services import venue_buffer_review as buffer_review
+from services import venue_replacements as replacements
 
 router = APIRouter(prefix="/event-requests", tags=["venue-bookings"])
 decisions = APIRouter(prefix="/venue-bookings", tags=["venue-bookings"])
@@ -190,6 +192,29 @@ def cancel_venue_arrangement(
         booking = service.cancel_arrangement(
             db, event.id, booking_id, _user_id(user), body.reason, datetime.now(UTC)
         )
+    except _CANCELLATION_REFUSALS as exc:
+        raise _cancellation_error(exc) from exc
+    venue = venue_repo.get(db, booking.venue_id)
+    assert venue is not None  # a booking cannot exist without its venue.
+    return _booking_read(booking, venue, None)
+
+
+# SCRUM-133 AC2: what the Coordinator is told when the request itself cannot be adopted.
+_ADOPTION_REFUSALS = {
+    AdoptionRefusal.NOT_A_REPLACEMENT: "This request does not replace another arrangement",
+    AdoptionRefusal.NOT_APPROVED: "Venue Staff have not approved this replacement",
+}
+
+
+@router.post("/{request_id}/venue-bookings/{booking_id}/adopt", response_model=VenueBookingRead)
+def adopt_venue_replacement(
+    event: CancellableEvent, booking_id: uuid.UUID, user: AuthenticatedUser, db: Db
+) -> VenueBookingRead:
+    """SCRUM-133: the assigned Coordinator adopts an approved replacement (ADR-0057)."""
+    try:
+        booking = replacements.adopt(db, event.id, booking_id, _user_id(user), datetime.now(UTC))
+    except replacements.AdoptionRefusedError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, _ADOPTION_REFUSALS[exc.refusal]) from exc
     except _CANCELLATION_REFUSALS as exc:
         raise _cancellation_error(exc) from exc
     venue = venue_repo.get(db, booking.venue_id)
