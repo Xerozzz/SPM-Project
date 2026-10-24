@@ -53,6 +53,7 @@ class EventAccess(StrEnum):
     READ_SAFETY_REVIEWS = "read_safety_reviews"
     CONFIRM_EVENT = "confirm_event"
     READ_REGISTRATION_SETTINGS = "read_registration_settings"
+    READ_REGISTRATIONS = "read_registrations"
     MANAGE_REGISTRATION = "manage_registration"
     CANCEL_VENUE_ARRANGEMENT = "cancel_venue_arrangement"
 
@@ -235,6 +236,15 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
         if permission is EventAccess.READ_REGISTRATION_SETTINGS:
+            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+            if is_owner or is_assigned:
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        # SCRUM-114: reviewing attendee submissions belongs to the event owner and the
+        # currently assigned Coordinator. Intake state is deliberately irrelevant here:
+        # closure prevents new submissions, not review of the existing record.
+        if permission is EventAccess.READ_REGISTRATIONS:
             is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
             if is_owner or is_assigned:
                 return request

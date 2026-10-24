@@ -63,6 +63,15 @@ class RegistrationRead(BaseModel):
         return cls.model_validate(registration)
 
 
+class RegistrationReviewRead(RegistrationRead):
+    """Attendee information needed by the authorised event-management review view."""
+
+    full_name: str
+    age: int
+    phone_number: str
+    dietary_accessibility_notes: str | None
+
+
 class WithdrawalRead(RegistrationRead):
     """Withdrawal outcome, including the idempotent-repeat signal."""
 
