@@ -95,6 +95,7 @@ modified once created, but the sample event requests are reset to Draft each tim
 | `venue-staff@example.com` | venue_staff | |
 | `tech-support@example.com` | tech_support | |
 | `attendee@example.com` | attendee | |
+| `attendee2@example.com` | attendee | |
 | `multi-role@example.com` | organiser, coordinator | |
 
 ### End-to-end tests

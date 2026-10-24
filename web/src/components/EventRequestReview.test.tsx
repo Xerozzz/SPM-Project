@@ -107,6 +107,7 @@ function renderReview(reviewable: unknown[], bookable: unknown[] = [], confirmed
         intake_open: true,
       })
     }
+    if (key.endsWith('/registrations')) return json([])
     if (key.startsWith('GET ') && key.endsWith('/venue-bookings')) return json([])
     if (key === 'GET /api/venues') return json([])
     if (key.endsWith('/clarifications')) return json([])

@@ -37,6 +37,11 @@ class WithdrawalNotAllowedError(RegistrationError):
     pass
 
 
+def list_for_event(db: Session, event_id: uuid.UUID) -> list[EventRegistration]:
+    """Read registrations without consulting or changing the intake state."""
+    return repo.list_for_event(db, event_id)
+
+
 def list_events_for_attendee(
     db: Session, attendee_id: uuid.UUID, now: datetime
 ) -> list[tuple[EventRequest, bool]]:

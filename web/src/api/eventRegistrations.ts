@@ -19,6 +19,14 @@ export interface EventRegistration {
   submission_order: number
 }
 
+/** Read-only event-management view of one registration lifecycle (SCRUM-114). */
+export interface RegistrationReview extends EventRegistration {
+  full_name: string
+  age: number
+  phone_number: string
+  dietary_accessibility_notes: string | null
+}
+
 export interface RegistrationSubmission {
   full_name: string
   age: number
@@ -111,4 +119,15 @@ export async function withdrawRegistration(
     throw new Error(detail)
   }
   return (await response.json()) as WithdrawalResult
+}
+
+export async function listEventRegistrations(
+  token: string,
+  eventId: string,
+): Promise<RegistrationReview[]> {
+  const response = await fetch(`/api/event-requests/${eventId}/registrations`, {
+    headers: headers(token),
+  })
+  if (!response.ok) throw new Error(`Could not load registrations (${response.status})`)
+  return (await response.json()) as RegistrationReview[]
 }

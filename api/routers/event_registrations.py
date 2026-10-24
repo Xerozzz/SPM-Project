@@ -8,18 +8,24 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from core.database import get_db
-from core.dependencies import require_role
+from core.dependencies import EventAccess, require_event_access, require_role
 from domain.roles import Role
+from models.event_request import EventRequest
 from schemas.event_registrations import (
     AttendeeEventRead,
     RegistrationRead,
+    RegistrationReviewRead,
     RegistrationSubmit,
     WithdrawalRead,
 )
 from services import event_registrations as service
 
 router = APIRouter(prefix="/attendee", tags=["attendee-registrations"])
+review_router = APIRouter(prefix="/event-requests", tags=["event-registrations"])
 Attendee = Annotated[dict[str, object], Depends(require_role(Role.ATTENDEE))]
+ReviewableEvent = Annotated[
+    EventRequest, Depends(require_event_access(EventAccess.READ_REGISTRATIONS))
+]
 Db = Annotated[Session, Depends(get_db)]
 
 
@@ -86,6 +92,12 @@ def read_mine(event_id: uuid.UUID, user: Attendee, db: Db) -> RegistrationRead:
     if registration is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Registration not found")
     return RegistrationRead.of(registration)
+
+
+@review_router.get("/{request_id}/registrations", response_model=list[RegistrationReviewRead])
+def list_registrations(event: ReviewableEvent, db: Db) -> list[RegistrationReviewRead]:
+    registrations = service.list_for_event(db, event.id)
+    return [RegistrationReviewRead.model_validate(row) for row in registrations]
 
 
 @router.post("/events/{event_id}/registration/withdraw", response_model=WithdrawalRead)

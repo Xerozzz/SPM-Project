@@ -19,6 +19,7 @@ import ConfirmEvent from './ConfirmEvent'
 import EventEquipmentRequirements from './EventEquipmentRequirements'
 import PlanningInfoEditor from './PlanningInfoEditor'
 import RegistrationSettingsCard from './RegistrationSettingsCard'
+import RegistrationReviewList from './RegistrationReviewList'
 import VenueBookingRequest from './VenueBookingRequest'
 
 /**
@@ -214,7 +215,12 @@ function ReviewCard({
       {/* Only while the event is still being planned: `list_bookable_for_coordinator`
           holds Approved events, so a confirmed one leaves this list altogether. */}
       {request.status === 'approved' && <ConfirmEvent event={request} onConfirmed={onConfirmed} />}
-      {request.status === 'confirmed' && <RegistrationSettingsCard event={request} />}
+      {request.status === 'confirmed' && (
+        <>
+          <RegistrationSettingsCard event={request} />
+          <RegistrationReviewList eventId={request.id} />
+        </>
+      )}
     </article>
   )
 }

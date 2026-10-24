@@ -35,6 +35,16 @@ def get_for_attendee(
     return db.scalars(statement).first()
 
 
+def list_for_event(db: Session, event_request_id: uuid.UUID) -> list[EventRegistration]:
+    """Return every lifecycle in fair submission order, including withdrawn records."""
+    statement = (
+        select(EventRegistration)
+        .where(EventRegistration.event_request_id == event_request_id)
+        .order_by(EventRegistration.submitted_at.asc(), EventRegistration.submission_order.asc())
+    )
+    return list(db.scalars(statement))
+
+
 def next_submission_order(db: Session, event_request_id: uuid.UUID) -> int:
     statement = select(func.coalesce(func.max(EventRegistration.submission_order), 0)).where(
         EventRegistration.event_request_id == event_request_id
