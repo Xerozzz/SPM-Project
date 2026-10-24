@@ -1,4 +1,4 @@
-# ADR-0057: Keep manual registration decision notes in registration history
+# ADR-0058: Keep manual registration decision notes in registration history
 
 ## Status
 
