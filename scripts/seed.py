@@ -55,6 +55,7 @@ _SEED_USERS: list[tuple[str, str, list[Role], uuid.UUID]] = [
     # SCRUM-79: decides whether a plan has passed operational safety review.
     ("safety-officer@example.com", "password123", [Role.SAFETY_OFFICER], _PRIMARY_ORG_ID),
     ("attendee@example.com", "password123", [Role.ATTENDEE], _PRIMARY_ORG_ID),
+    ("attendee2@example.com", "password123", [Role.ATTENDEE], _PRIMARY_ORG_ID),
     (
         "multi-role@example.com",
         "password123",
