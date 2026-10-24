@@ -8,11 +8,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from core.database import get_db
-from core.dependencies import EventAccess, require_event_access, require_role
+from core.dependencies import EventAccess, get_current_user, require_event_access, require_role
 from domain.roles import Role
 from models.event_request import EventRequest
 from schemas.event_registrations import (
     AttendeeEventRead,
+    RegistrationDecision,
+    RegistrationDecisionRead,
     RegistrationRead,
     RegistrationReviewRead,
     RegistrationSubmit,
@@ -26,6 +28,10 @@ Attendee = Annotated[dict[str, object], Depends(require_role(Role.ATTENDEE))]
 ReviewableEvent = Annotated[
     EventRequest, Depends(require_event_access(EventAccess.READ_REGISTRATIONS))
 ]
+ManageableRegistrationEvent = Annotated[
+    EventRequest, Depends(require_event_access(EventAccess.MANAGE_REGISTRATION))
+]
+CurrentUser = Annotated[dict[str, object], Depends(get_current_user)]
 Db = Annotated[Session, Depends(get_db)]
 
 
@@ -98,6 +104,51 @@ def read_mine(event_id: uuid.UUID, user: Attendee, db: Db) -> RegistrationRead:
 def list_registrations(event: ReviewableEvent, db: Db) -> list[RegistrationReviewRead]:
     registrations = service.list_for_event(db, event.id)
     return [RegistrationReviewRead.model_validate(row) for row in registrations]
+
+
+@review_router.post(
+    "/{request_id}/registrations/{registration_id}/decision",
+    response_model=RegistrationDecisionRead,
+)
+def record_decision(
+    registration_id: uuid.UUID,
+    body: RegistrationDecision,
+    event: ManageableRegistrationEvent,
+    user: CurrentUser,
+    db: Db,
+) -> RegistrationDecisionRead:
+    return _record_decision(db, event.id, registration_id, uuid.UUID(str(user["sub"])), body)
+
+
+def _record_decision(
+    db: Session,
+    event_id: uuid.UUID,
+    registration_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    body: RegistrationDecision,
+) -> RegistrationDecisionRead:
+    try:
+        registration, already_decided = service.decide(
+            db,
+            event_id,
+            registration_id,
+            actor_id,
+            body.expected_status,
+            body.status,
+            body.note,
+            datetime.now(UTC),
+        )
+    except service.EventNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found") from exc
+    except service.RegistrationNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Registration not found") from exc
+    except service.StaleRegistrationDecisionError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except service.RegistrationDecisionNotAllowedError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    return RegistrationDecisionRead.model_validate(registration).model_copy(
+        update={"already_decided": already_decided}
+    )
 
 
 @router.post("/events/{event_id}/registration/withdraw", response_model=WithdrawalRead)

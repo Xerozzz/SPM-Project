@@ -92,3 +92,4 @@ class EventRegistrationHistory(Base):
         nullable=False,
     )
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)

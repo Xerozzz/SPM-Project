@@ -172,7 +172,7 @@ export default function MyEventRequests({
                 {request.status === 'confirmed' && (
                   <div className="w-full">
                     <RegistrationIntakeControls event={request} />
-                    <RegistrationReviewList eventId={request.id} />
+                    <RegistrationReviewList eventId={request.id} canDecide />
                   </div>
                 )}
                 {/* SCRUM-105: a draft has never been submitted, so it has no history. */}

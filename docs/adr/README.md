@@ -67,6 +67,7 @@ someone else made two weeks ago.
 | [0055](0055-registration-history-actors.md) | Record the actor on registration status history | Proposed |
 | [0056](0056-cancel-one-venue-arrangement.md) | Cancel one venue arrangement as a staged, row-locked transition | Proposed |
 | [0057](0057-adopt-a-replacement-through-single-cancellation.md) | Adopt a replacement by cancelling the original through SCRUM-109 | Proposed |
+| [0058](0058-registration-decision-history-notes.md) | Keep manual registration decision notes in registration history | Proposed |
 
 ## When to write one
 

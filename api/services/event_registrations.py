@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 
 from domain.event_status import EventStatus
 from domain.registration import RegistrationStatus
+from domain.registration_decision import RegistrationDecisionError
+from domain.registration_decision import decide as permitted_decision
 from domain.registration_intake import RegistrationIntakeError
 from models.event_registration import EventRegistration
 from models.event_request import EventRequest
@@ -34,6 +36,14 @@ class RegistrationNotFoundError(RegistrationError):
 
 
 class WithdrawalNotAllowedError(RegistrationError):
+    pass
+
+
+class RegistrationDecisionNotAllowedError(RegistrationError):
+    pass
+
+
+class StaleRegistrationDecisionError(RegistrationError):
     pass
 
 
@@ -137,6 +147,45 @@ def withdraw(
     }:
         raise WithdrawalNotAllowedError("registration cannot be withdrawn in its current status")
     repo.withdraw(db, registration, attendee_id, now)
+    db.commit()
+    db.refresh(registration)
+    return registration, False
+
+
+def decide(
+    db: Session,
+    event_id: uuid.UUID,
+    registration_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    expected_status: RegistrationStatus,
+    target: RegistrationStatus,
+    note: str | None,
+    now: datetime,
+) -> tuple[EventRegistration, bool]:
+    """Record one authorised outcome, or recognise its exact safe retry.
+
+    The event lock is deliberately shared with attendee withdrawal and submission. Once it is
+    held, the locked registration read sees any earlier lifecycle transition before deciding.
+    """
+    event = event_repo.get_for_update(db, event_id)
+    if event is None:
+        raise EventNotFoundError
+    if event.status is not EventStatus.CONFIRMED:
+        raise RegistrationDecisionNotAllowedError("registration decisions require an active event")
+    registration = repo.get_for_update(db, registration_id, event.id)
+    if registration is None:
+        raise RegistrationNotFoundError
+    if registration.status is not expected_status:
+        if registration.status is target and repo.has_decision_action(
+            db, registration.id, actor_id, expected_status, target, note
+        ):
+            return registration, True
+        raise StaleRegistrationDecisionError("registration changed before this decision was saved")
+    try:
+        permitted_decision(registration.status, target)
+    except RegistrationDecisionError as exc:
+        raise RegistrationDecisionNotAllowedError(str(exc)) from exc
+    repo.decide(db, registration, actor_id, target, now, note)
     db.commit()
     db.refresh(registration)
     return registration, False
