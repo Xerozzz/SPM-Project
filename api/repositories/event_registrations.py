@@ -35,6 +35,21 @@ def get_for_attendee(
     return db.scalars(statement).first()
 
 
+def get_for_update(
+    db: Session, registration_id: uuid.UUID, event_request_id: uuid.UUID
+) -> EventRegistration | None:
+    """Lock one registration after its event lock has serialised its lifecycle changes."""
+    statement = (
+        select(EventRegistration)
+        .where(
+            EventRegistration.id == registration_id,
+            EventRegistration.event_request_id == event_request_id,
+        )
+        .with_for_update()
+    )
+    return db.scalars(statement).first()
+
+
 def list_for_event(db: Session, event_request_id: uuid.UUID) -> list[EventRegistration]:
     """Return every lifecycle in fair submission order, including withdrawn records."""
     statement = (
@@ -104,6 +119,54 @@ def withdraw(
         )
     )
     return registration
+
+
+def decide(
+    db: Session,
+    registration: EventRegistration,
+    actor_id: uuid.UUID,
+    target: RegistrationStatus,
+    occurred_at: datetime,
+    note: str | None,
+) -> EventRegistration:
+    """Stage one manual status outcome and its immutable source action together."""
+    previous_status = registration.status
+    registration.status = target
+    db.add(
+        EventRegistrationHistory(
+            registration_id=registration.id,
+            actor_id=actor_id,
+            previous_status=previous_status,
+            status=target,
+            occurred_at=occurred_at,
+            note=note,
+        )
+    )
+    return registration
+
+
+def has_decision_action(
+    db: Session,
+    registration_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    previous_status: RegistrationStatus,
+    status: RegistrationStatus,
+    note: str | None,
+) -> bool:
+    """Identify an exact committed retry without treating another decision as one."""
+    statement = (
+        select(EventRegistrationHistory)
+        .where(EventRegistrationHistory.registration_id == registration_id)
+        .order_by(EventRegistrationHistory.occurred_at.desc(), EventRegistrationHistory.id.desc())
+        .limit(1)
+    )
+    latest = db.scalars(statement).first()
+    return latest is not None and (
+        latest.actor_id,
+        latest.previous_status,
+        latest.status,
+        latest.note,
+    ) == (actor_id, previous_status, status, note)
 
 
 def list_history(db: Session, registration_id: uuid.UUID) -> list[EventRegistrationHistory]:

@@ -72,6 +72,30 @@ class RegistrationReviewRead(RegistrationRead):
     dietary_accessibility_notes: str | None
 
 
+class RegistrationDecision(BaseModel):
+    """The current state the Organiser reviewed and their requested manual outcome."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_status: RegistrationStatus
+    status: RegistrationStatus
+    note: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("note")
+    @classmethod
+    def optional_note(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+
+class RegistrationDecisionRead(RegistrationRead):
+    """Decision outcome; an exact retry returns the same record without another action."""
+
+    already_decided: bool = False
+
+
 class WithdrawalRead(RegistrationRead):
     """Withdrawal outcome, including the idempotent-repeat signal."""
 

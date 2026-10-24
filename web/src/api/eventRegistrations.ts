@@ -38,6 +38,10 @@ export interface WithdrawalResult extends EventRegistration {
   already_withdrawn: boolean
 }
 
+export interface RegistrationDecisionResult extends EventRegistration {
+  already_decided: boolean
+}
+
 export class RegistrationValidationError extends Error {
   constructor(readonly fields: Partial<Record<keyof RegistrationSubmission, string>>) {
     super('Please correct the highlighted registration information.')
@@ -130,4 +134,30 @@ export async function listEventRegistrations(
   })
   if (!response.ok) throw new Error(`Could not load registrations (${response.status})`)
   return (await response.json()) as RegistrationReview[]
+}
+
+export async function decideRegistration(
+  token: string,
+  eventId: string,
+  registrationId: string,
+  expectedStatus: RegistrationStatus,
+  status: Extract<RegistrationStatus, 'accepted' | 'waitlisted'>,
+  note: string | null,
+): Promise<RegistrationDecisionResult> {
+  const response = await fetch(
+    `/api/event-requests/${eventId}/registrations/${registrationId}/decision`,
+    {
+      method: 'POST',
+      headers: { ...headers(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expected_status: expectedStatus, status, note }),
+    },
+  )
+  if (!response.ok) {
+    const detail = await response
+      .json()
+      .then((body: { detail?: unknown }) => String(body.detail ?? 'Decision failed'))
+      .catch(() => `Decision failed (${response.status})`)
+    throw new Error(detail)
+  }
+  return (await response.json()) as RegistrationDecisionResult
 }
