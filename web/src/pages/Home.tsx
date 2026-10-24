@@ -10,6 +10,7 @@ import NotificationInbox from '../components/NotificationInbox'
 import OrganisationEventCalendar from '../components/OrganisationEventCalendar'
 import EventRequestForm from '../components/EventRequestForm'
 import BookingProblems from '../components/BookingProblems'
+import CompletedEvents from '../components/CompletedEvents'
 import EventRequestReview from '../components/EventRequestReview'
 import UnassignedQueue from '../components/UnassignedQueue'
 import EquipmentCatalogue from '../components/EquipmentCatalogue'
@@ -58,6 +59,7 @@ export default function HomePage() {
       )}
 
       {hasRole('coordinator') && <EventRequestReview />}
+      {hasRole('coordinator') && <CompletedEvents />}
 
       {hasRole('attendee') && <AttendeeRegistrations />}
 
