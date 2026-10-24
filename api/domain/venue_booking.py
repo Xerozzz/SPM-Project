@@ -16,7 +16,8 @@ class BookingStatus(StrEnum):
     PENDING = "pending"
     REJECTED = "rejected"
     # SCRUM-73 AC4: named so the conflict rule can prove a cancelled hold never blocks.
-    # Nothing sets it yet; no migration needed (status is a non-native VARCHAR enum).
+    # SCRUM-109 sets it: the assigned Coordinator cancels one arrangement
+    # (domain.venue_cancellation, ADR-0056). Stored in the non-native VARCHAR enum.
     CANCELLED = "cancelled"
     # SCRUM-83: Venue Staff hold a pending request's venue until an expiry (ADR-0029).
     TENTATIVE = "tentative"

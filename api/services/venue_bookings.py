@@ -1,6 +1,7 @@
 """Submit pending venue booking requests for approved events (SCRUM-38), check
 whether one can be approved without a conflict (SCRUM-73), and approve it safely under
-concurrency (SCRUM-74, which also absorbs SCRUM-40's approve action — see ADR-0017)."""
+concurrency (SCRUM-74, which also absorbs SCRUM-40's approve action — see ADR-0017).
+The assigned Coordinator cancels one arrangement of an event (SCRUM-109, ADR-0056)."""
 
 import uuid
 from datetime import datetime
@@ -8,6 +9,7 @@ from datetime import datetime
 from core.database import Session
 from domain import (
     venue_booking,
+    venue_cancellation,
     venue_hold,
     venue_replacement,
     venue_session,
@@ -49,6 +51,22 @@ class InvalidHoldError(Exception):
     def __init__(self, problems: list[FieldProblem]) -> None:
         super().__init__("invalid tentative hold")
         self.problems = problems
+
+
+class InvalidCancellationError(Exception):
+    """SCRUM-109 AC4: the cancellation's input is not acceptable, field by field."""
+
+    def __init__(self, problems: list[FieldProblem]) -> None:
+        super().__init__("invalid venue arrangement cancellation")
+        self.problems = problems
+
+
+class EventNotInPlanningError(Exception):
+    """SCRUM-109 AC7, AC9: the event's status does not allow cancelling an arrangement."""
+
+    def __init__(self, refusal: venue_cancellation.EventRefusal) -> None:
+        super().__init__(f"cannot cancel a venue arrangement: {refusal}")
+        self.refusal = refusal
 
 
 def evaluate(
@@ -278,6 +296,65 @@ def update_hold_expiry(
     except Exception:
         db.rollback()
         raise
+
+
+def stage_cancellation(
+    db: Session,
+    event_id: uuid.UUID,
+    booking_id: uuid.UUID,
+    cancelled_by_id: uuid.UUID,
+    reason: str | None,
+    now: datetime,
+) -> VenueBooking:
+    """SCRUM-109: cancel one arrangement of an event, in the caller's transaction.
+
+    Flushes and does **not** commit, so SCRUM-115 (cancel a whole event) and SCRUM-116
+    (replace a venue) can cancel several arrangements and commit once; a refusal leaves
+    nothing written, and rolling the caller's transaction back undoes a cancellation.
+    The caller has already checked who is acting (CANCEL_VENUE_ARRANGEMENT).
+
+    The event row is locked first and then the booking row, the order `submit` already
+    uses, so a cancellation never waits on a lock in the opposite order (ADR-0056). Under
+    the booking lock the row is re-read as committed, so a hold the expiry timer has just
+    expired, or a request Venue Staff have just decided, is judged as it now is (AC10).
+    Nothing else of the event is touched: not its status (AC8), not its other bookings
+    (AC1). The decision and hold columns stay as they were (AC2).
+    """
+    event = event_repo.get_for_update(db, event_id)
+    if event is None:
+        raise BookingNotFoundError
+    refusal = venue_cancellation.event_refusal(event.status)
+    if refusal is not None:
+        raise EventNotInPlanningError(refusal)
+    booking = booking_repo.get_booking_for_update(db, booking_id)
+    # An arrangement of another event is not found here, rather than refused, so the id
+    # of someone else's booking discloses nothing.
+    if booking is None or booking.event_request_id != event.id:
+        raise BookingNotFoundError
+    cancelled = venue_cancellation.cancel(booking.status, booking.expires_at, now)
+    problems = venue_cancellation.reason_problems(reason)
+    if problems:
+        raise InvalidCancellationError(problems)
+    assert reason is not None  # reason_problems refuses None
+    booking.status = cancelled
+    booking.cancelled_by_id = cancelled_by_id
+    booking.cancelled_at = now
+    booking.cancellation_reason = reason.strip()
+    db.flush()
+    return booking
+
+
+def cancel_arrangement(
+    db: Session,
+    event_id: uuid.UUID,
+    booking_id: uuid.UUID,
+    cancelled_by_id: uuid.UUID,
+    reason: str | None,
+    now: datetime,
+) -> VenueBooking:
+    """SCRUM-109 AC1: the Coordinator's single cancellation, staged and committed."""
+    booking = stage_cancellation(db, event_id, booking_id, cancelled_by_id, reason, now)
+    return booking_repo.save_booking(db, booking)
 
 
 def _buffers(venue: Venue) -> VenueBuffers:

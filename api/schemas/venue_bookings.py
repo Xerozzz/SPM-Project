@@ -29,6 +29,16 @@ class VenueBookingCreate(BaseModel):
         return value.astimezone(UTC)
 
 
+class VenueBookingCancel(BaseModel):
+    """SCRUM-109: why the assigned Coordinator cancels one arrangement.
+
+    Optional here so a missing reason gets the same field error as a blank one, from the
+    one rule in domain.venue_cancellation (AC4), rather than a differently shaped 422.
+    """
+
+    reason: str | None = None
+
+
 class SuitabilityRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -77,6 +87,11 @@ class VenueBookingRead(BaseModel):
     expires_at: datetime | None = None
     # SCRUM-116 AC3: the arrangement this request replaces, so old and new stay linked.
     replaces_booking_id: uuid.UUID | None = None
+    # SCRUM-109 AC2, AC11: who cancelled this arrangement, when, and why. Empty unless
+    # it is cancelled; its decision and hold history stay in the fields above.
+    cancelled_by_id: uuid.UUID | None = None
+    cancelled_at: datetime | None = None
+    cancellation_reason: str | None = None
     # SCRUM-89 AC4: set when the venue's current buffers mean this booking can no longer
     # stand beside everything else at that venue. Derived on every read rather than
     # stored, so it appears and disappears on its own as the venue changes (AC3, AC7).

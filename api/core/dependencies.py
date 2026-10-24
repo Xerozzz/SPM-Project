@@ -33,7 +33,8 @@ class EventAccess(StrEnum):
     (SCRUM-105) is readable by any Lead, the owning Organiser and the current assignee.
     Safety decisions (SCRUM-79) are staff-side: the Safety Officer, any Lead and the
     current assignee, but not the Organiser. Confirmation (SCRUM-80) is the current
-    assignee's alone.
+    assignee's alone. Cancelling one venue arrangement (SCRUM-109) is for the current
+    assignee only.
     """
 
     VIEW = "view"
@@ -53,6 +54,7 @@ class EventAccess(StrEnum):
     CONFIRM_EVENT = "confirm_event"
     READ_REGISTRATION_SETTINGS = "read_registration_settings"
     MANAGE_REGISTRATION = "manage_registration"
+    CANCEL_VENUE_ARRANGEMENT = "cancel_venue_arrangement"
 
 
 def get_current_user(
@@ -210,6 +212,16 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
         # CHECK_EQUIPMENT_AVAILABILITY below: outside planning the service answers 409
         # naming that, which tells the assignee more than a bare 403 would.
         if permission is EventAccess.CONFIRM_EVENT:
+            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+            if is_assigned:
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        # SCRUM-109 AC6 (ADR-0056): only the event's current assigned Coordinator cancels
+        # one of its venue arrangements, so a reassignment moves the right at once. No
+        # status pin, for the reason CHECK_EQUIPMENT_AVAILABILITY gives: the service says
+        # why an event outside planning is refused, which a 403 could not (AC7, AC9).
+        if permission is EventAccess.CANCEL_VENUE_ARRANGEMENT:
             is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
             if is_assigned:
                 return request
