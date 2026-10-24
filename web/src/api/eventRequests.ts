@@ -135,6 +135,10 @@ export interface VenueBooking {
   /** SCRUM-133: who adopted this replacement and when, if it has been adopted. */
   adopted_by_id?: string | null
   adopted_at?: string | null
+  /** SCRUM-109 AC2: who cancelled this arrangement, when, and why. Null unless cancelled. */
+  cancelled_by_id?: string | null
+  cancelled_at?: string | null
+  cancellation_reason?: string | null
   /**
    * SCRUM-89 AC4: what this booking now clashes with at its venue, or null when nothing.
    * Derived by the API on every read, so it appears and clears on its own as the venue's
@@ -573,6 +577,22 @@ export async function listVenueBookings(token: string, eventId: string): Promise
   return readBookingResponse(
     await fetch(`/api/event-requests/${eventId}/venue-bookings`, {
       headers: authHeaders(token),
+    }),
+  )
+}
+
+/** SCRUM-109: the assigned Coordinator cancels one arrangement, with a reason. */
+export async function cancelVenueArrangement(
+  token: string,
+  eventId: string,
+  bookingId: string,
+  reason: string,
+): Promise<VenueBooking> {
+  return readBookingResponse(
+    await fetch(`/api/event-requests/${eventId}/venue-bookings/${bookingId}/cancel`, {
+      method: 'POST',
+      headers: jsonHeaders(token),
+      body: JSON.stringify({ reason }),
     }),
   )
 }
