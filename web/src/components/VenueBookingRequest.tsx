@@ -15,9 +15,11 @@ import { describeConflict } from '../api/venueBookingDecisions'
 import { formatSingaporeTime } from '../api/venueCalendar'
 import { useAuth } from '../auth/useAuth'
 import AdoptReplacement from './AdoptReplacement'
+import { canOfferCancel, describeCanceller } from '../validation/venueCancellation'
+import CancelArrangementDialog from './CancelArrangementDialog'
 
 export default function VenueBookingRequest({ event }: { event: EventRequest }) {
-  const { token } = useAuth()
+  const { token, userId } = useAuth()
   const queryClient = useQueryClient()
   const [venueId, setVenueId] = useState('')
   // SCRUM-111: each request is for one labelled session with its own period,
@@ -80,6 +82,8 @@ export default function VenueBookingRequest({ event }: { event: EventRequest }) 
       {venueBookings.data.length > 0 && (
         <ExistingVenueBookings
           eventId={event.id}
+          event={event}
+          viewerId={userId}
           bookings={venueBookings.data}
           venues={venues.data ?? []}
           onReplace={(booking) => {
@@ -255,15 +259,21 @@ function VenueBookingForm({
 
 function ExistingVenueBookings({
   eventId,
+  event,
+  viewerId,
   bookings,
   venues,
   onReplace,
 }: {
   eventId: string
+  event: EventRequest
+  viewerId: string | null
   bookings: VenueBooking[]
   venues: Venue[]
   onReplace: (booking: VenueBooking) => void
 }) {
+  // SCRUM-109: the one arrangement whose cancel dialog is open, if any.
+  const [cancelling, setCancelling] = useState<string | null>(null)
   const venueNames = new Map(venues.map((venue) => [venue.id, venue.name]))
   const byId = new Map(bookings.map((booking) => [booking.id, booking]))
   // SCRUM-116 AC6: a rejected or expired replacement no longer counts, so another can be
@@ -311,6 +321,20 @@ function ExistingVenueBookings({
                   <dd className="inline">{heldPeriod(booking)}</dd>
                 </div>
               )}
+              {booking.status === 'cancelled' && booking.cancelled_at && (
+                <>
+                  <div>
+                    <dt className="inline font-medium">
+                      {describeCanceller(booking.cancelled_by_id, viewerId)}:{' '}
+                    </dt>
+                    <dd className="inline">{formatBookingTime(booking.cancelled_at)}</dd>
+                  </div>
+                  <div>
+                    <dt className="inline font-medium">Reason: </dt>
+                    <dd className="inline">{booking.cancellation_reason}</dd>
+                  </div>
+                </>
+              )}
             </dl>
             {booking.conflict && (
               <p className="mt-2 rounded bg-amber-50 p-2 text-amber-800" role="status">
@@ -345,6 +369,24 @@ function ExistingVenueBookings({
                   Find a replacement
                 </button>
               )}
+            {canOfferCancel(booking, event, viewerId) && cancelling !== booking.id && (
+              <button
+                type="button"
+                onClick={() => setCancelling(booking.id)}
+                aria-label={`Cancel arrangement for ${booking.session_label}`}
+                className="mt-2 block rounded border border-red-300 px-2 py-1 text-red-800"
+              >
+                Cancel arrangement
+              </button>
+            )}
+            {cancelling === booking.id && (
+              <CancelArrangementDialog
+                eventId={event.id}
+                booking={booking}
+                venueName={venueNames.get(booking.venue_id) ?? 'the selected venue'}
+                onClose={() => setCancelling(null)}
+              />
+            )}
           </li>
         ))}
       </ul>
