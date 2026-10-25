@@ -35,6 +35,10 @@ class NotificationType(StrEnum):
     SAFETY_APPROVED = "safety_approved"
     SAFETY_REJECTED = "safety_rejected"
     SAFETY_CHANGES_REQUESTED = "safety_changes_requested"
+    # SCRUM-49 AC1/AC2: a new Pending venue request needs Venue Staff review. The type
+    # names the new-request action, so staff can tell it apart from later revised
+    # requests (SCRUM-127) without opening the event.
+    VENUE_REQUEST_SUBMITTED = "venue_request_submitted"
 
 
 class NotificationSource(StrEnum):
@@ -70,3 +74,8 @@ class NotificationSource(StrEnum):
     # review row's id is a stable key: the same decision cannot notify twice and a
     # later decision on the same event is a new row and so a new notification.
     SAFETY_REVIEW = "safety_review"
+    # SCRUM-49: one new Pending venue request. The booking row's id is the source_id,
+    # so retrying the same submission collides per recipient (idempotent) while a
+    # later distinct request for the same event stays distinct. SCRUM-127 owns
+    # revised requests and uses its own source identity.
+    VENUE_REQUEST = "venue_request"
