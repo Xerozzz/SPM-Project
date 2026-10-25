@@ -15,6 +15,9 @@ from models.equipment_requirement_change import (
     EquipmentRequirementChange as EquipmentRequirementChange,
 )
 from models.equipment_reservation import EquipmentReservation as EquipmentReservation
+from models.event_cancellation_request import (
+    EventCancellationRequest as EventCancellationRequest,
+)
 from models.event_change_request import EventChangeItem as EventChangeItem
 from models.event_change_request import EventChangeRequest as EventChangeRequest
 from models.event_clarification import EventClarification as EventClarification

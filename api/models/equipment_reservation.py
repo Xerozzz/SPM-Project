@@ -62,9 +62,12 @@ class EquipmentReservation(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_now
     )
-    # Null means the reservation still holds stock. Nothing sets it yet: releasing belongs
-    # to Event Change Management.
+    # Null means the reservation still holds stock. Cancelling the event sets it
+    # (SCRUM-115 AC5). The row and its quantity stay, so what was held is still known.
     released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    released_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
     # Set when the requirement this reservation belongs to is changed or removed, which
     # flags the reservation rather than releasing it (SCRUM-53 part 3, ADR-0033 AC6). A
     # later change keeps the first flag time.

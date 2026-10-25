@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.security import decode_access_token
+from domain.event_cancellation import may_read_cancellation
 from domain.event_change import accepts_change_request
 from domain.event_completion import may_read_closure
 from domain.event_request import accepts_ordinary_update
@@ -43,6 +44,8 @@ class EventAccess(StrEnum):
     assignee's alone. Cancelling one venue arrangement (SCRUM-109) is for the current
     assignee only. Completing an event (SCRUM-86) is the current assignee's, and its
     closure record is for the owner, the assignee, any Lead and staff who took part.
+    Asking for a cancellation (SCRUM-115) is the owner's, applying or declining it is the
+    current assignee's, and the requests are readable by both and by any Lead.
     """
 
     VIEW = "view"
@@ -66,6 +69,9 @@ class EventAccess(StrEnum):
     CANCEL_VENUE_ARRANGEMENT = "cancel_venue_arrangement"
     COMPLETE_EVENT = "complete_event"
     READ_EVENT_CLOSURE = "read_event_closure"
+    REQUEST_EVENT_CANCELLATION = "request_event_cancellation"
+    CANCEL_EVENT = "cancel_event"
+    READ_EVENT_CANCELLATION = "read_event_cancellation"
 
 
 def get_current_user(
@@ -259,6 +265,32 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
                 is_lead=Role.COORDINATOR_LEAD.value in roles,
                 is_participating_staff=is_staff
                 and viewer_id in event_closures.acted_on_event(db, request.id),
+            ):
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        # SCRUM-115 AC1: only the owning Organiser asks for their event to be cancelled.
+        # No status pin: the service says why an event that is not active is refused.
+        if permission is EventAccess.REQUEST_EVENT_CANCELLATION:
+            if is_owner:
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        # SCRUM-115 AC2: only the current assigned Coordinator cancels the event or
+        # declines a request, so a reassignment moves the right at once.
+        if permission is EventAccess.CANCEL_EVENT:
+            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+            if is_assigned:
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        # SCRUM-115 AC1: the owner, the current assignee and any Lead see the requests.
+        if permission is EventAccess.READ_EVENT_CANCELLATION:
+            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+            if may_read_cancellation(
+                is_owner=is_owner,
+                is_assigned=is_assigned,
+                is_lead=Role.COORDINATOR_LEAD.value in roles,
             ):
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")

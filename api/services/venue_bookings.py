@@ -331,6 +331,20 @@ def stage_cancellation(
     # of someone else's booking discloses nothing.
     if booking is None or booking.event_request_id != event.id:
         raise BookingNotFoundError
+    stage_booking_cancellation(booking, cancelled_by_id, reason, now)
+    db.flush()
+    return booking
+
+
+def stage_booking_cancellation(
+    booking: VenueBooking, cancelled_by_id: uuid.UUID, reason: str | None, now: datetime
+) -> None:
+    """Cancel one booking the caller has already locked, with who, when and why.
+
+    The one place a booking becomes Cancelled. `stage_cancellation` calls it after its
+    planning-only event check, and SCRUM-115 calls it for each live booking when a whole
+    event is cancelled, including a Confirmed event, under its own event lock.
+    """
     cancelled = venue_cancellation.cancel(booking.status, booking.expires_at, now)
     problems = venue_cancellation.reason_problems(reason)
     if problems:
@@ -340,8 +354,6 @@ def stage_cancellation(
     booking.cancelled_by_id = cancelled_by_id
     booking.cancelled_at = now
     booking.cancellation_reason = reason.strip()
-    db.flush()
-    return booking
 
 
 def cancel_arrangement(

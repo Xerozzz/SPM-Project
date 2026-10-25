@@ -5,10 +5,10 @@ import type { BookingConflict } from './venueBookingDecisions'
  */
 
 export type EventStatus =
-  'draft' | 'submitted' | 'approved' | 'rejected' | 'confirmed' | 'completed'
+  'draft' | 'submitted' | 'approved' | 'rejected' | 'confirmed' | 'completed' | 'cancelled'
 
 export type EventAction =
-  'edit' | 'submit' | 'approve' | 'reject' | 'replan' | 'confirm' | 'complete'
+  'edit' | 'submit' | 'approve' | 'reject' | 'replan' | 'confirm' | 'complete' | 'cancel'
 
 export interface EventCalendarEntry {
   id: string

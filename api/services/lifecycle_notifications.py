@@ -3,7 +3,8 @@
 Every function here stages and never commits. The source action calls it inside its own
 transaction, so a notification exists only if the action did, and a rollback leaves none
 (AC9). SCRUM-99's (recipient, source) uniqueness makes retries and overlapping roles
-harmless. Whole-event cancellation is SCRUM-115's and is not sent from here (AC6).
+harmless. SCRUM-115 adds whole-event cancellation and its requests here, staff side only.
+Attendees hear about a cancellation through SCRUM-135, once SCRUM-51 lands.
 """
 
 import uuid
@@ -14,12 +15,14 @@ from core.database import Session
 from domain.event_status import EventStatus
 from domain.lifecycle_notifications import (
     affected_staff,
+    cancellation_staff,
     confirmation_key,
     replan_key,
     review_due_key,
 )
 from domain.notifications import NotificationSource, NotificationType
 from domain.safety_review import PlanSnapshot, blockers, fingerprint
+from models.event_cancellation_request import EventCancellationRequest
 from models.event_request import EventRequest
 from repositories import event_closures
 from repositories import lifecycle_recipients as recipients
@@ -130,6 +133,55 @@ def completed(db: Session, event: EventRequest, now: datetime) -> None:
         [event.organiser_id, event.coordinator_id],
         NotificationType.EVENT_COMPLETED,
         NotificationSource.EVENT_COMPLETION,
+        str(event.id),
+        now,
+    )
+
+
+def cancellation_requested(
+    db: Session, event: EventRequest, request: EventCancellationRequest, now: datetime
+) -> None:
+    """SCRUM-115 AC1: the Organiser's request goes to the current assigned Coordinator."""
+    _send(
+        db,
+        event,
+        [event.coordinator_id],
+        NotificationType.CANCELLATION_REQUESTED,
+        NotificationSource.CANCELLATION_REQUEST,
+        str(request.id),
+        now,
+    )
+
+
+def cancellation_declined(
+    db: Session, event: EventRequest, request: EventCancellationRequest, now: datetime
+) -> None:
+    """SCRUM-115 AC1: the Organiser hears that their request was declined."""
+    _send(
+        db,
+        event,
+        [request.requested_by_id],
+        NotificationType.CANCELLATION_DECLINED,
+        NotificationSource.CANCELLATION_DECISION,
+        str(request.id),
+        now,
+    )
+
+
+def cancelled(db: Session, event: EventRequest, now: datetime) -> None:
+    """SCRUM-115 AC9: the Organiser, the Coordinator and staff who took part.
+
+    Keyed to the event, since Cancelled is terminal and happens once. Someone in two of
+    these roles is one recipient, and a retry collides on the unique key.
+    """
+    actors = event_closures.acted_on_event(db, event.id)
+    staff = cancellation_staff(actors, recipients.roles_of(db, actors))
+    _send(
+        db,
+        event,
+        {event.organiser_id, event.coordinator_id} | staff,
+        NotificationType.EVENT_CANCELLED,
+        NotificationSource.EVENT_CANCELLATION,
         str(event.id),
         now,
     )

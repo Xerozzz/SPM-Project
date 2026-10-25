@@ -70,6 +70,7 @@ someone else made two weeks ago.
 | [0058](0058-registration-decision-history-notes.md) | Keep manual registration decision notes in registration history | Proposed |
 | [0059](0059-event-completion-and-versioned-closure-notes.md) | Complete an event in one transaction and keep closure notes as versions | Proposed |
 | [0060](0060-lifecycle-notifications-staged-in-the-source-action.md) | Stage lifecycle notifications in the source action, keyed once per action | Proposed |
+| [0061](0061-cancel-a-whole-event-in-one-transaction.md) | Cancel a whole event in one transaction, reusing each owner's staged operation | Proposed |
 
 ## When to write one
 

@@ -13,6 +13,7 @@ import { useAuth } from '../auth/useAuth'
 import { hasReviewNote } from '../validation/eventRequestReview'
 import { acceptsOrdinaryUpdate } from '../validation/planningInfo'
 import { AssignmentHistoryToggle } from './AssignmentHistory'
+import CancelEvent from './CancelEvent'
 import ChangeRequestList from './ChangeRequestList'
 import ClarificationThread from './ClarificationThread'
 import CompleteEvent from './CompleteEvent'
@@ -225,6 +226,10 @@ function ReviewCard({
       {/* SCRUM-86: close the event once it has run, then keep its record correctable. */}
       {request.status === 'confirmed' && (
         <CompleteEvent event={request} onCompleted={onConfirmed} />
+      )}
+      {/* SCRUM-115: cancel the event, or answer the Organiser's request to. */}
+      {request.status_permits.includes('cancel') && (
+        <CancelEvent event={request} onCancelled={onConfirmed} />
       )}
     </article>
   )
