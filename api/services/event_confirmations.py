@@ -34,6 +34,7 @@ from models.venue_booking import VenueBooking
 from repositories import event_requests as event_repo
 from repositories import safety_reviews as safety_repo
 from repositories import venue_availability as booking_repo
+from services import lifecycle_notifications as lifecycle
 from services import safety_reviews as safety_service
 from services import venue_buffer_review
 
@@ -84,6 +85,16 @@ def _needing_attention(db: Session, event: EventRequest, now: datetime) -> set[u
     if not standing:
         return set()
     return set(venue_buffer_review.problems_by_booking(db, standing, now))
+
+
+def announce_review_due(db: Session, event: EventRequest, now: datetime) -> None:
+    """SCRUM-50 AC2: tell the Safety Officers when this plan version is ready for review.
+
+    Called when the Coordinator reads readiness, the point where a plan is being checked.
+    Keyed on the plan fingerprint, so reading an unchanged plan again notifies nobody.
+    """
+    lifecycle.review_due(db, event, safety_service.plan_of(db, event, now), now)
+    db.commit()
 
 
 def readiness(db: Session, event: EventRequest, now: datetime) -> ConfirmationProblems:
@@ -144,6 +155,8 @@ def confirm(db: Session, event: EventRequest, actor_id: uuid.UUID, now: datetime
     locked.status = event_status.confirm(locked.status)
     locked.confirmed_by_id = actor_id
     locked.confirmed_at = now
+    # SCRUM-50 AC4: the Organiser and the Coordinator hear it, in the same commit.
+    lifecycle.confirmed(db, locked, now)
 
     db.commit()
     db.refresh(locked)

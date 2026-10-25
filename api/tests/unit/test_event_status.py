@@ -124,6 +124,7 @@ def test_active_status_classification(status: EventStatus, expected: bool) -> No
 def test_active_statuses_cover_every_known_status() -> None:
     """TC-100-01 boundary: no status is left unclassified when a new one is added —
     adding a value without deciding its bucket fails here."""
-    assert set(ACTIVE_STATUSES) | {EventStatus.DRAFT, EventStatus.REJECTED} == set(EventStatus)
+    inactive = {EventStatus.DRAFT, EventStatus.REJECTED, EventStatus.COMPLETED}
+    assert set(ACTIVE_STATUSES) | inactive == set(EventStatus)
     for status in EventStatus:
         assert is_active_status(status) is (status in ACTIVE_STATUSES)

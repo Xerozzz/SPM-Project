@@ -15,6 +15,7 @@ import { acceptsOrdinaryUpdate } from '../validation/planningInfo'
 import { AssignmentHistoryToggle } from './AssignmentHistory'
 import ChangeRequestList from './ChangeRequestList'
 import ClarificationThread from './ClarificationThread'
+import CompleteEvent from './CompleteEvent'
 import ConfirmEvent from './ConfirmEvent'
 import EventEquipmentRequirements from './EventEquipmentRequirements'
 import PlanningInfoEditor from './PlanningInfoEditor'
@@ -220,6 +221,10 @@ function ReviewCard({
           <RegistrationSettingsCard event={request} />
           <RegistrationReviewList eventId={request.id} />
         </>
+      )}
+      {/* SCRUM-86: close the event once it has run, then keep its record correctable. */}
+      {request.status === 'confirmed' && (
+        <CompleteEvent event={request} onCompleted={onConfirmed} />
       )}
     </article>
   )

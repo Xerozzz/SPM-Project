@@ -23,6 +23,7 @@ from models.equipment_requirement_change import EquipmentRequirementChange
 from models.equipment_reservation import EquipmentReservation
 from models.event_change_request import EventChangeItem, EventChangeRequest
 from models.event_clarification import EventClarification
+from models.event_closure_note import EventClosureNote
 from models.event_coordinator_assignment import EventCoordinatorAssignment
 from models.event_equipment_requirement import EventEquipmentRequirement
 from models.event_registration import EventRegistration, EventRegistrationHistory
@@ -302,6 +303,8 @@ _DEPENDENTS = (
     EquipmentReservation,
     EventEquipmentRequirement,
     EventClarification,
+    # SCRUM-86: closure notes of a completed event.
+    EventClosureNote,
     EventCoordinatorAssignment,
     Notification,
     # SCRUM-42. History points at a registration rather than the event, so it is

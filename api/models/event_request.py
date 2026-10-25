@@ -79,6 +79,11 @@ class EventRequest(Base):
         UUID(as_uuid=True), ForeignKey("users.id")
     )
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # SCRUM-86: who completed the event and when. The source action SCRUM-50 notifies on.
+    completed_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id")
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # SCRUM-113: operational intake controls are deliberately separate from the
     # organiser's locked planning requirement above.
     registration_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

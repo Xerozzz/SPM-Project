@@ -40,7 +40,9 @@ def read_readiness(event: ConfirmableEvent, db: Db) -> ConfirmationReadinessRead
     `not_in_planning` instead of an error, which is what a screen needs to show the
     right thing on every card it has.
     """
-    found = service.readiness(db, event, datetime.now(UTC))
+    now = datetime.now(UTC)
+    service.announce_review_due(db, event, now)
+    found = service.readiness(db, event, now)
     return ConfirmationReadinessRead.of(event, found)
 
 

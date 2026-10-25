@@ -40,6 +40,7 @@ from repositories import notifications as notifications_repo
 from repositories import safety_reviews as repo
 from repositories import venue_availability as booking_repo
 from services import equipment_requirements as requirement_service
+from services import lifecycle_notifications as lifecycle
 
 #: AC5: which notification each decision raises. The type names the decision, as
 #: SCRUM-94's do, so the Coordinator can tell whether the plan is back with them
@@ -199,6 +200,8 @@ def record(
             source_id=str(recorded.id),
             occurred_at=now,
         )
+    # SCRUM-50 AC3: the owning Organiser hears the decision as well.
+    lifecycle.safety_decided(db, event, _NOTIFICATION_OF[decision], recorded.id, now)
     db.commit()
     db.refresh(recorded)
     return recorded

@@ -93,8 +93,17 @@ def close_intake(db: Session, event_id: uuid.UUID, now: datetime) -> EventReques
         return event
     if not intake_is_open(event.status, settings_of(event), now):
         raise RegistrationIntakeError("registration intake is not open")
-    event.registration_closed_at = now
+    close(event, now)
     return event_repo.save(db, event)
+
+
+def close(event: EventRequest, now: datetime) -> None:
+    """Stage the close marker without committing (SCRUM-86).
+
+    For callers that already hold the event's lock and commit once, such as completing
+    an event, so the close lands or rolls back with it. Registrations are untouched.
+    """
+    event.registration_closed_at = now
 
 
 def require_open_intake(event: EventRequest, now: datetime) -> None:

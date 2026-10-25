@@ -192,13 +192,15 @@ def _record_impact(
             source_id=impact_key(record.id, record.starts_at, record.ends_at, item.booking.id),
             occurred_at=now,
         )
-    _replan_confirmed(db, affected, now)
+    _replan_confirmed(db, affected, record, now)
     db.commit()
     db.refresh(record)
     return SavedClosure(record=record, affected=affected)
 
 
-def _replan_confirmed(db: Session, affected: list[AffectedArrangement], now: datetime) -> None:
+def _replan_confirmed(
+    db: Session, affected: list[AffectedArrangement], record: VenueUnavailability, now: datetime
+) -> None:
     """SCRUM-132: return each affected Confirmed event to planning (ADR-0053).
 
     Each event once, however many of its arrangements the closure hits. Locked in id
@@ -209,4 +211,5 @@ def _replan_confirmed(db: Session, affected: list[AffectedArrangement], now: dat
     for event_id in event_ids:
         event = event_repo.get_for_update(db, event_id)
         if event is not None and needs_replanning(event.status):
-            return_to_planning(db, event, ReplanCause.VENUE_CLOSURE, now)
+            source = f"{record.id}|{record.starts_at.isoformat()}|{record.ends_at.isoformat()}"
+            return_to_planning(db, event, ReplanCause.VENUE_CLOSURE, source, now)

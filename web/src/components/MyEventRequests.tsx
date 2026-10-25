@@ -14,6 +14,7 @@ import { useAuth } from '../auth/useAuth'
 import { acceptsChangeRequest } from '../validation/eventChange'
 import { AssignmentHistoryToggle } from './AssignmentHistory'
 import ChangeRequestList from './ChangeRequestList'
+import ClosureRecord from './ClosureRecord'
 import ProposeChange from './ProposeChange'
 import RegistrationIntakeControls from './RegistrationIntakeControls'
 import RegistrationReviewList from './RegistrationReviewList'
@@ -175,6 +176,12 @@ export default function MyEventRequests({
                     <RegistrationReviewList eventId={request.id} canDecide />
                   </div>
                 )}
+                {/* SCRUM-86 AC4: the owning Organiser reads the closure record. */}
+                {request.status === 'completed' && (
+                  <div className="w-full">
+                    <ClosureRecord eventId={request.id} />
+                  </div>
+                )}
                 {/* SCRUM-105: a draft has never been submitted, so it has no history. */}
                 {request.status !== 'draft' && (
                   <div className="w-full">
@@ -204,6 +211,7 @@ function StatusLabel({ status }: { status: EventRequest['status'] }) {
   if (status === 'approved') return <>Approved</>
   if (status === 'rejected') return <>Rejected</>
   if (status === 'confirmed') return <>Confirmed</>
+  if (status === 'completed') return <>Completed</>
   return <>Draft</>
 }
 
