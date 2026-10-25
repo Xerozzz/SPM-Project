@@ -22,6 +22,7 @@ from domain.event_request import (
     field_names,
     validate_event_request,
 )
+from domain.notifications import NotificationSource, NotificationType
 from domain.validation import FieldProblem
 from domain.venue_booking import BookingStatus
 from domain.venue_buffer import VenueBuffers, effective_interval
@@ -30,6 +31,8 @@ from models.venue import Venue
 from models.venue_booking import VenueBooking
 from repositories import equipment_requirements as requirement_repo
 from repositories import event_requests as event_repo
+from repositories import notifications as notifications_repo
+from repositories import users as users_repo
 from repositories import venue_availability as booking_repo
 from repositories import venues as venue_repo
 from services import venue_buffer_review as buffer_review
@@ -162,6 +165,29 @@ def submit(
         status=BookingStatus.PENDING,
         replaces_booking_id=replaces_booking_id,
     )
+    # SCRUM-49: notify every active Venue Staff member of the new Pending request.
+    # Staged before the commit so the booking and its notifications land or roll back
+    # together; the occurrence time is the submission time, not a second clock read;
+    # the (venue_request, booking id) source pair makes a retry collide instead of
+    # duplicating (ADR-0022). Revised requests (replaces_booking_id set) are owned by
+    # SCRUM-127 and stay silent here. With no active Venue Staff the loop stages
+    # nothing and the booking still commits (AC4).
+    if replaces_booking_id is None:
+        db.add(booking)
+        db.flush()
+        for staff in users_repo.list_active_venue_staff(db):
+            notifications_repo.stage(
+                db,
+                recipient_id=staff.id,
+                event_request_id=locked.id,
+                type=NotificationType.VENUE_REQUEST_SUBMITTED,
+                source_type=NotificationSource.VENUE_REQUEST,
+                source_id=str(booking.id),
+                occurred_at=now,
+            )
+        db.commit()
+        db.refresh(booking)
+        return booking, suitability
     return booking_repo.save_booking(db, booking), suitability
 
 
