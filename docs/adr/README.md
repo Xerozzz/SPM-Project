@@ -69,6 +69,7 @@ someone else made two weeks ago.
 | [0057](0057-adopt-a-replacement-through-single-cancellation.md) | Adopt a replacement by cancelling the original through SCRUM-109 | Proposed |
 | [0058](0058-registration-decision-history-notes.md) | Keep manual registration decision notes in registration history | Proposed |
 | [0059](0059-event-completion-and-versioned-closure-notes.md) | Complete an event in one transaction and keep closure notes as versions | Proposed |
+| [0060](0060-lifecycle-notifications-staged-in-the-source-action.md) | Stage lifecycle notifications in the source action, keyed once per action | Proposed |
 
 ## When to write one
 

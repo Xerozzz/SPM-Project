@@ -35,6 +35,15 @@ class NotificationType(StrEnum):
     SAFETY_APPROVED = "safety_approved"
     SAFETY_REJECTED = "safety_rejected"
     SAFETY_CHANGES_REQUESTED = "safety_changes_requested"
+    # SCRUM-50: event changes, safety and lifecycle. Each type names the action, and for
+    # an event the status it is now in, so a recipient can tell without opening it.
+    CHANGE_PROPOSED = "change_proposed"
+    CHANGE_APPROVED = "change_approved"
+    CHANGE_REJECTED = "change_rejected"
+    SAFETY_REVIEW_DUE = "safety_review_due"
+    EVENT_CONFIRMED = "event_confirmed"
+    EVENT_REPLANNED = "event_replanned"
+    EVENT_COMPLETED = "event_completed"
 
 
 class NotificationSource(StrEnum):
@@ -70,3 +79,17 @@ class NotificationSource(StrEnum):
     # review row's id is a stable key: the same decision cannot notify twice and a
     # later decision on the same event is a new row and so a new notification.
     SAFETY_REVIEW = "safety_review"
+    # SCRUM-50: one change request. Its id is the source_id for the proposal and, as a
+    # different source type, for its decision, so each notifies once.
+    CHANGE_REQUEST = "change_request"
+    CHANGE_DECISION = "change_decision"
+    # SCRUM-50: one version of a plan becoming reviewable, keyed by the plan fingerprint,
+    # so polling an unchanged plan never notifies again (domain.lifecycle_notifications).
+    SAFETY_PLAN = "safety_plan"
+    # SCRUM-50: one confirmation, keyed by its time, so a reconfirmation is new news.
+    EVENT_CONFIRMATION = "event_confirmation"
+    # SCRUM-50: one return to planning, keyed by what caused it.
+    EVENT_REPLAN = "event_replan"
+    # SCRUM-50: the completion of one event. Completed is terminal, so the event id is
+    # the source_id.
+    EVENT_COMPLETION = "event_completion"
