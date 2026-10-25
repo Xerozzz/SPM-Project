@@ -14,6 +14,7 @@ import { useAuth } from '../auth/useAuth'
 import { acceptsChangeRequest } from '../validation/eventChange'
 import { AssignmentHistoryToggle } from './AssignmentHistory'
 import ChangeRequestList from './ChangeRequestList'
+import ClosureRecord from './ClosureRecord'
 import ProposeChange from './ProposeChange'
 import RegistrationIntakeControls from './RegistrationIntakeControls'
 import RegistrationReviewList from './RegistrationReviewList'
@@ -173,6 +174,12 @@ export default function MyEventRequests({
                   <div className="w-full">
                     <RegistrationIntakeControls event={request} />
                     <RegistrationReviewList eventId={request.id} canDecide />
+                  </div>
+                )}
+                {/* SCRUM-86 AC4: the owning Organiser reads the closure record. */}
+                {request.status === 'completed' && (
+                  <div className="w-full">
+                    <ClosureRecord eventId={request.id} />
                   </div>
                 )}
                 {/* SCRUM-105: a draft has never been submitted, so it has no history. */}
