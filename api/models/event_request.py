@@ -84,6 +84,13 @@ class EventRequest(Base):
         UUID(as_uuid=True), ForeignKey("users.id")
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # SCRUM-115 AC3: who cancelled the event, when and why. The source action the
+    # cancellation notifications are keyed to.
+    cancelled_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id")
+    )
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancellation_reason: Mapped[str | None] = mapped_column(Text)
     # SCRUM-113: operational intake controls are deliberately separate from the
     # organiser's locked planning requirement above.
     registration_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

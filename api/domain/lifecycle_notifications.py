@@ -17,6 +17,9 @@ _NAMESPACE = uuid.UUID("5c0e8a3b-5c1a-4b4e-9f50-50a1f0c0de50")
 #: AC5: staff roles responsible for an event's arrangements.
 ARRANGEMENT_STAFF_ROLES = frozenset({Role.VENUE_STAFF.value, Role.TECH_SUPPORT.value})
 
+#: SCRUM-115 AC9: a cancellation also reaches Safety Officers who took part.
+CANCELLATION_STAFF_ROLES = ARRANGEMENT_STAFF_ROLES | {Role.SAFETY_OFFICER.value}
+
 
 def _key(*parts: object) -> str:
     return str(uuid.uuid5(_NAMESPACE, "|".join(str(part) for part in parts)))
@@ -42,3 +45,10 @@ def affected_staff(
 ) -> set[uuid.UUID]:
     """AC5: venue and technical staff who acted on the event's arrangements."""
     return {actor for actor in actor_ids if ARRANGEMENT_STAFF_ROLES & set(roles_of.get(actor, []))}
+
+
+def cancellation_staff(
+    actor_ids: Iterable[uuid.UUID], roles_of: dict[uuid.UUID, list[str]]
+) -> set[uuid.UUID]:
+    """SCRUM-115 AC9: venue, technical and safety staff who acted on the event."""
+    return {actor for actor in actor_ids if CANCELLATION_STAFF_ROLES & set(roles_of.get(actor, []))}

@@ -44,7 +44,7 @@ async def test_a_submitted_request_is_listed_with_coordinator_decisions(
 
     assert submit_response.status_code == 200
     assert response.status_code == 200
-    assert response.json()[0]["status_permits"] == ["approve", "reject"]
+    assert response.json()[0]["status_permits"] == ["approve", "cancel", "reject"]
 
 
 @pytest.mark.story("SCRUM-35")
@@ -60,4 +60,4 @@ async def test_submitting_a_draft_returns_its_new_actions(
         response = await client.post(f"/api/event-requests/{draft.id}/submit")
 
     assert response.status_code == 200
-    assert response.json()["status_permits"] == ["approve", "reject"]
+    assert response.json()["status_permits"] == ["approve", "cancel", "reject"]

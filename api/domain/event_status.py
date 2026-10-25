@@ -13,6 +13,7 @@ Stories add transitions here as they land, each with its own tests:
     SCRUM-35  allowed_actions: what a status permits
     SCRUM-47  confirmed -> approved                   (an approved change reopens planning)
     SCRUM-86  confirmed -> completed                  (the event has run, terminal)
+    SCRUM-115 submitted | approved | confirmed -> cancelled  (terminal)
 
 SCRUM-34 pre-declared the `CONFIRMED` value ahead of any story landing the transition
 into it: coordinator assignment needs to ask "does this coordinator already have a
@@ -34,6 +35,8 @@ class EventStatus(StrEnum):
     REJECTED = "rejected"
     # SCRUM-86: the event has run and its Coordinator closed it. Terminal, nothing leaves it.
     COMPLETED = "completed"
+    # SCRUM-115: the assigned Coordinator cancelled the event. Terminal, nothing leaves it.
+    CANCELLED = "cancelled"
 
 
 class EventAction(StrEnum):
@@ -49,6 +52,8 @@ class EventAction(StrEnum):
     CONFIRM = "confirm"
     # SCRUM-86: the assigned Coordinator closes an event that has run.
     COMPLETE = "complete"
+    # SCRUM-115: the assigned Coordinator cancels an active event.
+    CANCEL = "cancel"
 
 
 class InvalidTransitionError(Exception):
@@ -79,6 +84,9 @@ _ALLOWED_TRANSITIONS: dict[tuple[EventStatus, EventStatus], EventAction] = {
     (EventStatus.APPROVED, EventStatus.CONFIRMED): EventAction.CONFIRM,
     (EventStatus.CONFIRMED, EventStatus.APPROVED): EventAction.REPLAN,
     (EventStatus.CONFIRMED, EventStatus.COMPLETED): EventAction.COMPLETE,
+    (EventStatus.SUBMITTED, EventStatus.CANCELLED): EventAction.CANCEL,
+    (EventStatus.APPROVED, EventStatus.CANCELLED): EventAction.CANCEL,
+    (EventStatus.CONFIRMED, EventStatus.CANCELLED): EventAction.CANCEL,
 }
 
 
@@ -135,6 +143,17 @@ def complete(current: EventStatus) -> EventStatus:
     return transition(current, EventStatus.COMPLETED)
 
 
+def cancel(current: EventStatus) -> EventStatus:
+    """SCRUM-115 AC2, AC3: the assigned Coordinator cancels a submitted, planning or
+    Confirmed event.
+
+    Only the status move lives here. Releasing the event's arrangements is
+    `services.event_cancellations`'s job, in the same transaction. Cancelled has no way
+    out, so nothing can reconfirm or resume it (AC7).
+    """
+    return transition(current, EventStatus.CANCELLED)
+
+
 def is_editable(status: EventStatus) -> bool:
     """Drafts and rejected requests may be edited directly; an approved or submitted
     request remains locked."""
@@ -158,8 +177,7 @@ def allowed_actions(status: EventStatus) -> frozenset[EventAction]:
 # SCRUM-100: which statuses count as "active" for the Lead assignment overview.
 # Active means the request still needs coordinator ownership or planning attention:
 # SUBMITTED (awaiting review/assignment), APPROVED (planning), CONFIRMED (committed).
-# DRAFT (never submitted), REJECTED and COMPLETED (terminal) are inactive. A cancelled
-# status does not exist yet; when added it joins the inactive set, not this one.
+# DRAFT (never submitted), REJECTED, COMPLETED and CANCELLED (terminal) are inactive.
 ACTIVE_STATUSES: frozenset[EventStatus] = frozenset(
     {EventStatus.SUBMITTED, EventStatus.APPROVED, EventStatus.CONFIRMED}
 )

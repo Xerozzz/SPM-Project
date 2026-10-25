@@ -76,6 +76,26 @@ def flag_live(db: Session, requirement_id: uuid.UUID, now: datetime) -> None:
     )
 
 
+def release_for_event(
+    db: Session, event_request_id: uuid.UUID, released_by_id: uuid.UUID, now: datetime
+) -> None:
+    """SCRUM-115 AC5: release every live reservation of one event, without committing.
+
+    Each row keeps its quantity and window, and gains who released it and when, so the
+    history of what was held stays. Released rows drop out of `_live_sum` and
+    `repositories.equipment.reserved_quantity`, so the stock is free again. Rows released
+    earlier keep their first release. No other event's reservation is touched.
+    """
+    db.execute(
+        update(EquipmentReservation)
+        .where(
+            EquipmentReservation.event_request_id == event_request_id,
+            EquipmentReservation.released_at.is_(None),
+        )
+        .values(released_at=now, released_by_id=released_by_id)
+    )
+
+
 def add(db: Session, reservation: EquipmentReservation) -> EquipmentReservation:
     """Commit a new reservation, which also releases the catalogue row locks."""
     db.add(reservation)

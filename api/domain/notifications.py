@@ -54,6 +54,11 @@ class NotificationType(StrEnum):
     REGISTRATION_ACCEPTED = "registration_accepted"
     REGISTRATION_WAITLISTED = "registration_waitlisted"
     REGISTRATION_WITHDRAWN = "registration_withdrawn"
+    # SCRUM-115: an Organiser asked for their event to be cancelled, the Coordinator
+    # declined that, or the event was cancelled.
+    CANCELLATION_REQUESTED = "cancellation_requested"
+    CANCELLATION_DECLINED = "cancellation_declined"
+    EVENT_CANCELLED = "event_cancelled"
 
 
 class NotificationSource(StrEnum):
@@ -111,3 +116,9 @@ class NotificationSource(StrEnum):
     # One append-only registration-history row is one source action. This makes a
     # retry collide while a later, distinct status transition stays visible.
     REGISTRATION_STATUS = "registration_status"
+    # SCRUM-115: one cancellation request, its id the source_id for the request and, as a
+    # different source type, for a decline. The cancellation of an event is terminal, so
+    # the event id is the source_id for that.
+    CANCELLATION_REQUEST = "cancellation_request"
+    CANCELLATION_DECISION = "cancellation_decision"
+    EVENT_CANCELLATION = "event_cancellation"

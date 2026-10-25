@@ -21,6 +21,7 @@ from domain.roles import Role
 from models.equipment import Equipment
 from models.equipment_requirement_change import EquipmentRequirementChange
 from models.equipment_reservation import EquipmentReservation
+from models.event_cancellation_request import EventCancellationRequest
 from models.event_change_request import EventChangeItem, EventChangeRequest
 from models.event_clarification import EventClarification
 from models.event_closure_note import EventClosureNote
@@ -305,6 +306,8 @@ _DEPENDENTS = (
     EventClarification,
     # SCRUM-86: closure notes of a completed event.
     EventClosureNote,
+    # SCRUM-115: an Organiser's cancellation requests.
+    EventCancellationRequest,
     EventCoordinatorAssignment,
     Notification,
     # SCRUM-42. History points at a registration rather than the event, so it is

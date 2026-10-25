@@ -78,7 +78,11 @@ def test_a_draft_may_be_edited_and_submitted() -> None:
 
 @pytest.mark.story("SCRUM-35")
 def test_a_submitted_request_permits_coordinator_decisions() -> None:
-    assert allowed_actions(EventStatus.SUBMITTED) == {EventAction.APPROVE, EventAction.REJECT}
+    assert allowed_actions(EventStatus.SUBMITTED) == {
+        EventAction.APPROVE,
+        EventAction.REJECT,
+        EventAction.CANCEL,
+    }
 
 
 @pytest.mark.story("SCRUM-35")
@@ -124,7 +128,12 @@ def test_active_status_classification(status: EventStatus, expected: bool) -> No
 def test_active_statuses_cover_every_known_status() -> None:
     """TC-100-01 boundary: no status is left unclassified when a new one is added —
     adding a value without deciding its bucket fails here."""
-    inactive = {EventStatus.DRAFT, EventStatus.REJECTED, EventStatus.COMPLETED}
+    inactive = {
+        EventStatus.DRAFT,
+        EventStatus.REJECTED,
+        EventStatus.COMPLETED,
+        EventStatus.CANCELLED,
+    }
     assert set(ACTIVE_STATUSES) | inactive == set(EventStatus)
     for status in EventStatus:
         assert is_active_status(status) is (status in ACTIVE_STATUSES)

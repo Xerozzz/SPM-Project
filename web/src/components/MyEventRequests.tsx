@@ -13,11 +13,13 @@ import {
 import { useAuth } from '../auth/useAuth'
 import { acceptsChangeRequest } from '../validation/eventChange'
 import { AssignmentHistoryToggle } from './AssignmentHistory'
+import CancellationRecord from './CancellationRecord'
 import ChangeRequestList from './ChangeRequestList'
 import ClosureRecord from './ClosureRecord'
 import ProposeChange from './ProposeChange'
 import RegistrationIntakeControls from './RegistrationIntakeControls'
 import RegistrationReviewList from './RegistrationReviewList'
+import RequestCancellation from './RequestCancellation'
 
 /**
  * SCRUM-46: an organiser's event requests, each with a Submit action while it is a draft.
@@ -157,7 +159,7 @@ export default function MyEventRequests({
                   >
                     Propose a change
                   </button>
-                ) : (
+                ) : request.status === 'cancelled' ? null : (
                   <span className="text-sm text-slate-500">
                     Locked - ask your coordinator to request changes
                   </span>
@@ -180,6 +182,17 @@ export default function MyEventRequests({
                 {request.status === 'completed' && (
                   <div className="w-full">
                     <ClosureRecord eventId={request.id} />
+                  </div>
+                )}
+                {/* SCRUM-115: ask the Coordinator to cancel, or see why it was cancelled. */}
+                {request.status_permits.includes('cancel') && (
+                  <div className="w-full">
+                    <RequestCancellation event={request} />
+                  </div>
+                )}
+                {request.status === 'cancelled' && (
+                  <div className="w-full">
+                    <CancellationRecord eventId={request.id} />
                   </div>
                 )}
                 {/* SCRUM-105: a draft has never been submitted, so it has no history. */}
@@ -212,6 +225,7 @@ function StatusLabel({ status }: { status: EventRequest['status'] }) {
   if (status === 'rejected') return <>Rejected</>
   if (status === 'confirmed') return <>Confirmed</>
   if (status === 'completed') return <>Completed</>
+  if (status === 'cancelled') return <>Cancelled</>
   return <>Draft</>
 }
 
