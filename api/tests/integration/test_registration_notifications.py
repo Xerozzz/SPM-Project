@@ -36,7 +36,7 @@ def registration_notifications_for(db: Session, recipient_id: object) -> list[No
 async def test_submission_and_withdrawal_notify_only_the_affected_attendee_once(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
-    event, organiser = open_event(db, make_user)
+    event, _organiser = open_event(db, make_user)
     attendee = make_user("attendee", "organiser")
 
     async with make_client(attendee) as client:
@@ -62,7 +62,7 @@ async def test_submission_and_withdrawal_notify_only_the_affected_attendee_once(
     assert all(row.event_request_id == event.id for row in attendee_rows)
     assert all(row.viewed_at is None for row in attendee_rows)
     assert len({row.source_id for row in attendee_rows}) == 3
-    assert registration_notifications_for(db, organiser.id) == []
+    assert registration_notifications_for(db, event.organiser_id) == []
 
 
 @pytest.mark.story("SCRUM-51")
