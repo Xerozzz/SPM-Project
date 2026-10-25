@@ -4,9 +4,11 @@ import type { BookingConflict } from './venueBookingDecisions'
  * Event request API calls for organisers. Mirrors api/schemas/event_requests.py.
  */
 
-export type EventStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'confirmed'
+export type EventStatus =
+  'draft' | 'submitted' | 'approved' | 'rejected' | 'confirmed' | 'completed'
 
-export type EventAction = 'edit' | 'submit' | 'approve' | 'reject' | 'replan' | 'confirm'
+export type EventAction =
+  'edit' | 'submit' | 'approve' | 'reject' | 'replan' | 'confirm' | 'complete'
 
 export interface EventCalendarEntry {
   id: string

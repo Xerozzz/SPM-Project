@@ -204,6 +204,7 @@ function StatusLabel({ status }: { status: EventRequest['status'] }) {
   if (status === 'approved') return <>Approved</>
   if (status === 'rejected') return <>Rejected</>
   if (status === 'confirmed') return <>Confirmed</>
+  if (status === 'completed') return <>Completed</>
   return <>Draft</>
 }
 
