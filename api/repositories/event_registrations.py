@@ -176,3 +176,16 @@ def list_history(db: Session, registration_id: uuid.UUID) -> list[EventRegistrat
         .order_by(EventRegistrationHistory.occurred_at.asc(), EventRegistrationHistory.id.asc())
     )
     return list(db.scalars(statement))
+
+
+def latest_history(db: Session, registration_id: uuid.UUID) -> EventRegistrationHistory:
+    """Return the just-staged source action after flushing it to obtain its stable id."""
+    db.flush()
+    statement = (
+        select(EventRegistrationHistory)
+        .where(EventRegistrationHistory.registration_id == registration_id)
+        .order_by(EventRegistrationHistory.occurred_at.desc(), EventRegistrationHistory.id.desc())
+        .limit(1)
+    )
+    action = db.scalars(statement).one()
+    return action

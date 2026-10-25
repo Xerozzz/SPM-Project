@@ -15,7 +15,7 @@ from models.event_registration import EventRegistration
 from models.event_request import EventRequest
 from repositories import event_registrations as repo
 from repositories import event_requests as event_repo
-from services import registration_intake
+from services import registration_intake, registration_notifications
 
 
 class RegistrationError(Exception):
@@ -103,6 +103,9 @@ def submit(
         phone_number,
         dietary_accessibility_notes,
     )
+    registration_notifications.status_changed(
+        db, event, registration, repo.latest_history(db, registration.id)
+    )
     try:
         db.commit()
     except IntegrityError as exc:
@@ -147,6 +150,9 @@ def withdraw(
     }:
         raise WithdrawalNotAllowedError("registration cannot be withdrawn in its current status")
     repo.withdraw(db, registration, attendee_id, now)
+    registration_notifications.status_changed(
+        db, event, registration, repo.latest_history(db, registration.id)
+    )
     db.commit()
     db.refresh(registration)
     return registration, False
@@ -186,6 +192,9 @@ def decide(
     except RegistrationDecisionError as exc:
         raise RegistrationDecisionNotAllowedError(str(exc)) from exc
     repo.decide(db, registration, actor_id, target, now, note)
+    registration_notifications.status_changed(
+        db, event, registration, repo.latest_history(db, registration.id)
+    )
     db.commit()
     db.refresh(registration)
     return registration, False

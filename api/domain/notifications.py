@@ -44,6 +44,12 @@ class NotificationType(StrEnum):
     EVENT_CONFIRMED = "event_confirmed"
     EVENT_REPLANNED = "event_replanned"
     EVENT_COMPLETED = "event_completed"
+    # SCRUM-42/SCRUM-114: an attendee's own registration lifecycle changed. The
+    # type preserves the outcome recorded by the immutable history source action.
+    REGISTRATION_PENDING = "registration_pending"
+    REGISTRATION_ACCEPTED = "registration_accepted"
+    REGISTRATION_WAITLISTED = "registration_waitlisted"
+    REGISTRATION_WITHDRAWN = "registration_withdrawn"
 
 
 class NotificationSource(StrEnum):
@@ -93,3 +99,6 @@ class NotificationSource(StrEnum):
     # SCRUM-50: the completion of one event. Completed is terminal, so the event id is
     # the source_id.
     EVENT_COMPLETION = "event_completion"
+    # One append-only registration-history row is one source action. This makes a
+    # retry collide while a later, distinct status transition stays visible.
+    REGISTRATION_STATUS = "registration_status"

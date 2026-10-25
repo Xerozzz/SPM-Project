@@ -71,16 +71,26 @@ export default function NotificationInbox() {
                   </>
                 )}
               </dl>
-              {notification.is_unread && (
-                <button
-                  type="button"
-                  disabled={markViewed.isPending}
-                  onClick={() => markViewed.mutate(notification.id)}
-                  className="mt-2 rounded border border-slate-300 px-2 py-1"
-                >
-                  Mark viewed
-                </button>
-              )}
+              <div className="mt-2 flex flex-col items-start gap-2">
+                {notification.source_type === 'registration_status' && (
+                  <a
+                    href={`#event-registration-${notification.event_request_id}`}
+                    className="text-blue-700 underline"
+                  >
+                    View my registration status
+                  </a>
+                )}
+                {notification.is_unread && (
+                  <button
+                    type="button"
+                    disabled={markViewed.isPending}
+                    onClick={() => markViewed.mutate(notification.id)}
+                    className="rounded border border-slate-300 px-2 py-1"
+                  >
+                    Mark viewed
+                  </button>
+                )}
+              </div>
             </li>
           ))}
         </ul>

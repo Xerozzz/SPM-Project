@@ -110,6 +110,15 @@ test('marking viewed keeps the row visible with its viewed time', async () => {
   expect(screen.queryByText('Mark viewed')).toBeNull()
 })
 
+test('links registration-status notifications to the attendee registration view', async () => {
+  signIn()
+  renderInbox(async () =>
+    json([{ ...newer, type: 'registration_accepted', source_type: 'registration_status' }]),
+  )
+  const link = await screen.findByRole('link', { name: 'View my registration status' })
+  expect(link.getAttribute('href')).toBe('#event-registration-req-1')
+})
+
 test('shows an error state when the inbox fails to load', async () => {
   signIn()
   renderInbox(async () => {
