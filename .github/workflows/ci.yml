@@ -5,6 +5,9 @@ on:
     branches: [main]
   push:
     branches: [main]
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -102,6 +105,11 @@ jobs:
     name: End-to-end (Playwright)
     runs-on: ubuntu-latest
     needs: [backend, frontend]
+    # Costly job: per-PR runs are opt-in via the `e2e` label (ADR-0061).
+    # Nightly schedule and manual dispatch always run it.
+    if: >
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'e2e')
     steps:
       - uses: actions/checkout@v7
       - name: Start the whole stack the way a marker would
