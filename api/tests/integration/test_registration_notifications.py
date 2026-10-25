@@ -32,7 +32,7 @@ def registration_notifications_for(db: Session, recipient_id: object) -> list[No
     ]
 
 
-@pytest.mark.story("SCRUM-42")
+@pytest.mark.story("SCRUM-51")
 async def test_submission_and_withdrawal_notify_only_the_affected_attendee_once(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -65,7 +65,7 @@ async def test_submission_and_withdrawal_notify_only_the_affected_attendee_once(
     assert registration_notifications_for(db, organiser.id) == []
 
 
-@pytest.mark.story("SCRUM-114")
+@pytest.mark.story("SCRUM-51")
 @pytest.mark.parametrize(
     ("target", "kind"),
     [
@@ -108,7 +108,7 @@ async def test_committed_organiser_decision_notifies_only_its_attendee(
     assert registration_notifications_for(db, coordinator.id) == []
 
 
-@pytest.mark.story("SCRUM-42")
+@pytest.mark.story("SCRUM-51")
 async def test_refused_submission_creates_no_registration_notification(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
