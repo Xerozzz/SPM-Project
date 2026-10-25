@@ -166,3 +166,29 @@ test('a requested cancellation is applied and the staff who took part are told',
   await signIn(page, 'attendee@example.com')
   await expect(inboxEntries(page, 'event_cancelled', event.id)).toHaveCount(0)
 })
+
+test('each attendee whose registration was cancelled is told, and nobody else', async ({
+  page,
+}) => {
+  // SCRUM-135: an attendee registers, the Coordinator cancels, and the attendee's inbox
+  // shows the cancellation. Someone who never registered is told nothing.
+  const event = await confirmedEvent(page.request)
+  const owner = await tokenFor(page.request, VENUE_SPEC_ACCOUNT)
+  await call(page.request, owner, 'POST', `/api/event-requests/${event.id}/registration/open`, {})
+  const attendee = await tokenFor(page.request, 'attendee@example.com')
+  await call(page.request, attendee, 'POST', `/api/attendee/events/${event.id}/registrations`, {
+    full_name: 'Ada Lovelace',
+    age: 24,
+    phone_number: '+65 8123 4567',
+  })
+  await call(page.request, owner, 'POST', `/api/event-requests/${event.id}/cancel`, {
+    reason: 'Storm warning',
+  })
+
+  await signIn(page, 'attendee@example.com')
+  await expect(inboxEntries(page, 'event_cancelled', event.id)).toHaveCount(1)
+  await signOut(page)
+
+  await signIn(page, 'attendee2@example.com')
+  await expect(inboxEntries(page, 'event_cancelled', event.id)).toHaveCount(0)
+})

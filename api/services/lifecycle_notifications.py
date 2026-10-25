@@ -3,8 +3,8 @@
 Every function here stages and never commits. The source action calls it inside its own
 transaction, so a notification exists only if the action did, and a rollback leaves none
 (AC9). SCRUM-99's (recipient, source) uniqueness makes retries and overlapping roles
-harmless. SCRUM-115 adds whole-event cancellation and its requests here, staff side only.
-Attendees hear about a cancellation through SCRUM-135, once SCRUM-51 lands.
+harmless. SCRUM-115 adds whole-event cancellation and its requests here, and SCRUM-135
+adds the attendees whose registration that cancellation cancelled.
 """
 
 import uuid
@@ -168,18 +168,21 @@ def cancellation_declined(
     )
 
 
-def cancelled(db: Session, event: EventRequest, now: datetime) -> None:
-    """SCRUM-115 AC9: the Organiser, the Coordinator and staff who took part.
+def cancelled(db: Session, event: EventRequest, attendees: set[uuid.UUID], now: datetime) -> None:
+    """SCRUM-115 AC9: the Organiser, the Coordinator and staff who took part. SCRUM-135:
+    each attendee whose Pending, Waitlisted or Accepted registration it cancelled.
 
-    Keyed to the event, since Cancelled is terminal and happens once. Someone in two of
-    these roles is one recipient, and a retry collides on the unique key.
+    `attendees` comes from the cancellation itself, so someone who had already withdrawn
+    is not in it. Keyed to the event, since Cancelled is terminal and happens once, and
+    every recipient shares that key: someone in two of these roles is one recipient, and
+    a retry collides on the unique key.
     """
     actors = event_closures.acted_on_event(db, event.id)
     staff = cancellation_staff(actors, recipients.roles_of(db, actors))
     _send(
         db,
         event,
-        {event.organiser_id, event.coordinator_id} | staff,
+        {event.organiser_id, event.coordinator_id} | staff | attendees,
         NotificationType.EVENT_CANCELLED,
         NotificationSource.EVENT_CANCELLATION,
         str(event.id),

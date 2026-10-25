@@ -560,7 +560,7 @@ def test_a_repeat_releases_and_notifies_nothing_more(db: Session, make_user: Mak
         service.cancel(db, event.id, coordinator.id, "Again", None, _NOW + timedelta(hours=1))
     db.rollback()
     # Staging the same notification again collides on its key.
-    lifecycle.cancelled(db, _stored(db, event), _NOW + timedelta(hours=1))
+    lifecycle.cancelled(db, _stored(db, event), set(), _NOW + timedelta(hours=1))
     db.commit()
 
     assert [row.released_at for row in _reservations(db, event)] == [
@@ -580,9 +580,6 @@ def test_the_organiser_coordinator_and_staff_who_took_part_are_told(
     db: Session, make_user: MakeUser
 ) -> None:
     event, booking, coordinator = _confirmed(db, make_user)
-    event.registration_opened_at = _NOW
-    db.flush()
-    registration = _register(db, event, make_user)
     hold_staff = booking.held_by_id
     tech = next(row.created_by_id for row in _reservations(db, event))
     officer = next(row.decided_by_id for row in safety_repo.list_for_event(db, event.id))
@@ -594,5 +591,3 @@ def test_the_organiser_coordinator_and_staff_who_took_part_are_told(
         assert _got(db, person, NotificationType.EVENT_CANCELLED) == 1, person
     for person in bystanders:
         assert _got(db, person, NotificationType.EVENT_CANCELLED) == 0
-    # Attendees are told through SCRUM-135, not here.
-    assert _got(db, registration.attendee_id, NotificationType.EVENT_CANCELLED) == 0

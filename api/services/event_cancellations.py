@@ -12,7 +12,8 @@ none of it does (AC8):
   SCRUM-109's `stage_booking_cancellation` (AC4),
 - every live equipment reservation is released, keeping its row (AC5),
 - the status moves to Cancelled through the shared machine, with who, when and why (AC3),
-- the staff notifications are staged (AC9).
+- the notifications are staged: staff (AC9) and each attendee whose registration this
+  cancelled (SCRUM-135), all keyed to this one cancellation.
 """
 
 import uuid
@@ -139,7 +140,7 @@ def cancel(
     # the record says it ended. Never opened means there is nothing to close.
     if event.registration_opened_at is not None and event.registration_closed_at is None:
         registration_intake.close(event, now)
-    _cancel_registrations(db, event, actor_id, now)
+    attendees = _cancel_registrations(db, event, actor_id, now)
     _cancel_bookings(db, event, actor_id, reason, now)
     reservation_repo.release_for_event(db, event.id, actor_id, now)
 
@@ -151,7 +152,7 @@ def cancel(
         request.status = RequestStatus.APPLIED
         request.decided_by_id = actor_id
         request.decided_at = now
-    lifecycle.cancelled(db, event, now)
+    lifecycle.cancelled(db, event, attendees, now)
     db.commit()
     db.refresh(event)
     return event
@@ -188,17 +189,21 @@ def requests_of(db: Session, event: EventRequest) -> list[EventCancellationReque
 
 def _cancel_registrations(
     db: Session, event: EventRequest, actor_id: uuid.UUID, now: datetime
-) -> None:
+) -> set[uuid.UUID]:
     """AC6: live registrations become Cancelled, each with its own history row.
 
     Withdrawn ones are left exactly as they are. Submission, withdrawal and decisions all
     lock the event first, so holding its lock here means none of them runs in between.
+    Returns the attendees whose registration this cancelled, who are told (SCRUM-135).
     """
+    attendees: set[uuid.UUID] = set()
     for registration in registration_repo.list_for_event(db, event.id):
         if registration.status in LIVE_STATUSES:
             registration_repo.decide(
                 db, registration, actor_id, RegistrationStatus.CANCELLED, now, None
             )
+            attendees.add(registration.attendee_id)
+    return attendees
 
 
 def _cancel_bookings(
