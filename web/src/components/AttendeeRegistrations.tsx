@@ -106,7 +106,7 @@ function EventCard({
     queryFn: () => readMyRegistration(token, event.id),
   })
   return (
-    <article className="rounded border border-slate-200 p-3">
+    <article id={`event-registration-${event.id}`} className="rounded border border-slate-200 p-3">
       <h3 className="font-medium">{event.name ?? 'Untitled event'}</h3>
       {event.description && <p className="mt-1 text-sm text-slate-600">{event.description}</p>}
       {event.start_at && (
