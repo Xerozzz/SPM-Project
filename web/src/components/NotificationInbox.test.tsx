@@ -119,6 +119,29 @@ test('links registration-status notifications to the attendee registration view'
   expect(link.getAttribute('href')).toBe('#event-registration-req-1')
 })
 
+// TC-124-04: an equipment-review item identifies the requirement (source id),
+// the review action (type) and the change time, and opens the authorised review
+// view — the Technical Support-only queue, whose route requires that role.
+test('links equipment-review notifications to the authorised review queue', async () => {
+  signIn()
+  renderInbox(async () =>
+    json([
+      {
+        ...newer,
+        type: 'equipment_review_needed',
+        source_type: 'equipment_requirement_change',
+        source_id: 'change-1',
+      },
+    ]),
+  )
+  const item = await screen.findByRole('listitem')
+  expect(item.textContent).toContain('equipment_review_needed')
+  expect(item.textContent).toContain('change-1')
+  expect(item.textContent).toContain('2026-04-01T10:00:00Z')
+  const link = screen.getByRole('link', { name: 'Review equipment requirements' })
+  expect(link.getAttribute('href')).toBe('#equipment-review-queue')
+})
+
 test('shows an error state when the inbox fails to load', async () => {
   signIn()
   renderInbox(async () => {
