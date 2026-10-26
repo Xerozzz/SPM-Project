@@ -31,7 +31,7 @@ async function call(
 ) {
   const response = await request.fetch(`${API}${path}`, {
     method,
-    headers: { Authorization: `****** },
+    headers: { Authorization: `Bearer ${token}` },
     data,
   })
   expect(response.ok(), `${method} ${path} -> ${response.status()} ${await response.text()}`).toBe(
