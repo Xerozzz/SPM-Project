@@ -25,6 +25,7 @@ from routers import (
     event_clarifications,
     event_completions,
     event_confirmations,
+    event_history,
     event_registrations,
     event_requests,
     notifications,
@@ -93,6 +94,8 @@ def create_app() -> FastAPI:
     app.include_router(event_confirmations.router, prefix="/api")
     app.include_router(event_completions.router, prefix="/api")
     app.include_router(event_cancellations.router, prefix="/api")
+    # SCRUM-88: the event's history, read from the records above (ADR-0062).
+    app.include_router(event_history.router, prefix="/api")
     app.include_router(event_requests.router, prefix="/api")
     app.include_router(event_registrations.router, prefix="/api")
     app.include_router(event_registrations.review_router, prefix="/api")
