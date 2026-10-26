@@ -720,3 +720,70 @@ describe('SCRUM-105 assigned coordinator views assignment history (frontend unit
     expect(within(card).queryByText(/First assignment|@example.com/)).toBeNull()
   })
 })
+
+// SCRUM-88: the card lists only events assigned to the viewer, so it offers the history.
+describe('SCRUM-88 assigned coordinator views the event history (frontend unit)', () => {
+  const historyUrl = '/api/event-requests/req-1/history'
+
+  function renderCard(history: Response) {
+    signInAsCoordinator()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const key = `${init?.method ?? 'GET'} ${String(input)}`
+      if (key === 'GET /api/event-requests/reviewable') return json([submitted])
+      if (key === 'GET /api/event-requests/bookable') return json([])
+      if (key === 'GET /api/event-requests/assigned-confirmed') return json([])
+      if (key.endsWith('/clarifications')) return json([])
+      if (key === `GET ${historyUrl}`) return history
+      throw new Error(`unexpected request ${key}`)
+    })
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <AuthProvider>
+          <EventRequestReview />
+        </AuthProvider>
+      </QueryClientProvider>,
+    )
+  }
+
+  test('the card opens the history, including the note entry the API sends', async () => {
+    renderCard(
+      json([
+        {
+          id: 'clarification_requested:cl-1',
+          action: 'clarification_requested',
+          occurred_at: '2026-11-01T02:00:00Z',
+          actor_id: 'user-1',
+          actor_email: 'coordinator@example.com',
+          source_type: 'clarification',
+          source_id: 'cl-1',
+          outcome: null,
+          reason: null,
+          previous_coordinator_email: null,
+          new_coordinator_email: null,
+          venue_name: null,
+          session_label: null,
+          hold_expires_at: null,
+          note: 'Check the fire exits',
+        },
+      ]),
+    )
+    const card = await screen.findByRole('article')
+    fireEvent.click(within(card).getByRole('button', { name: 'View event history' }))
+
+    const row = (await within(card).findByText('Note: Check the fire exits')).closest('li')
+    expect(row).toHaveTextContent('Internal note by coordinator@example.com')
+  })
+
+  test('a history refused after a reassignment shows no entries', async () => {
+    renderCard(json({ detail: 'Forbidden' }, 403))
+    const card = await screen.findByRole('article')
+
+    fireEvent.click(within(card).getByRole('button', { name: 'View event history' }))
+
+    expect(
+      await within(card).findByText('This event’s history is not available to you.'),
+    ).toBeInTheDocument()
+    expect(within(card).queryByText(/^Record:/)).toBeNull()
+  })
+})

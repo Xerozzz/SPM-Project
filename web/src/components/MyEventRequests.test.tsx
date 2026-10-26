@@ -296,3 +296,26 @@ describe('SCRUM-105 owner views assignment history (frontend unit)', () => {
     expect(await screen.findByText('No assignment history for Open Day yet.')).toBeInTheDocument()
   })
 })
+
+// SCRUM-88: this list holds only the owner's own requests, so every row, a draft
+// included, offers the event history. The API decides what the history holds.
+describe('SCRUM-88 owner views the event history (frontend unit)', () => {
+  test('every own row offers the toggle, and only the opened row is fetched', async () => {
+    renderSignedIn({
+      'GET /api/event-requests': () => json([draft, submitted]),
+      'GET /api/event-requests/req-1/history': () => json([]),
+    })
+    const rows = await screen.findAllByRole('listitem')
+    const draftRow = rows.find((row) => row.textContent?.includes('Orientation Day'))!
+    const submittedRow = rows.find((row) => row.textContent?.includes('Open Day'))!
+
+    expect(within(submittedRow).getByRole('button', { name: 'View event history' })).toBeVisible()
+    fireEvent.click(within(draftRow).getByRole('button', { name: 'View event history' }))
+
+    expect(
+      await within(draftRow).findByText('No history you can see for Orientation Day yet.'),
+    ).toBeInTheDocument()
+    const urls = vi.mocked(globalThis.fetch).mock.calls.map(([input]) => String(input))
+    expect(urls).not.toContain('/api/event-requests/req-2/history')
+  })
+})

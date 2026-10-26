@@ -222,3 +222,20 @@ test('assigning refetches the active-assignment overview with the new owner', as
     expect(screen.getAllByText('coordinator@example.com').length).toBeGreaterThan(0),
   )
 })
+
+// SCRUM-88: a Lead may read any event's history, so a queued request offers it too.
+test('a queued request offers the event history', async () => {
+  signInAsLead()
+  renderQueue(
+    withOverview(async (input) => {
+      if (String(input) === '/api/event-requests/unassigned') return json([row])
+      if (String(input) === '/api/event-requests/assignable-coordinators') return json(coordinators)
+      if (String(input) === '/api/event-requests/req-1/history') return json([])
+      throw new Error(`unexpected fetch ${String(input)}`)
+    }),
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'View event history' }))
+  await waitFor(() =>
+    expect(screen.getByText('No history you can see for Orientation Day yet.')).toBeDefined(),
+  )
+})

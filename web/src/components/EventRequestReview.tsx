@@ -18,6 +18,7 @@ import ChangeRequestList from './ChangeRequestList'
 import ClarificationThread from './ClarificationThread'
 import CompleteEvent from './CompleteEvent'
 import ConfirmEvent from './ConfirmEvent'
+import { EventHistoryToggle } from './EventHistory'
 import EventEquipmentRequirements from './EventEquipmentRequirements'
 import PlanningInfoEditor from './PlanningInfoEditor'
 import RegistrationSettingsCard from './RegistrationSettingsCard'
@@ -202,6 +203,8 @@ function ReviewCard({
       <ChangeRequestList eventId={request.id} canDecide />
       {/* SCRUM-105: this list holds only events assigned to the viewer (SCRUM-104). */}
       <AssignmentHistoryToggle requestId={request.id} requestName={request.name} />
+      {/* SCRUM-88: likewise only events currently assigned to the viewer. */}
+      <EventHistoryToggle eventId={request.id} eventName={request.name} />
       <ClarificationThread
         eventRequestId={request.id}
         canRequest={request.status === 'submitted'}

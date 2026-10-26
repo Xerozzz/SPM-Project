@@ -16,6 +16,7 @@ import { AssignmentHistoryToggle } from './AssignmentHistory'
 import CancellationRecord from './CancellationRecord'
 import ChangeRequestList from './ChangeRequestList'
 import ClosureRecord from './ClosureRecord'
+import { EventHistoryToggle } from './EventHistory'
 import ProposeChange from './ProposeChange'
 import RegistrationIntakeControls from './RegistrationIntakeControls'
 import RegistrationReviewList from './RegistrationReviewList'
@@ -201,6 +202,10 @@ export default function MyEventRequests({
                     <AssignmentHistoryToggle requestId={request.id} requestName={request.name} />
                   </div>
                 )}
+                {/* SCRUM-88: this list holds only the viewer's own requests, drafts included. */}
+                <div className="w-full">
+                  <EventHistoryToggle eventId={request.id} eventName={request.name} />
+                </div>
               </li>
             ))}
           </ul>

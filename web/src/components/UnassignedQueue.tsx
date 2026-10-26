@@ -7,6 +7,7 @@ import {
   listUnassignedEventRequests,
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
+import { EventHistoryToggle } from './EventHistory'
 
 /**
  * SCRUM-101: the Coordinator Lead unassigned queue. Read-only triage list showing every
@@ -105,6 +106,10 @@ export default function UnassignedQueue() {
                 >
                   Assign
                 </button>
+              </div>
+              {/* SCRUM-88: a Lead may read any event's history. */}
+              <div className="mt-2">
+                <EventHistoryToggle eventId={request.id} eventName={request.name} />
               </div>
             </li>
           ))}

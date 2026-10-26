@@ -102,33 +102,37 @@ async function freeWindow(request: APIRequestContext, lane: 0 | 1 | 2) {
   throw new Error('No free window for the venue specs in 20 tries')
 }
 
-/**
- * `coordinator` is who the Lead assigns and who approves; it defaults to
- * `VENUE_SPEC_ACCOUNT`. A spec that needs the owner and the assignee to be different
- * people passes another account, and must hand the event back afterwards so it does
- * not stay on that account's review page (see significant-change-request.spec.ts).
- */
-export async function createApprovedEvent(
+/** One API call that must succeed, as the given account's token. */
+async function call(
   request: APIRequestContext,
-  {
-    name,
-    lane,
-    coordinator: assignee = VENUE_SPEC_ACCOUNT,
-  }: { name: string; lane: 0 | 1 | 2; coordinator?: string },
+  token: string,
+  method: 'GET' | 'POST',
+  path: string,
+  data?: unknown,
+) {
+  const response = await request.fetch(`${API}${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${token}` },
+    data,
+  })
+  expect(response.ok(), `${method} ${path} -> ${response.status()}`).toBe(true)
+  return response.json()
+}
+
+type EventOptions = { name: string; lane: 0 | 1 | 2; coordinator?: string }
+
+/**
+ * SCRUM-88: a fresh Submitted event the Lead has assigned, not yet approved, for a spec
+ * that needs the Submitted stage (internal notes can only be recorded then). The same
+ * steps `createApprovedEvent` starts with, and the same hand-back rule for `coordinator`.
+ */
+export async function createAssignedEvent(
+  request: APIRequestContext,
+  { name, lane, coordinator: assignee = VENUE_SPEC_ACCOUNT }: EventOptions,
 ): Promise<ApprovedEvent> {
   const window = await freeWindow(request, lane)
-  const call = async (token: string, method: 'GET' | 'POST', path: string, data?: unknown) => {
-    const response = await request.fetch(`${API}${path}`, {
-      method,
-      headers: { Authorization: `Bearer ${token}` },
-      data,
-    })
-    expect(response.ok(), `${method} ${path} -> ${response.status()}`).toBe(true)
-    return response.json()
-  }
-
   const organiser = await tokenFor(request, VENUE_SPEC_ACCOUNT)
-  const created = (await call(organiser, 'POST', '/api/event-requests', {
+  const created = (await call(request, organiser, 'POST', '/api/event-requests', {
     name,
     purpose: 'E2E venue booking',
     description: 'Created by a venue spec so it owns its own venue slot.',
@@ -139,26 +143,41 @@ export async function createApprovedEvent(
     equipment_requirement: 'Projector',
     layout_requirement: 'Theatre style',
     registration_requirement: 'Open registration',
-  })) as { id: string }
-  await call(organiser, 'POST', `/api/event-requests/${created.id}/submit`)
+  })) as ApprovedEvent
+  await call(request, organiser, 'POST', `/api/event-requests/${created.id}/submit`)
 
   const lead = await tokenFor(request, 'coordinator-lead@example.com')
   const coordinators = (await call(
+    request,
     lead,
     'GET',
     '/api/event-requests/assignable-coordinators',
   )) as { id: string; email: string }[]
   const coordinator = coordinators.find((row) => row.email === assignee)
   expect(coordinator, `${assignee} is assignable`).toBeDefined()
-  await call(lead, 'POST', `/api/event-requests/${created.id}/assign`, {
+  await call(request, lead, 'POST', `/api/event-requests/${created.id}/assign`, {
     coordinator_id: coordinator!.id,
   })
+  return { id: created.id, name: created.name, start_at: created.start_at, end_at: created.end_at }
+}
 
-  const assigned = await tokenFor(request, assignee)
+/**
+ * `coordinator` is who the Lead assigns and who approves; it defaults to
+ * `VENUE_SPEC_ACCOUNT`. A spec that needs the owner and the assignee to be different
+ * people passes another account, and must hand the event back afterwards so it does
+ * not stay on that account's review page (see significant-change-request.spec.ts).
+ */
+export async function createApprovedEvent(
+  request: APIRequestContext,
+  options: EventOptions,
+): Promise<ApprovedEvent> {
+  const assigned = await createAssignedEvent(request, options)
+  const assignee = await tokenFor(request, options.coordinator ?? VENUE_SPEC_ACCOUNT)
   const approved = (await call(
-    assigned,
+    request,
+    assignee,
     'POST',
-    `/api/event-requests/${created.id}/approve`,
+    `/api/event-requests/${assigned.id}/approve`,
   )) as ApprovedEvent & { status: string }
   expect(approved.status).toBe('approved')
   return { id: approved.id, name: approved.name, start_at: approved.start_at, end_at: approved.end_at }

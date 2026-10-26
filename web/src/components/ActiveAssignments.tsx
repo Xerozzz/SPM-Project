@@ -8,6 +8,7 @@ import {
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
 import AssignmentHistory from './AssignmentHistory'
+import { EventHistoryToggle } from './EventHistory'
 
 /**
  * SCRUM-100: the Coordinator Lead active-assignment overview. Read-only list of every
@@ -133,6 +134,10 @@ export default function ActiveAssignments() {
               {expanded[request.id] && (
                 <AssignmentHistory requestId={request.id} requestName={request.name} />
               )}
+              {/* SCRUM-88: a Lead may read any event's history. */}
+              <div className="mt-2">
+                <EventHistoryToggle eventId={request.id} eventName={request.name} />
+              </div>
             </li>
           ))}
         </ul>

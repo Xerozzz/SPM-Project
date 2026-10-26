@@ -113,6 +113,14 @@ describe('SCRUM-112 peer calendar entries show calendar fields only (frontend un
     ])
   })
 
+  // SCRUM-88: a peer may not read the history (ADR-0039), so the calendar never offers it.
+  test('the calendar offers no event history', async () => {
+    renderCalendar({ entries: [shared] })
+    fireEvent.click(await screen.findByRole('button', { name: 'View Shared workshop details' }))
+
+    expect(screen.queryByRole('button', { name: /event history/i })).toBeNull()
+  })
+
   test('unnamed dated drafts remain identifiable and openable', async () => {
     const fetchSpy = renderCalendar({ entries: [{ ...shared, name: null }] })
     fireEvent.click(await screen.findByRole('button', { name: 'View Untitled event details' }))
