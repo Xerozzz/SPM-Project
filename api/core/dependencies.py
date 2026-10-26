@@ -46,6 +46,7 @@ class EventAccess(StrEnum):
     closure record is for the owner, the assignee, any Lead and staff who took part.
     Asking for a cancellation (SCRUM-115) is the owner's, applying or declining it is the
     current assignee's, and the requests are readable by both and by any Lead.
+    The event history (SCRUM-88) is readable by the assignment-history audience.
     """
 
     VIEW = "view"
@@ -72,6 +73,7 @@ class EventAccess(StrEnum):
     REQUEST_EVENT_CANCELLATION = "request_event_cancellation"
     CANCEL_EVENT = "cancel_event"
     READ_EVENT_CANCELLATION = "read_event_cancellation"
+    READ_EVENT_HISTORY = "read_event_history"
 
 
 def get_current_user(
@@ -147,8 +149,7 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
         if permission is EventAccess.READ_CLARIFICATIONS:
-            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
-            if is_assigned:
+            if may_read_clarifications(request, roles, viewer_id):
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
@@ -193,7 +194,10 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
         # the owning Organiser and the current assigned Coordinator. No status pin, so a
         # Lead still reads a draft's empty history. Each role is checked on its own, so
         # an outgoing Coordinator who is also the owner or a Lead keeps that access.
-        if permission is EventAccess.READ_ASSIGNMENT_HISTORY:
+        # SCRUM-88 (ADR-0062): the event history has the same audience today. Kept as its
+        # own member so either can be widened on its own, written once so that widening
+        # one is a deliberate edit rather than two branches drifting apart.
+        if permission in (EventAccess.READ_ASSIGNMENT_HISTORY, EventAccess.READ_EVENT_HISTORY):
             is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
             if Role.COORDINATOR_LEAD.value in roles or is_owner or is_assigned:
                 return request
@@ -357,6 +361,25 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
     return check
+
+
+def may_read_clarifications(request: EventRequest, roles: set[str], viewer_id: uuid.UUID) -> bool:
+    """SCRUM-106: only the event's current assigned Coordinator reads its internal notes.
+
+    The one statement of that rule. READ_CLARIFICATIONS asks it to guard the notes route,
+    and the event history (SCRUM-88, ADR-0062) asks it to decide whether to include note
+    entries, so the history can never show more or fewer notes than that route allows.
+    """
+    return Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+
+
+def clarification_visibility(
+    user: Annotated[dict[str, object], Depends(get_current_user)],
+) -> Callable[[EventRequest], bool]:
+    """SCRUM-88: `may_read_clarifications` for the signed-in caller, to apply to an event
+    the route has already loaded and authorised, so the request is not loaded twice."""
+    roles, viewer_id = _granted_roles(user), _user_id(user)
+    return lambda request: may_read_clarifications(request, roles, viewer_id)
 
 
 def _granted_roles(user: dict[str, object]) -> set[str]:
