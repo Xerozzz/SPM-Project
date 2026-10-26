@@ -22,6 +22,18 @@ function ownRow(page: Page, name: string) {
   return ownRequests.getByRole('listitem').filter({ hasText: name })
 }
 
+async function ownRequestId(page: Page, name: string) {
+  return page.evaluate(async (requestName) => {
+    const raw = localStorage.getItem('connectsphere.token')
+    const token = raw ? (JSON.parse(raw) as { token: string }).token : ''
+    const response = await fetch('/api/event-requests', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const rows = (await response.json()) as { id: string; name: string | null }[]
+    return rows.find((row) => row.name === requestName)?.id ?? ''
+  }, name)
+}
+
 test('an organiser submission notifies the active Lead inbox', async ({ page }) => {
   const name = `E2E lead notify ${Date.now()}`
   await signIn(page, 'organiser@example.com')
@@ -44,14 +56,21 @@ test('an organiser submission notifies the active Lead inbox', async ({ page }) 
     `“${name}” has been submitted for review.`,
   )
   await expect(ownRow(page, name)).toContainText('Submitted')
+  const eventId = await ownRequestId(page, name)
+  expect(eventId, `id of ${name}`).not.toBe('')
   await signOut(page)
 
   await signIn(page, 'coordinator-lead@example.com')
   const inbox = page.getByLabel('Notifications')
   await expect(inbox).toBeVisible()
-  // The newest notification is the just-submitted event; it is unread and names the
-  // unassigned-submission action.
-  const items = inbox.getByRole('listitem')
-  await expect(items.first()).toContainText('Unread')
-  await expect(items.first()).toContainText('unassigned_submission')
+  // Parallel specs submit requests too, so the newest item may belong to another event.
+  // Select this spec's own by the event ID in its label, leaving the read state out of
+  // the match so that "Unread" is still asserted below.
+  const own = inbox
+    .getByRole('listitem', { name: new RegExp(`notification for event ${eventId}$`) })
+    .filter({ hasText: 'unassigned_submission' })
+  await expect(own).toHaveCount(1)
+  await expect(own).toContainText('Unread')
+  await expect(own).toContainText('unassigned_submission')
+  await expect(own).toContainText(eventId)
 })
