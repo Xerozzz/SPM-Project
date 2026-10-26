@@ -43,6 +43,14 @@ class NotificationType(StrEnum):
     # Support review. The type names the review action, so staff can tell it apart
     # from later review/reservation outcomes (SCRUM-125) without opening the event.
     EQUIPMENT_REVIEW_NEEDED = "equipment_review_needed"
+    # SCRUM-125 AC1/AC2: Technical Support reviewed or reserved equipment for your
+    # event. The type names the outcome, so the Coordinator can tell without opening
+    # the event. Reconsideration transitions belong to SCRUM-126, not these types.
+    EQUIPMENT_REVIEW_AVAILABLE = "equipment_review_available"
+    EQUIPMENT_REVIEW_PARTIALLY_AVAILABLE = "equipment_review_partially_available"
+    EQUIPMENT_REVIEW_UNAVAILABLE = "equipment_review_unavailable"
+    EQUIPMENT_RESERVED_FULL = "equipment_reserved_full"
+    EQUIPMENT_RESERVED_PARTIAL = "equipment_reserved_partial"
     # SCRUM-50: event changes, safety and lifecycle. Each type names the action, and for
     # an event the status it is now in, so a recipient can tell without opening it.
     CHANGE_PROPOSED = "change_proposed"
@@ -115,6 +123,13 @@ class NotificationSource(StrEnum):
     # the source_id, so retrying the same change collides per recipient (idempotent)
     # while a later distinct change on the same requirement stays distinct.
     EQUIPMENT_REQUIREMENT_CHANGE = "equipment_requirement_change"
+    # SCRUM-125: one review decision on a requirement, and one reservation act. A
+    # requirement can be reviewed again (each decision carries its own time, as
+    # SCRUM-94's EVENT_DECISION does), and each reservation is its own row, so the
+    # source_id carries the decision/reservation identity and time to keep later
+    # actions distinct while a retried HTTP call collides.
+    EQUIPMENT_REVIEW = "equipment_review"
+    EQUIPMENT_RESERVATION = "equipment_reservation"
     # SCRUM-50: one change request. Its id is the source_id for the proposal and, as a
     # different source type, for its decision, so each notifies once.
     CHANGE_REQUEST = "change_request"

@@ -25,11 +25,14 @@ from domain.equipment_reservation import (
     quantity_to_reserve,
     reservation_state,
 )
+from domain.notifications import NotificationSource, NotificationType
 from models.equipment_reservation import EquipmentReservation
+from models.event_request import EventRequest
 from repositories import equipment as catalogue_repo
 from repositories import equipment_requirements as requirement_repo
 from repositories import equipment_reservations as repo
 from repositories import event_requests as event_request_repo
+from repositories import notifications as notifications_repo
 from services.equipment_requirements import RequirementNotFoundError, ReviewNotAllowedError
 
 
@@ -68,7 +71,15 @@ def reserve(
     actor_id: uuid.UUID,
     now: datetime,
 ) -> ReservationOutcome:
-    """AC1 to AC5: reserve some or all of what a requirement still needs."""
+    """AC1 to AC5: reserve some or all of what a requirement still needs.
+
+    SCRUM-125 AC2/AC3: the current assigned Coordinator is notified of the
+    arrangement. Staged before the commit so the reservation and its notification
+    land or roll back together; the occurrence time is the reservation time, not a
+    second clock read. The source_id is the reservation row id, so each reservation
+    is its own item while a retried HTTP call collides per recipient (idempotent).
+    With no Coordinator assigned the reservation still commits, unstaged.
+    """
     requirement = requirement_repo.get(db, requirement_id)
     # Another event's requirement is reported as missing, as `_live_requirement` does.
     if requirement is None or requirement.event_request_id != event_request_id:
@@ -102,20 +113,25 @@ def reserve(
     if isinstance(decided, ReservationRefusal):
         raise ReservationRefusedError(decided)
 
-    repo.add(
-        db,
-        EquipmentReservation(
-            requirement_id=requirement.id,
-            event_request_id=event.id,
-            equipment_type=requirement.equipment_type,
-            quantity=decided,
-            starts_at=event.start_at,
-            ends_at=event.end_at,
-            created_by_id=actor_id,
-            created_at=now,
-        ),
+    reservation = EquipmentReservation(
+        id=uuid.uuid4(),
+        requirement_id=requirement.id,
+        event_request_id=event.id,
+        equipment_type=requirement.equipment_type,
+        quantity=decided,
+        starts_at=event.start_at,
+        ends_at=event.end_at,
+        created_by_id=actor_id,
+        created_at=now,
     )
     total = already + decided
+    state = reservation_state(requirement.quantity, total)
+    # Staged before the commit so the reservation and its notification land or roll
+    # back together. The id is assigned here (rather than relying on the column
+    # default, which only fires at flush) so the source_id is known before the row
+    # exists.
+    _stage_reservation_outcome(db, event, reservation.id, state, now)
+    repo.add(db, reservation)
     return ReservationOutcome(
         requirement_id=requirement.id,
         event_request_id=event.id,
@@ -123,7 +139,41 @@ def reserve(
         reserved_now=decided,
         total_reserved=total,
         outstanding=outstanding_quantity(requirement.quantity, total),
-        state=reservation_state(requirement.quantity, total),
+        state=state,
         event_start_at=event.start_at,
         event_end_at=event.end_at,
+    )
+
+
+def _stage_reservation_outcome(
+    db: Session,
+    event: EventRequest,
+    reservation_id: uuid.UUID,
+    state: ReservationState,
+    now: datetime,
+) -> None:
+    """SCRUM-125 AC2/AC3: notify the current Coordinator of a reservation.
+
+    The recipient is resolved at commit time, so a reassigned event notifies the new
+    Coordinator and the former one gets nothing. The source_id is the reservation
+    row id, so each reservation is its own item while a retried HTTP call collides
+    per recipient (idempotent). NOT_RESERVED is never staged: a refusal raises
+    before any row exists, so there is nothing to point the notification at.
+    """
+    if event.coordinator_id is None:
+        return
+    outcome_type = {
+        ReservationState.RESERVED: NotificationType.EQUIPMENT_RESERVED_FULL,
+        ReservationState.PARTIALLY_RESERVED: NotificationType.EQUIPMENT_RESERVED_PARTIAL,
+    }.get(state)
+    if outcome_type is None:
+        return
+    notifications_repo.stage(
+        db,
+        recipient_id=event.coordinator_id,
+        event_request_id=event.id,
+        type=outcome_type,
+        source_type=NotificationSource.EQUIPMENT_RESERVATION,
+        source_id=str(reservation_id),
+        occurred_at=now,
     )
