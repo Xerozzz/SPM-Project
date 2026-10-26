@@ -17,6 +17,7 @@ so a retry finds it done, a second worker never sees it, and a failure leaves it
 undelivered rather than silently marked sent (AC6, AC8).
 """
 
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -39,6 +40,8 @@ from models.event_request import EventRequest
 from repositories import event_reminders as repo
 from repositories import notifications as notifications_repo
 from services import event_confirmations as confirmation_service
+
+logger = logging.getLogger(__name__)
 
 
 class InvalidReminderScheduleError(Exception):
@@ -129,8 +132,19 @@ def process_due(db: Session, now: datetime) -> list[ProcessedOccurrence]:
         ):
             continue
 
-        outstanding = confirmation_service.readiness(db, event, now).blocked
+        try:
+            outstanding = confirmation_service.readiness(db, event, now).blocked
+        except Exception:
+            # One event whose plan cannot be read must not starve every other event's
+            # reminders. The batch below would roll back for all of them, every tick,
+            # for as long as the bad data lasted. This occurrence stays unprocessed and
+            # is retried next tick; nothing has been staged for it yet, so there is
+            # nothing half-done to undo (AC8).
+            logger.exception("reading readiness for event %s failed", event.id)
+            continue
+
         outcome = outcome_of(outstanding)
+        assert event.start_at is not None  # may_process refuses an event without one
         if outcome is ReminderOutcome.NOTIFIED and event.coordinator_id is not None:
             # AC5: addressed to the *current* assignee, which is what AC2 means by
             # reassignment transferring access — the new Coordinator owns the work now.
@@ -145,9 +159,7 @@ def process_due(db: Session, now: datetime) -> list[ProcessedOccurrence]:
                 type=NotificationType.ARRANGEMENTS_INCOMPLETE,
                 source_type=NotificationSource.EVENT_REMINDER,
                 source_id=str(reminder.id),
-                occurred_at=due_at(event.start_at, reminder.lead_minutes)
-                if event.start_at is not None
-                else now,
+                occurred_at=due_at(event.start_at, reminder.lead_minutes),
             )
         reminder.processed_at = now
         done.append(
