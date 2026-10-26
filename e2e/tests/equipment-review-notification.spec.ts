@@ -56,14 +56,24 @@ test('a new equipment requirement tells Technical Support, with a link to the re
     lane: 1,
   })
 
-  // The Coordinator adds a requirement through the real endpoint.
+  // The Coordinator adds a requirement through the real endpoint. The event already
+  // carries the seeded Projector line, so pick any other active catalogue type —
+  // hardcoding one breaks whenever the seed or catalogue state changes.
   const coordinator = await tokenFor(page.request, VENUE_SPEC_ACCOUNT)
+  const catalogue = (await call(
+    page.request,
+    coordinator,
+    'GET',
+    `/api/event-requests/${approved.id}/equipment-requirements/catalogue-types`,
+  )) as unknown as string[]
+  const freshType = catalogue.find((type) => type !== 'Projector')
+  expect(freshType, 'an active catalogue type besides Projector').toBeDefined()
   await call(
     page.request,
     coordinator,
     'POST',
     `/api/event-requests/${approved.id}/equipment-requirements`,
-    { equipment_type: 'Projector', quantity: 2 },
+    { equipment_type: freshType, quantity: 2 },
   )
 
   // Technical Support Staff see it in their inbox, with the review link.
