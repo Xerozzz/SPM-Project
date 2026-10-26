@@ -72,6 +72,7 @@ someone else made two weeks ago.
 | [0060](0060-lifecycle-notifications-staged-in-the-source-action.md) | Stage lifecycle notifications in the source action, keyed once per action | Proposed |
 | [0061](0061-cancel-a-whole-event-in-one-transaction.md) | Cancel a whole event in one transaction, reusing each owner's staged operation | Proposed |
 | [0062](0062-event-history-from-retained-source-records.md) | Build an event's history from the records each story already keeps | Proposed |
+| [0063](0063-reminder-occurrences-as-rows-with-a-derived-due-time.md) | A reminder occurrence is a row, and its due time is derived | Proposed |
 
 ## When to write one
 

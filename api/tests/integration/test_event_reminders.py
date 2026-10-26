@@ -10,6 +10,7 @@ than worked out again.
 a reminder can get.
 """
 
+import uuid
 from datetime import timedelta
 
 import pytest
@@ -18,14 +19,17 @@ from sqlalchemy.orm import Session
 
 from domain.event_reminder import ReminderOutcome
 from domain.event_status import EventStatus
+from domain.venue_booking import BookingStatus
 from models.event_reminder import EventReminder
 from models.event_request import EventRequest
 from models.notification import Notification
 from models.user import User
+from models.venue_booking import VenueBooking
 from services import event_reminders as service
 from tests.integration.test_event_confirmation import approve_safety, ready_event
 from tests.integration.test_safety_review import _NOW, _START, arranged_event
 from tests.integration.test_submit_event_request import MakeClient, MakeUser
+from tests.integration.test_venue_search import effective_for, make_venue
 
 
 def _inbox(db: Session, user: User) -> list[Notification]:
@@ -293,11 +297,33 @@ def test_a_superseded_arrangement_does_not_create_a_false_reminder(
 ) -> None:
     """AC4: "retained historical superseded arrangements do not create false reminders".
 
+    The event keeps a refused venue request forever — nobody can clear one — beside the
+    hold that actually stands. Judging the dead row would report an incomplete venue
+    arrangement every time, for an event that is in fact fully arranged.
+
     True because this reads SCRUM-80's readiness, which already excludes rows that are
-    history rather than plan — not because it is checked again here.
+    history rather than plan, not because it is checked again here. The test exists to
+    prove the reuse really happens.
     """
     event, _, coordinator = arranged_event(db, make_user)
     approve_safety(db, event, make_user)
+    refused_venue = make_venue(db, name=f"Hall {uuid.uuid4()}")
+    effective_start, effective_end = effective_for(
+        refused_venue, _START, _START + timedelta(hours=2)
+    )
+    db.add(
+        VenueBooking(
+            venue_id=refused_venue.id,
+            event_request_id=event.id,
+            requested_by_id=coordinator.id,
+            session_label="Tried and refused",
+            start_at=_START,
+            end_at=_START + timedelta(hours=2),
+            effective_start_at=effective_start,
+            effective_end_at=effective_end,
+            status=BookingStatus.REJECTED,
+        )
+    )
     db.flush()
     schedule(db, event, coordinator, 60)
 
@@ -305,3 +331,27 @@ def test_a_superseded_arrangement_does_not_create_a_false_reminder(
 
     assert [row.outcome for row in done] == [ReminderOutcome.NOTHING_OUTSTANDING]
     assert _inbox(db, coordinator) == []
+
+
+@pytest.mark.story("SCRUM-85")
+async def test_an_empty_schedule_clears_every_reminder(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """Removing the last reminder has to be possible, and the screen does it this way.
+
+    AC1 asks for "one or more distinct lead times", which is about what a schedule may
+    contain rather than a floor on it: a Coordinator who no longer wants reminding sends
+    an empty list, and the panel's Remove button on the last row does exactly that.
+    """
+    event, _, coordinator = arranged_event(db, make_user)
+    schedule(db, event, coordinator, 60, 1440)
+
+    async with make_client(coordinator) as client:
+        response = await client.put(
+            f"/api/event-requests/{event.id}/reminders", json={"lead_minutes": []}
+        )
+
+    assert response.status_code == 200
+    assert response.json() == []
+    db.expire_all()
+    assert reminders_of(db, event) == []
