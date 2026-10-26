@@ -773,6 +773,11 @@ describe('SCRUM-88 assigned coordinator views the event history (frontend unit)'
           session_label: null,
           hold_expires_at: null,
           note: 'Check the fire exits',
+          session_start_at: null,
+          session_end_at: null,
+          related_booking_id: null,
+          affected_booking_ids: [],
+          changes: [],
         },
       ]),
     )

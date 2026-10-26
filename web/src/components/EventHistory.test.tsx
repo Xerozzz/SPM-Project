@@ -36,6 +36,11 @@ function entry(overrides: Partial<EventHistoryEntry>): EventHistoryEntry {
     session_label: null,
     hold_expires_at: null,
     note: null,
+    session_start_at: null,
+    session_end_at: null,
+    related_booking_id: null,
+    affected_booking_ids: [],
+    changes: [],
     ...overrides,
   }
 }
@@ -262,5 +267,104 @@ describe('SCRUM-88 completed events offer the event history (frontend unit)', ()
 
     fireEvent.click(await screen.findByRole('button', { name: 'View event history' }))
     expect(await screen.findByText('Draft created')).toBeInTheDocument()
+  })
+})
+
+// SCRUM-119: venue change entries. The API decides which fields each carries (ADR-0064);
+// the component shows the period, the replacement link, the affected arrangements and
+// each before-and-after value under the label the API sends.
+describe('SCRUM-119 venue change entries (frontend unit)', () => {
+  const START = '2026-12-01T02:00:00Z'
+  const END = '2026-12-01T04:00:00Z'
+  const venue = {
+    source_type: 'venue_booking' as const,
+    venue_name: 'Hall A',
+    session_label: 'Main session',
+    session_start_at: START,
+    session_end_at: END,
+  }
+
+  test('venue entries show the session label and period in Singapore time', async () => {
+    renderWith(
+      ok([entry({ ...venue, id: 'venue_requested:bk-1', action: 'venue_requested' })]),
+      history,
+    )
+    const [row] = await screen.findAllByRole('listitem')
+
+    expect(row).toHaveTextContent(
+      `Hall A, Main session, ${formatSingaporeTime(START)} to ${formatSingaporeTime(END)}`,
+    )
+  })
+
+  test('a cancellation shows the Coordinator and reason; adoption links both ways', async () => {
+    renderWith(
+      ok([
+        entry({
+          ...venue,
+          id: 'replacement_adopted:bk-2',
+          action: 'replacement_adopted',
+          source_id: 'bk-2',
+          actor_id: 'u-coord',
+          actor_email: 'coordinator@example.com',
+          related_booking_id: 'bk-1',
+        }),
+        entry({
+          ...venue,
+          id: 'arrangement_cancelled:bk-1',
+          action: 'arrangement_cancelled',
+          source_id: 'bk-1',
+          actor_id: 'u-coord',
+          actor_email: 'coordinator@example.com',
+          reason: 'Replaced by an adopted replacement venue request',
+          related_booking_id: 'bk-2',
+        }),
+      ]),
+      history,
+    )
+    const [adopted, cancelled] = await screen.findAllByRole('listitem')
+
+    expect(adopted).toHaveTextContent('Replacement adopted by coordinator@example.com')
+    expect(adopted).toHaveTextContent('Replaces arrangement bk-1')
+    expect(cancelled).toHaveTextContent('Venue arrangement cancelled by coordinator@example.com')
+    expect(cancelled).toHaveTextContent('Reason: Replaced by an adopted replacement venue request')
+    expect(cancelled).toHaveTextContent('Replaced by arrangement bk-2')
+  })
+
+  test('a buffer change shows each labelled value, old and new, and the affected booking', async () => {
+    renderWith(
+      ok([
+        entry({
+          id: 'buffer_changed:bc-1',
+          action: 'buffer_changed',
+          source_type: 'venue_buffer_change',
+          source_id: 'bc-1',
+          actor_id: 'u-staff',
+          actor_email: 'staff@example.com',
+          venue_name: 'Hall A',
+          affected_booking_ids: ['bk-1'],
+          changes: [
+            { field: 'setup_minutes', label: 'Setup time (minutes)', old: '0', new: '45' },
+            {
+              field: 'turnaround_minutes',
+              label: 'Turnaround time (minutes)',
+              old: null,
+              new: '30',
+            },
+          ],
+        }),
+      ]),
+      history,
+    )
+    const [row] = await screen.findAllByRole('listitem')
+
+    expect(row).toHaveTextContent('Venue buffers changed by staff@example.com')
+    expect(row.textContent).toContain('Hall A')
+    expect(row).not.toHaveTextContent('null')
+    expect(row).toHaveTextContent('Setup time (minutes): 0 → 45')
+    expect(row).toHaveTextContent('Turnaround time (minutes): — → 30')
+    expect(row).toHaveTextContent('Affected arrangements: bk-1')
+    expect(row).toHaveTextContent('Record: venue buffer change bc-1')
+    // Labels come from the API; the column names never reach the screen.
+    expect(row).not.toHaveTextContent('setup_minutes')
   })
 })

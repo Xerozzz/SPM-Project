@@ -19,9 +19,25 @@ export type HistoryAction =
   | 'hold_created'
   | 'hold_confirmed'
   | 'hold_expired'
+  | 'replacement_adopted'
+  | 'arrangement_cancelled'
+  | 'buffer_changed'
 
 export type HistorySource =
-  'event_request' | 'coordinator_assignment' | 'clarification' | 'venue_booking'
+  | 'event_request'
+  | 'coordinator_assignment'
+  | 'clarification'
+  | 'venue_booking'
+  | 'venue_buffer_change'
+
+/** SCRUM-119: one value before and after, with its label. Only fields a reader names. */
+export interface FieldChange {
+  field: string
+  label: string
+  /** Null is "no value". */
+  old: string | null
+  new: string | null
+}
 
 export interface EventHistoryEntry {
   /** `action:source_id`, unique within one history. */
@@ -43,6 +59,14 @@ export interface EventHistoryEntry {
   hold_expires_at: string | null
   /** An internal note's text. The API sends note entries only to the current assignee. */
   note: string | null
+  /** SCRUM-119: the venue session's period (UTC). */
+  session_start_at: string | null
+  session_end_at: string | null
+  /** The other arrangement of a replacement: the one replaced, or the one replacing it. */
+  related_booking_id: string | null
+  /** The event's bookings a buffer change caught out. */
+  affected_booking_ids: string[]
+  changes: FieldChange[]
 }
 
 /** The caller may not read this event's history (AC6). */
