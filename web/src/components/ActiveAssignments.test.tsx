@@ -200,3 +200,22 @@ test('unassigned rows offer history but no reassignment picker', async () => {
     expect(screen.getByText('No assignment history for Open Day yet.')).toBeDefined(),
   )
 })
+
+// SCRUM-88: a Lead may read any event's history, so every overview row offers it.
+test('every row offers the event history', async () => {
+  signInAsLead()
+  renderOverview(async (input) => {
+    if (String(input) === '/api/event-requests/active-assignments')
+      return json([assigned, unassigned])
+    if (String(input) === '/api/event-requests/req-2/history') return json([])
+    throw new Error(`unexpected fetch ${String(input)}`)
+  })
+  await waitFor(() => expect(screen.getByText('Open Day')).toBeDefined())
+  const toggles = screen.getAllByRole('button', { name: 'View event history' })
+  expect(toggles).toHaveLength(2)
+
+  fireEvent.click(toggles[1])
+  await waitFor(() =>
+    expect(screen.getByText('No history you can see for Open Day yet.')).toBeDefined(),
+  )
+})

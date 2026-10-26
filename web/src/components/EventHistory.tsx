@@ -1,0 +1,157 @@
+import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+
+import {
+  type EventHistoryEntry,
+  EventHistoryForbiddenError,
+  type HistoryAction,
+  type HistorySource,
+  getEventHistory,
+} from '../api/eventHistory'
+import { formatSingaporeTime } from '../api/venueCalendar'
+import { useAuth } from '../auth/useAuth'
+
+/**
+ * SCRUM-88: one event's recorded actions, in the order the API returns them (oldest
+ * first, ties already broken by the API). Each row shows the action, who did it ("System"
+ * for a hold's expiry), when in Singapore time, the record it came from, and the outcome,
+ * reason or other detail the record keeps. Who may read it, and which internal notes
+ * they get, is decided by the API (ADR-0062); this component only shows what it is sent.
+ */
+export default function EventHistory({
+  eventId,
+  eventName,
+}: {
+  eventId: string
+  eventName: string | null
+}) {
+  const { token } = useAuth()
+  const history = useQuery({
+    queryKey: ['event-requests', eventId, 'history', token],
+    queryFn: () => getEventHistory(token ?? '', eventId),
+    enabled: token !== null,
+  })
+
+  return (
+    <div className="mt-2 rounded border border-slate-100 p-2">
+      <p className="font-medium text-slate-500">Event history</p>
+      {history.isPending && <p className="mt-1 text-sm">Loading history…</p>}
+      {history.error instanceof EventHistoryForbiddenError && (
+        <p className="mt-1 text-sm text-slate-500">{history.error.message}</p>
+      )}
+      {history.isError && !(history.error instanceof EventHistoryForbiddenError) && (
+        <p role="alert" className="mt-1 text-sm text-red-600">
+          Could not load history: {history.error.message}
+        </p>
+      )}
+      {history.data?.length === 0 && (
+        <p className="mt-1 text-sm text-slate-500">
+          No history you can see for {eventName ?? eventId} yet.
+        </p>
+      )}
+      {history.data && history.data.length > 0 && (
+        <ol className="mt-1 space-y-2 text-sm text-slate-600">
+          {history.data.map((entry) => (
+            <HistoryRow key={entry.id} entry={entry} />
+          ))}
+        </ol>
+      )}
+    </div>
+  )
+}
+
+/**
+ * SCRUM-88: the history behind a button, beside the assignment-history toggle. It mounts,
+ * and so fetches, only once opened. It is offered only in lists the API already limits to
+ * events the viewer may read, so the component itself holds no access rule.
+ */
+export function EventHistoryToggle({
+  eventId,
+  eventName,
+}: {
+  eventId: string
+  eventName: string | null
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        className="text-sm text-slate-600 underline"
+      >
+        {open ? 'Hide event history' : 'View event history'}
+      </button>
+      {open && <EventHistory eventId={eventId} eventName={eventName} />}
+    </div>
+  )
+}
+
+function HistoryRow({ entry }: { entry: EventHistoryEntry }) {
+  return (
+    <li>
+      <p>
+        <span className="font-medium text-slate-800">{actionLabel(entry)}</span> by{' '}
+        {actorLabel(entry)} at{' '}
+        <time dateTime={entry.occurred_at}>{formatSingaporeTime(entry.occurred_at)}</time>
+      </p>
+      {entry.new_coordinator_email !== null && (
+        <p>
+          {entry.previous_coordinator_email ?? 'No previous Coordinator'} →{' '}
+          {entry.new_coordinator_email}
+        </p>
+      )}
+      {entry.venue_name !== null && (
+        <p>
+          {entry.venue_name}, {entry.session_label}
+        </p>
+      )}
+      {entry.hold_expires_at !== null && (
+        <p>
+          Held until{' '}
+          <time dateTime={entry.hold_expires_at}>{formatSingaporeTime(entry.hold_expires_at)}</time>
+        </p>
+      )}
+      {entry.reason !== null && <p>Reason: {entry.reason}</p>}
+      {entry.note !== null && <p>Note: {entry.note}</p>}
+      <p className="text-xs text-slate-400">
+        Record: {SOURCE_LABELS[entry.source_type]} {entry.source_id}
+      </p>
+    </li>
+  )
+}
+
+const ACTION_LABELS: Record<HistoryAction, string> = {
+  draft_created: 'Draft created',
+  submitted: 'Submitted for review',
+  review_decided: 'Coordinator review',
+  coordinator_assigned: 'Coordinator assigned',
+  coordinator_reassigned: 'Coordinator reassigned',
+  clarification_requested: 'Internal note',
+  clarification_responded: 'Organiser response',
+  venue_requested: 'Venue requested',
+  venue_decided: 'Venue Staff decision',
+  hold_created: 'Tentative hold placed',
+  hold_confirmed: 'Hold confirmed',
+  hold_expired: 'Hold expired',
+}
+
+const SOURCE_LABELS: Record<HistorySource, string> = {
+  event_request: 'event request',
+  coordinator_assignment: 'assignment',
+  clarification: 'internal note',
+  venue_booking: 'venue booking',
+}
+
+/** A decision's outcome is part of what happened, so it is named with the action. */
+function actionLabel(entry: EventHistoryEntry): string {
+  const label = ACTION_LABELS[entry.action]
+  return entry.outcome === null ? label : `${label}: ${entry.outcome}`
+}
+
+/** No actor id is the system; an id without an email is a missing user (ADR-0047). */
+function actorLabel(entry: EventHistoryEntry): string {
+  if (entry.actor_id === null) return 'System'
+  return entry.actor_email ?? 'Unknown user'
+}
