@@ -28,6 +28,7 @@ from domain.equipment_requirement import (
     validate_new_requirement,
 )
 from domain.equipment_reservation import ReservationState, reservation_state
+from domain.notifications import NotificationSource, NotificationType
 from domain.validation import FieldProblem
 from models.equipment_requirement_change import EquipmentRequirementChange, RequirementAction
 from models.event_equipment_requirement import EventEquipmentRequirement
@@ -36,6 +37,8 @@ from repositories import equipment as catalogue_repo
 from repositories import equipment_requirements as repo
 from repositories import equipment_reservations as reservation_repo
 from repositories import event_requests as event_request_repo
+from repositories import notifications as notifications_repo
+from repositories import users as users_repo
 
 
 class RequirementError(Exception):
@@ -94,7 +97,7 @@ def add(
     db.add(requirement)
     # Flushed so the audit row can reference it; both commit together in `repo.save`.
     db.flush()
-    _record(
+    change = _record(
         db,
         requirement,
         actor_id,
@@ -105,6 +108,13 @@ def add(
         new_quantity=requirement.quantity,
         new_technical=requirement.technical_requirements,
     )
+    # SCRUM-124: alert every active Technical Support Staff of the new requirement
+    # needing review. Staged before the commit so the requirement and its
+    # notifications land or roll back together; the occurrence time is the change
+    # time, not a second clock read; the (equipment_requirement_change, audit row
+    # id) source pair makes a retry collide instead of duplicating (ADR-0060). With
+    # no active Technical Support the loop stages nothing and the add still commits.
+    _stage_review_needed(db, event.id, change.id, now)
     try:
         return repo.save(db, requirement)
     except repo.DuplicateRequirementError as exc:
@@ -156,7 +166,7 @@ def update(
     requirement.review_status = review_after_change()
     requirement.updated_at = now
     reservation_repo.flag_live(db, requirement.id, now)
-    _record(
+    change = _record(
         db,
         requirement,
         actor_id,
@@ -167,6 +177,9 @@ def update(
         new_quantity=requirement.quantity,
         new_technical=requirement.technical_requirements,
     )
+    # SCRUM-124: a changed requirement needs review again, so the same alert as an
+    # add, keyed on this change's own audit row so it stays distinct from the add.
+    _stage_review_needed(db, event.id, change.id, now)
     return repo.save(db, requirement)
 
 
@@ -316,28 +329,52 @@ def _record(
     old_technical: str | None,
     new_quantity: int | None,
     new_technical: str | None,
-) -> None:
+) -> EquipmentRequirementChange:
     """AC8: who did what, when, and both sides of it.
 
     Both sides are passed in rather than read off the requirement, because for a removal
     there is no new value rather than an unchanged one, and a default that guessed which
     case it was in would be one more thing to get wrong.
+
+    Returns the audit row, flushed so SCRUM-124 can key its notification on the row id.
     """
-    repo.record_change(
-        db,
-        EquipmentRequirementChange(
-            requirement_id=requirement.id,
-            event_request_id=requirement.event_request_id,
-            changed_by_id=actor_id,
-            changed_at=now,
-            action=action,
-            equipment_type=requirement.equipment_type,
-            old_quantity=old_quantity,
-            new_quantity=new_quantity,
-            old_technical_requirements=old_technical,
-            new_technical_requirements=new_technical,
-        ),
+    change = EquipmentRequirementChange(
+        requirement_id=requirement.id,
+        event_request_id=requirement.event_request_id,
+        changed_by_id=actor_id,
+        changed_at=now,
+        action=action,
+        equipment_type=requirement.equipment_type,
+        old_quantity=old_quantity,
+        new_quantity=new_quantity,
+        old_technical_requirements=old_technical,
+        new_technical_requirements=new_technical,
     )
+    repo.record_change(db, change)
+    # Flushed so the caller can key its notification on the row id; both commit
+    # together in `repo.save`.
+    db.flush()
+    return change
+
+
+def _stage_review_needed(
+    db: Session, event_id: uuid.UUID, change_id: uuid.UUID, now: datetime
+) -> None:
+    """SCRUM-124: stage one review alert per active Technical Support Staff member.
+
+    No commit here: the caller's `repo.save` commits the requirement, its audit row
+    and these rows together, so a rolled-back change notifies nobody.
+    """
+    for staff in users_repo.list_active_tech_support(db):
+        notifications_repo.stage(
+            db,
+            recipient_id=staff.id,
+            event_request_id=event_id,
+            type=NotificationType.EQUIPMENT_REVIEW_NEEDED,
+            source_type=NotificationSource.EQUIPMENT_REQUIREMENT_CHANGE,
+            source_id=str(change_id),
+            occurred_at=now,
+        )
 
 
 def seed_from_event(db: Session, event: EventRequest, now: datetime) -> None:

@@ -39,6 +39,10 @@ class NotificationType(StrEnum):
     # names the new-request action, so staff can tell it apart from later revised
     # requests (SCRUM-127) without opening the event.
     VENUE_REQUEST_SUBMITTED = "venue_request_submitted"
+    # SCRUM-124 AC1/AC2: a new or changed equipment requirement needs Technical
+    # Support review. The type names the review action, so staff can tell it apart
+    # from later review/reservation outcomes (SCRUM-125) without opening the event.
+    EQUIPMENT_REVIEW_NEEDED = "equipment_review_needed"
     # SCRUM-50: event changes, safety and lifecycle. Each type names the action, and for
     # an event the status it is now in, so a recipient can tell without opening it.
     CHANGE_PROPOSED = "change_proposed"
@@ -99,6 +103,10 @@ class NotificationSource(StrEnum):
     # later distinct request for the same event stays distinct. SCRUM-127 owns
     # revised requests and uses its own source identity.
     VENUE_REQUEST = "venue_request"
+    # SCRUM-124: one add or change of an equipment requirement. The audit row's id is
+    # the source_id, so retrying the same change collides per recipient (idempotent)
+    # while a later distinct change on the same requirement stays distinct.
+    EQUIPMENT_REQUIREMENT_CHANGE = "equipment_requirement_change"
     # SCRUM-50: one change request. Its id is the source_id for the proposal and, as a
     # different source type, for its decision, so each notifies once.
     CHANGE_REQUEST = "change_request"

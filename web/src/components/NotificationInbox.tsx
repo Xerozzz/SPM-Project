@@ -80,6 +80,14 @@ export default function NotificationInbox() {
                     View my registration status
                   </a>
                 )}
+                {/* SCRUM-124: the review queue is rendered for Technical Support
+                    Staff only, and its route requires that role, so this link is an
+                    authorised review view for exactly the inbox's recipients. */}
+                {notification.source_type === 'equipment_requirement_change' && (
+                  <a href="#equipment-review-queue" className="text-blue-700 underline">
+                    Review equipment requirements
+                  </a>
+                )}
                 {notification.is_unread && (
                   <button
                     type="button"
