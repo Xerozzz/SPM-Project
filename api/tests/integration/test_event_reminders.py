@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from domain.event_reminder import ReminderOutcome
 from domain.event_status import EventStatus
+from domain.notifications import NotificationSource
 from domain.venue_booking import BookingStatus
 from models.event_reminder import EventReminder
 from models.event_request import EventRequest
@@ -31,13 +32,29 @@ from tests.integration.test_safety_review import _NOW, _START, arranged_event
 from tests.integration.test_submit_event_request import MakeClient, MakeUser
 from tests.integration.test_venue_search import effective_for, make_venue
 
+#: `arranged_event` holds its venue only until a day before the event starts, so after
+#: that the plan is genuinely incomplete and a reminder is right to fire. A test about a
+#: *complete* plan therefore has to process its occurrence while the hold is still live:
+#: two days of lead time, processed a day and a half before the event.
+_COMPLETE_LEAD = 2880
+_WHILE_HELD = _START - timedelta(days=1, hours=12)
+
 
 def _inbox(db: Session, user: User) -> list[Notification]:
-    """Everything addressed to this user, oldest first."""
+    """The reminders addressed to this user, oldest first.
+
+    Filtered to this story's source rather than reading the whole inbox: arranging an
+    event legitimately notifies its Coordinator about other things — a safety decision,
+    for one — and a test about reminders should not fail because another story did its
+    job.
+    """
     return list(
         db.scalars(
             select(Notification)
-            .where(Notification.recipient_id == user.id)
+            .where(
+                Notification.recipient_id == user.id,
+                Notification.source_type == NotificationSource.EVENT_REMINDER,
+            )
             .order_by(Notification.occurred_at)
         )
     )
@@ -174,9 +191,9 @@ def test_a_due_occurrence_on_a_complete_plan_notifies_nobody(
 ) -> None:
     """AC5: "if no work remains, create none" — but the occurrence is still processed."""
     event, _, coordinator = ready_event(db, make_user)
-    schedule(db, event, coordinator, 60)
+    schedule(db, event, coordinator, _COMPLETE_LEAD)
 
-    done = service.process_due(db, _START - timedelta(minutes=30))
+    done = service.process_due(db, _WHILE_HELD)
 
     assert [row.outcome for row in done] == [ReminderOutcome.NOTHING_OUTSTANDING]
     assert _inbox(db, coordinator) == []
@@ -254,13 +271,21 @@ def test_changing_the_schedule_does_not_resend_a_delivered_occurrence(
     event, _, coordinator = arranged_event(db, make_user)
     schedule(db, event, coordinator, 60)
     service.process_due(db, _START - timedelta(minutes=30))
+    kept = next(row for row in reminders_of(db, event) if row.lead_minutes == 60)
+    sent_at = kept.processed_at
+    assert sent_at is not None
 
     schedule(db, event, coordinator, 60, 1440)  # add another, keep the first
 
     kept = next(row for row in reminders_of(db, event) if row.lead_minutes == 60)
-    assert kept.processed_at is not None
+    assert kept.processed_at == sent_at, "the kept row lost its history"
     service.process_due(db, _START - timedelta(minutes=20))
-    assert len(_inbox(db, coordinator)) == 1
+
+    # The added day-before occurrence is due as well and rightly fires; what must not
+    # happen is a second notification for the occurrence already delivered, so this
+    # counts by source rather than by inbox size.
+    for_kept = [row for row in _inbox(db, coordinator) if row.source_id == str(kept.id)]
+    assert len(for_kept) == 1
 
 
 @pytest.mark.story("SCRUM-85")
@@ -275,7 +300,9 @@ def test_moving_the_event_moves_future_occurrences_and_keeps_history(
     """
     event, _, coordinator = arranged_event(db, make_user)
     schedule(db, event, coordinator, 60, 1440)
-    service.process_due(db, _START - timedelta(minutes=30))
+    # Half a day out: the day-before occurrence has fallen due, the hour-before has not.
+    # Lead times nest, so this is the only way to have one fire and not the other.
+    service.process_due(db, _START - timedelta(hours=12))
     assert len(_inbox(db, coordinator)) == 1
 
     moved = _START + timedelta(days=7)
@@ -283,11 +310,12 @@ def test_moving_the_event_moves_future_occurrences_and_keeps_history(
     event.end_at = moved + timedelta(hours=2)
     db.flush()
 
-    # Against the old start the day-before occurrence was overdue; against the new one
-    # it is still a week away, so nothing fires.
+    # The hour-before occurrence was an hour away under the old start and is a week and
+    # an hour away under the new one, so nothing fires at the old moment.
     assert service.process_due(db, _START) == []
-    later = service.process_due(db, moved - timedelta(hours=2))
-    assert [row.lead_minutes for row in later] == [1440]
+    later = service.process_due(db, moved - timedelta(minutes=30))
+
+    assert [row.lead_minutes for row in later] == [60]
     assert len(_inbox(db, coordinator)) == 2
 
 
@@ -325,9 +353,9 @@ def test_a_superseded_arrangement_does_not_create_a_false_reminder(
         )
     )
     db.flush()
-    schedule(db, event, coordinator, 60)
+    schedule(db, event, coordinator, _COMPLETE_LEAD)
 
-    done = service.process_due(db, _START - timedelta(minutes=30))
+    done = service.process_due(db, _WHILE_HELD)
 
     assert [row.outcome for row in done] == [ReminderOutcome.NOTHING_OUTSTANDING]
     assert _inbox(db, coordinator) == []
