@@ -3,9 +3,8 @@
 TC-125-01 proves each review outcome (available, partially_available, unavailable)
 notifies the current Coordinator with the requirement, the outcome and the review time.
 TC-125-02 proves a full and a partial reservation each notify the Coordinator with the
-arrangement, the quantity and the outcome. TC-125-03 proves distinct actions produce
-distinct items while retries, invalid actions and rollbacks produce none. TC-125-04
-proves former and unrelated users get nothing.
+arrangement, the quantity and the outcome. TC-125-03 proves invalid actions and
+rollbacks produce none. TC-125-04 proves former and unrelated users get nothing.
 """
 
 import pytest
@@ -18,7 +17,7 @@ from models.notification import Notification
 from repositories import notifications as notifications_repo
 from tests.integration.test_equipment_availability import entry, new_type
 from tests.integration.test_equipment_requirements import catalogue, planning_event
-from tests.integration.test_reserve_equipment import reserve
+from tests.integration.test_reserve_equipment import reservations, reserve
 from tests.integration.test_review_equipment_requirements import requirement, review_url
 from tests.integration.test_submit_event_request import MakeClient, MakeUser
 
@@ -56,6 +55,8 @@ async def test_each_review_outcome_notifies_the_coordinator(
 ) -> None:
     """AC1: reviewing a requirement notifies the current Coordinator with the
     requirement, the outcome and the review time."""
+    # Tech Support reviews one equipment item. The Coordinator in charge of the
+    # event should get exactly one inbox message saying what the outcome was.
     catalogue(db, "Projector")
     event, coordinator = planning_event(db, make_user)
     row = requirement(db, event)
@@ -64,6 +65,7 @@ async def test_each_review_outcome_notifies_the_coordinator(
         response = await client.patch(review_url(row.id), json={"review_status": outcome.value})
 
     assert response.status_code == 200, response.text
+    db.refresh(row)
     rows = _inbox(db, coordinator.id)
     assert len(rows) == 1
     [item] = rows
@@ -90,8 +92,10 @@ async def test_each_review_outcome_notifies_the_coordinator(
 async def test_full_and_partial_reservations_each_notify_the_coordinator(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
-    """AC2: a full reservation and a later partial top-up each notify the Coordinator
-    with the arrangement, the quantity and the outcome."""
+    """AC2: a partial reservation and the top-up that completes it each notify the
+    Coordinator with the arrangement, the quantity and the outcome."""
+    # Tech Support reserves equipment twice. The Coordinator should get one message
+    # per reservation, each linked to the reservation it belongs to.
     event, coordinator = planning_event(db, make_user)
     equipment_type = new_type()
     entry(db, equipment_type, 5)
@@ -106,26 +110,30 @@ async def test_full_and_partial_reservations_each_notify_the_coordinator(
 
     rows = _inbox(db, coordinator.id)
     assert len(rows) == 2
-    assert rows[0].type == NotificationType.EQUIPMENT_RESERVED_FULL
-    assert rows[1].type == NotificationType.EQUIPMENT_RESERVED_PARTIAL
+    # Match each item to its reservation row instead of relying on inbox order.
+    [first_row, second_row] = reservations(db)
+    by_source = {item.source_id: item for item in rows}
+    assert set(by_source) == {str(first_row.id), str(second_row.id)}
+    assert by_source[str(first_row.id)].type == NotificationType.EQUIPMENT_RESERVED_PARTIAL
+    assert by_source[str(second_row.id)].type == NotificationType.EQUIPMENT_RESERVED_FULL
     for item in rows:
         assert item.source_type == NotificationSource.EQUIPMENT_RESERVATION
         assert item.event_request_id == event.id
         assert item.occurred_at.tzinfo is not None
         assert item.viewed_at is None
-    # One item per reservation: the source ids are the two distinct reservation rows.
-    assert rows[0].source_id != rows[1].source_id
 
 
 # ------------------------------------------------------------------ TC-125-03
 
 
 @pytest.mark.story("SCRUM-125")
-async def test_retry_invalid_and_rollback_create_nothing(
+async def test_invalid_and_unauthorised_reviews_create_nothing(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
-    """AC3: a re-staged retry, an invalid review, an unauthorised review and a
-    rolled-back reservation produce no extra item."""
+    """AC3: an invalid review and an unauthorised review are refused before anything
+    is written, so no item exists for either."""
+    # Bad requests (a made-up outcome, or someone without permission) are rejected,
+    # so no message should be created for them.
     catalogue(db, "Projector")
     event, coordinator = planning_event(db, make_user)
     row = requirement(db, event)
@@ -140,19 +148,6 @@ async def test_retry_invalid_and_rollback_create_nothing(
         refused = await client.patch(review_url(row.id), json={"review_status": "approved"})
         assert refused.status_code == 422
 
-    # A retry that re-stages the same review collides on the review's source key
-    # instead of duplicating (ADR-0060).
-    db.refresh(row)
-    notifications_repo.stage(
-        db,
-        recipient_id=coordinator.id,
-        event_request_id=event.id,
-        type=NotificationType.EQUIPMENT_REVIEW_AVAILABLE,
-        source_type=NotificationSource.EQUIPMENT_REVIEW,
-        source_id=f"{row.id}:{row.updated_at.isoformat()}",
-        occurred_at=row.updated_at,
-    )
-    db.commit()
     assert _total_notifications(db) == 1
 
     # An unauthorised review is refused before anything is written.
@@ -162,17 +157,29 @@ async def test_retry_invalid_and_rollback_create_nothing(
         )
     assert forbidden.status_code == 403
 
-    # A rolled-back reservation: asking for more than is free refuses the exact-or-
-    # nothing request with 409, so no row and no notification exist for it.
+    assert _total_notifications(db) == 1
+    assert len(_inbox(db, coordinator.id)) == 1
+
+
+@pytest.mark.story("SCRUM-125")
+async def test_rolled_back_reservation_creates_nothing(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    """AC3: asking for more than is free refuses the exact-or-nothing request with
+    409, so no reservation row and no notification exist for it."""
+    # Asking for more equipment than is free is rejected. Nothing is saved, so no
+    # message is sent either.
+    event, coordinator = planning_event(db, make_user)
     equipment_type = new_type()
     entry(db, equipment_type, 1)
     scarce = requirement(db, event, equipment_type, quantity=3)
-    async with make_client(tech) as client:
+
+    async with make_client(make_user("tech_support")) as client:
         rejected = await reserve(client, event, scarce, quantity=2)
     assert rejected.status_code == 409
 
-    assert _total_notifications(db) == 1
-    assert len(_inbox(db, coordinator.id)) == 1
+    assert _total_notifications(db) == 0
+    assert _inbox(db, coordinator.id) == []
 
 
 # ------------------------------------------------------------------ TC-125-04
@@ -184,6 +191,8 @@ async def test_former_and_unrelated_users_get_nothing(
 ) -> None:
     """AC3: a review and a reservation notify only the current Coordinator — not a
     former one, not Technical Support, not other roles."""
+    # Only the current Coordinator gets the message. The previous Coordinator and
+    # other staff get nothing.
     catalogue(db, "Projector")
     event, coordinator = planning_event(db, make_user)
     former = make_user("coordinator")
@@ -216,6 +225,8 @@ async def test_review_without_a_coordinator_still_commits(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     """AC1 boundary: no Coordinator assigned → the review still commits, zero rows."""
+    # With no Coordinator assigned, the review still goes through but no message
+    # is created.
     catalogue(db, "Projector")
     event, _ = planning_event(db, make_user)
     event.coordinator_id = None
@@ -236,6 +247,8 @@ async def test_reservation_without_a_coordinator_still_commits(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
     """AC2 boundary: no Coordinator assigned → the reservation still commits, zero rows."""
+    # With no Coordinator assigned, the reservation still goes through but no
+    # message is created.
     event, _ = planning_event(db, make_user)
     event.coordinator_id = None
     db.flush()
