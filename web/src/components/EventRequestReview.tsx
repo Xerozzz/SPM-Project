@@ -18,6 +18,7 @@ import ChangeRequestList from './ChangeRequestList'
 import ClarificationThread from './ClarificationThread'
 import CompleteEvent from './CompleteEvent'
 import ConfirmEvent from './ConfirmEvent'
+import ReminderSchedule from './ReminderSchedule'
 import { EventHistoryToggle } from './EventHistory'
 import EventEquipmentRequirements from './EventEquipmentRequirements'
 import PlanningInfoEditor from './PlanningInfoEditor'
@@ -220,6 +221,8 @@ function ReviewCard({
       {/* Only while the event is still being planned: `list_bookable_for_coordinator`
           holds Approved events, so a confirmed one leaves this list altogether. */}
       {request.status === 'approved' && <ConfirmEvent event={request} onConfirmed={onConfirmed} />}
+      {/* SCRUM-85: the Coordinator's own reminders about outstanding arrangements. */}
+      {request.status === 'approved' && <ReminderSchedule event={request} />}
       {request.status === 'confirmed' && (
         <>
           <RegistrationSettingsCard event={request} />
