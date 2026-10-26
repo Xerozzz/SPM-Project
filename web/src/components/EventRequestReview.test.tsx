@@ -117,6 +117,8 @@ function renderReview(reviewable: unknown[], bookable: unknown[] = [], confirmed
     if (key.endsWith('/catalogue-types')) return json([])
     // SCRUM-80 put a confirm control on this card. Ready with no blockers, so it adds
     // no list items of its own to the booking lists these tests count.
+    // SCRUM-85 put a reminder schedule on this card; empty is enough for these tests.
+    if (key.endsWith('/reminders')) return json([])
     if (key.endsWith('/confirmation')) {
       return json({
         event_request_id: 'req-1',
@@ -157,6 +159,8 @@ function renderBookingReview(submission: unknown, status = 200, existingBookings
     if (key.endsWith('/catalogue-types')) return json([])
     // SCRUM-80 put a confirm control on this card. Ready with no blockers, so it adds
     // no list items of its own to the booking lists these tests count.
+    // SCRUM-85 put a reminder schedule on this card; empty is enough for these tests.
+    if (key.endsWith('/reminders')) return json([])
     if (key.endsWith('/confirmation')) {
       return json({
         event_request_id: 'req-1',
@@ -198,6 +202,8 @@ function renderExistingBookingReview(existingBookings: unknown[]) {
     if (key.endsWith('/catalogue-types')) return json([])
     // SCRUM-80 put a confirm control on this card. Ready with no blockers, so it adds
     // no list items of its own to the booking lists these tests count.
+    // SCRUM-85 put a reminder schedule on this card; empty is enough for these tests.
+    if (key.endsWith('/reminders')) return json([])
     if (key.endsWith('/confirmation')) {
       return json({
         event_request_id: 'req-1',
@@ -381,6 +387,8 @@ test('SCRUM-78: adds another venue, retains both records on reload and accepts a
     if (key.endsWith('/catalogue-types')) return json([])
     // SCRUM-80 put a confirm control on this card. Ready with no blockers, so it adds
     // no list items of its own to the booking lists these tests count.
+    // SCRUM-85 put a reminder schedule on this card; empty is enough for these tests.
+    if (key.endsWith('/reminders')) return json([])
     if (key.endsWith('/confirmation')) {
       return json({
         event_request_id: 'req-1',

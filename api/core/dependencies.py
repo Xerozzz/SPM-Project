@@ -64,6 +64,7 @@ class EventAccess(StrEnum):
     READ_ASSIGNMENT_HISTORY = "read_assignment_history"
     READ_SAFETY_REVIEWS = "read_safety_reviews"
     CONFIRM_EVENT = "confirm_event"
+    MANAGE_REMINDERS = "manage_reminders"
     READ_REGISTRATION_SETTINGS = "read_registration_settings"
     READ_REGISTRATIONS = "read_registrations"
     MANAGE_REGISTRATION = "manage_registration"
@@ -232,6 +233,18 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
         # or ask whether it can be. Deliberately not pinned to a status, following
         # CHECK_EQUIPMENT_AVAILABILITY below: outside planning the service answers 409
         # naming that, which tells the assignee more than a bare 403 would.
+        # SCRUM-85 AC2: the reminder schedule belongs to the event's current assigned
+        # Coordinator, for reading as well as changing — it is their own working
+        # arrangement, not a record of the event. A Lead or the owning Organiser gets
+        # nothing from those roles alone, and reassignment transfers it at once because
+        # the check is against the event's current assignee. No status pin: the service
+        # answers for an event outside planning, which says more than a bare 403.
+        if permission is EventAccess.MANAGE_REMINDERS:
+            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+            if is_assigned:
+                return request
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
         if permission is EventAccess.CONFIRM_EVENT:
             is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
             if is_assigned:

@@ -30,6 +30,7 @@ from models.event_equipment_requirement import (
 )
 from models.event_registration import EventRegistration as EventRegistration
 from models.event_registration import EventRegistrationHistory as EventRegistrationHistory
+from models.event_reminder import EventReminder as EventReminder
 from models.event_request import EventRequest as EventRequest
 from models.notification import Notification as Notification
 from models.organisation import Organisation as Organisation

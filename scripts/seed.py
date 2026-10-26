@@ -28,6 +28,7 @@ from models.event_closure_note import EventClosureNote
 from models.event_coordinator_assignment import EventCoordinatorAssignment
 from models.event_equipment_requirement import EventEquipmentRequirement
 from models.event_registration import EventRegistration, EventRegistrationHistory
+from models.event_reminder import EventReminder
 from models.event_request import EventRequest
 from models.notification import Notification
 from models.organisation import Organisation
@@ -304,6 +305,8 @@ _DEPENDENTS = (
     EquipmentReservation,
     EventEquipmentRequirement,
     EventClarification,
+    # SCRUM-85: a reminder schedule points at the event it is for.
+    EventReminder,
     # SCRUM-86: closure notes of a completed event.
     EventClosureNote,
     # SCRUM-115: an Organiser's cancellation requests.

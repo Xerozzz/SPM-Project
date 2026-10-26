@@ -63,6 +63,10 @@ class NotificationType(StrEnum):
     CANCELLATION_REQUESTED = "cancellation_requested"
     CANCELLATION_DECLINED = "cancellation_declined"
     EVENT_CANCELLED = "event_cancelled"
+    # SCRUM-85 AC5: arrangements for one of your events are still incomplete with the
+    # event approaching. Which of them is read live from the event (ADR-0022 keeps
+    # presentation out of the row), so a reminder can never name stale work.
+    ARRANGEMENTS_INCOMPLETE = "arrangements_incomplete"
 
 
 class NotificationSource(StrEnum):
@@ -98,6 +102,10 @@ class NotificationSource(StrEnum):
     # review row's id is a stable key: the same decision cannot notify twice and a
     # later decision on the same event is a new row and so a new notification.
     SAFETY_REVIEW = "safety_review"
+    # SCRUM-85: one configured reminder occurrence. The schedule row is the occurrence,
+    # so its id is a stable key: a retry or a second worker collides rather than
+    # sending twice, and another lead time on the same event stays distinct.
+    EVENT_REMINDER = "event_reminder"
     # SCRUM-49: one new Pending venue request. The booking row's id is the source_id,
     # so retrying the same submission collides per recipient (idempotent) while a
     # later distinct request for the same event stays distinct. SCRUM-127 owns

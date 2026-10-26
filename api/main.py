@@ -16,6 +16,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from core.config import get_settings
 from core.database import engine
 from core.hold_expiry import HoldExpiryTimer
+from core.reminder_sweep import ReminderSweepTimer
 from routers import (
     auth,
     equipment,
@@ -27,6 +28,7 @@ from routers import (
     event_confirmations,
     event_history,
     event_registrations,
+    event_reminders,
     event_requests,
     notifications,
     registration_intake,
@@ -42,11 +44,16 @@ from routers import (
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """SCRUM-108: the minute timer that expires tentative venue holds runs while the app
-    is up (ADR-0030). Test clients that do not start the app never start it."""
-    timer = HoldExpiryTimer()
-    timer.start()
+    is up (ADR-0030). SCRUM-85 adds a second one for arrangement reminders; they are kept
+    apart so a failure in either cannot stop the other. Test clients that do not start
+    the app never start them."""
+    holds = HoldExpiryTimer()
+    reminders = ReminderSweepTimer()
+    holds.start()
+    reminders.start()
     yield
-    timer.stop()
+    reminders.stop()
+    holds.stop()
 
 
 def create_app() -> FastAPI:
@@ -96,6 +103,7 @@ def create_app() -> FastAPI:
     app.include_router(event_cancellations.router, prefix="/api")
     # SCRUM-88: the event's history, read from the records above (ADR-0062).
     app.include_router(event_history.router, prefix="/api")
+    app.include_router(event_reminders.router, prefix="/api")
     app.include_router(event_requests.router, prefix="/api")
     app.include_router(event_registrations.router, prefix="/api")
     app.include_router(event_registrations.review_router, prefix="/api")
