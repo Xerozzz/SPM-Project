@@ -47,10 +47,14 @@ test('a new venue request notifies the Venue Staff inbox', async ({ page }) => {
   await signIn(page, 'venue-staff@example.com')
   const inbox = page.getByLabel('Notifications')
   await expect(inbox).toBeVisible()
-  // The newest notification is the just-submitted request; it is unread and names the
-  // new-request action for this spec's event (the inbox shows the event ID).
-  const items = inbox.getByRole('listitem')
-  await expect(items.first()).toContainText('Unread')
-  await expect(items.first()).toContainText('venue_request_submitted')
-  await expect(items.first()).toContainText(event.id)
+  // Parallel specs submit venue requests too, so the newest item may belong to another
+  // event. Select this spec's own: the label names the event ID after the read state,
+  // which is left out of the match so that "Unread" is still asserted below.
+  const own = inbox
+    .getByRole('listitem', { name: new RegExp(`notification for event ${event.id}$`) })
+    .filter({ hasText: 'venue_request_submitted' })
+  await expect(own).toHaveCount(1)
+  await expect(own).toContainText('Unread')
+  await expect(own).toContainText('venue_request_submitted')
+  await expect(own).toContainText(event.id)
 })
