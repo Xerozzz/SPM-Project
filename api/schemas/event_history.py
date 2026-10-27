@@ -28,7 +28,8 @@ class EventHistoryEntryRead(BaseModel):
     clarification entry, which only the event's current assigned Coordinator receives.
 
     SCRUM-119 adds the session period to venue entries, the other arrangement of a
-    replacement, the bookings a buffer change caught out, and before-and-after `changes`.
+    replacement, the bookings a buffer change caught out, and before-and-after `changes`,
+    and to equipment entries their equipment type and, for a reservation, its quantity.
     """
 
     id: str
@@ -51,6 +52,8 @@ class EventHistoryEntryRead(BaseModel):
     related_booking_id: uuid.UUID | None
     affected_booking_ids: list[uuid.UUID]
     changes: list[FieldChangeRead]
+    equipment_type: str | None
+    quantity: int | None
 
     @classmethod
     def from_entry(cls, entry: HistoryEntry) -> Self:
@@ -78,4 +81,6 @@ class EventHistoryEntryRead(BaseModel):
                 FieldChangeRead(field=c.field, label=c.label, old=c.old, new=c.new)
                 for c in entry.changes
             ],
+            equipment_type=entry.equipment_type,
+            quantity=entry.quantity,
         )

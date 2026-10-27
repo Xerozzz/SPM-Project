@@ -28,4 +28,6 @@ def history_of(
         bookings,
         may_read_clarifications,
         repo.buffer_change_records(db, [b.id for b in bookings]),
+        repo.requirement_change_records(db, event.id),
+        repo.reservation_records(db, event.id),
     )

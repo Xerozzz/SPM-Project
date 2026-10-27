@@ -120,6 +120,12 @@ function HistoryRow({ entry }: { entry: EventHistoryEntry }) {
           )}
         </p>
       )}
+      {entry.equipment_type !== null && (
+        <p>
+          {entry.equipment_type}
+          {entry.quantity !== null && ` × ${entry.quantity}`}
+        </p>
+      )}
       {entry.related_booking_id !== null && (
         <p>
           {entry.action === 'arrangement_cancelled' ? 'Replaced by' : 'Replaces'} arrangement{' '}
@@ -166,6 +172,12 @@ const ACTION_LABELS: Record<HistoryAction, string> = {
   replacement_adopted: 'Replacement adopted',
   arrangement_cancelled: 'Venue arrangement cancelled',
   buffer_changed: 'Venue buffers changed',
+  requirement_added: 'Equipment requirement added',
+  requirement_updated: 'Equipment requirement changed',
+  requirement_removed: 'Equipment requirement removed',
+  equipment_reserved: 'Equipment reserved',
+  reservation_flagged: 'Reservation flagged for reconsideration',
+  reservation_released: 'Reservation released',
 }
 
 const SOURCE_LABELS: Record<HistorySource, string> = {
@@ -174,6 +186,8 @@ const SOURCE_LABELS: Record<HistorySource, string> = {
   clarification: 'internal note',
   venue_booking: 'venue booking',
   venue_buffer_change: 'venue buffer change',
+  equipment_requirement_change: 'equipment requirement change',
+  equipment_reservation: 'equipment reservation',
 }
 
 /** A decision's outcome is part of what happened, so it is named with the action. */
