@@ -400,7 +400,8 @@ def test_staging_for_an_event_that_does_not_exist_is_not_found(
     [
         (
             EventStatus.CONFIRMED,
-            "This event is confirmed: change its venue through the venue-change process",
+            # SCRUM-118 names the venue-change action this event now goes through.
+            "This event is confirmed: cancelling an arrangement starts a venue change",
         ),
         *[
             (status, "Venue arrangements can only be cancelled while the event is being planned")
