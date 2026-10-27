@@ -43,4 +43,9 @@ def test_an_invalidated_approval_cannot_confirm_even_for_the_same_plan() -> None
 
 @pytest.mark.story("SCRUM-130")
 def test_the_causes_are_stored_as_short_text() -> None:
-    assert [cause.value for cause in ReplanCause] == ["change_request", "venue_closure"]
+    # SCRUM-118 adds the venue change (ADR-0066). Each still fits the String(32) column.
+    assert [cause.value for cause in ReplanCause] == [
+        "change_request",
+        "venue_closure",
+        "venue_cancellation",
+    ]

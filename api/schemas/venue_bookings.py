@@ -39,6 +39,19 @@ class VenueBookingCancel(BaseModel):
     reason: str | None = None
 
 
+class VenueChangeCreate(BaseModel):
+    """SCRUM-118: cancel one arrangement of a Confirmed event as a venue change.
+
+    Both fields default so that a missing one gets the same field error as a wrong one,
+    from domain.venue_cancellation.venue_change_problems, rather than a differently shaped
+    422. `confirm_venue_change` must be true: the Coordinator has agreed the event goes back
+    to planning (AC1).
+    """
+
+    reason: str | None = None
+    confirm_venue_change: bool = False
+
+
 class SuitabilityRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -99,3 +112,10 @@ class VenueBookingRead(BaseModel):
     # stand beside everything else at that venue. Derived on every read rather than
     # stored, so it appears and disappears on its own as the venue changes (AC3, AC7).
     conflict: ConflictRead | None = None
+
+
+class VenueChangeRead(BaseModel):
+    """SCRUM-118: the cancelled arrangement, and the status the event went back to."""
+
+    booking: VenueBookingRead
+    event_status: str

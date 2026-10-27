@@ -331,6 +331,8 @@ def stage_cancellation(
     cancelled_by_id: uuid.UUID,
     reason: str | None,
     now: datetime,
+    *,
+    venue_change: bool = False,
 ) -> VenueBooking:
     """SCRUM-109: cancel one arrangement of an event, in the caller's transaction.
 
@@ -345,11 +347,14 @@ def stage_cancellation(
     expired, or a request Venue Staff have just decided, is judged as it now is (AC10).
     Nothing else of the event is touched: not its status (AC8), not its other bookings
     (AC1). The decision and hold columns stay as they were (AC2).
+
+    SCRUM-118: `venue_change` is set only by `services.venue_changes`, which has the
+    Coordinator's confirmation; it allows a Confirmed event instead of a planning one.
     """
     event = event_repo.get_for_update(db, event_id)
     if event is None:
         raise BookingNotFoundError
-    refusal = venue_cancellation.event_refusal(event.status)
+    refusal = venue_cancellation.event_refusal(event.status, venue_change)
     if refusal is not None:
         raise EventNotInPlanningError(refusal)
     booking = booking_repo.get_booking_for_update(db, booking_id)

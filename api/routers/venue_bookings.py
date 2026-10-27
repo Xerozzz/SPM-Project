@@ -28,9 +28,12 @@ from schemas.venue_bookings import (
     VenueBookingCreate,
     VenueBookingRead,
     VenueBookingSubmissionRead,
+    VenueChangeCreate,
+    VenueChangeRead,
 )
 from services import venue_bookings as service
 from services import venue_buffer_review as buffer_review
+from services import venue_changes
 from services import venue_replacements as replacements
 
 router = APIRouter(prefix="/event-requests", tags=["venue-bookings"])
@@ -47,12 +50,16 @@ AuthenticatedUser = Annotated[dict[str, object], Depends(get_current_user)]
 Db = Annotated[Session, Depends(get_db)]
 
 # SCRUM-109 AC7, AC9: what the Coordinator is told when the event's status refuses.
+# SCRUM-118 names the venue-change action a Confirmed event's arrangement goes through.
 _EVENT_REFUSALS = {
     EventRefusal.CONFIRMED_NEEDS_VENUE_CHANGE: (
-        "This event is confirmed: change its venue through the venue-change process"
+        "This event is confirmed: cancelling an arrangement starts a venue change"
     ),
     EventRefusal.NOT_IN_PLANNING: (
         "Venue arrangements can only be cancelled while the event is being planned"
+    ),
+    EventRefusal.NOT_CONFIRMED: (
+        "Only a confirmed event's arrangements are cancelled as a venue change"
     ),
 }
 # SCRUM-109 AC5, AC10: what the Coordinator is told when the arrangement itself refuses.
@@ -194,6 +201,46 @@ def cancel_venue_arrangement(
         )
     except _CANCELLATION_REFUSALS as exc:
         raise _cancellation_error(exc) from exc
+    venue = venue_repo.get(db, booking.venue_id)
+    assert venue is not None  # a booking cannot exist without its venue.
+    return _booking_read(booking, venue, None)
+
+
+@router.get("/{request_id}/venue-arrangements", response_model=list[VenueBookingRead])
+def list_venue_arrangements(event: CancellableEvent, db: Db) -> list[VenueBookingRead]:
+    """SCRUM-118: every arrangement of the event in any status, for the current assigned
+    Coordinator, so a Confirmed event's arrangements can be seen and cancelled. The
+    planning list above is pinned to Approved; this one is not (ADR-0066)."""
+    return [_read_with_venue(db, row) for row in service.list_for_event(db, event)]
+
+
+@router.post(
+    "/{request_id}/venue-bookings/{booking_id}/venue-change", response_model=VenueChangeRead
+)
+def start_venue_change(
+    event: CancellableEvent,
+    booking_id: uuid.UUID,
+    body: VenueChangeCreate,
+    user: AuthenticatedUser,
+    db: Db,
+) -> VenueChangeRead:
+    """SCRUM-118: cancel one arrangement of a Confirmed event, which returns it to planning."""
+    try:
+        booking, changed = venue_changes.cancel_for_venue_change(
+            db,
+            event.id,
+            booking_id,
+            _user_id(user),
+            body.reason,
+            body.confirm_venue_change,
+            datetime.now(UTC),
+        )
+    except _CANCELLATION_REFUSALS as exc:
+        raise _cancellation_error(exc) from exc
+    return VenueChangeRead(booking=_read_with_venue(db, booking), event_status=changed.status)
+
+
+def _read_with_venue(db: Session, booking: VenueBooking) -> VenueBookingRead:
     venue = venue_repo.get(db, booking.venue_id)
     assert venue is not None  # a booking cannot exist without its venue.
     return _booking_read(booking, venue, None)

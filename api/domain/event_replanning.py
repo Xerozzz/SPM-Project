@@ -1,7 +1,8 @@
 """Returning a Confirmed event to planning (SCRUM-130, ADR-0052). Pure, no database.
 
 A Confirmed event goes back to planning when its plan is no longer the one that was
-confirmed: an approved change request (SCRUM-47) or a venue closure (SCRUM-132). The
+confirmed: an approved change request (SCRUM-47), a venue closure (SCRUM-132), or an
+arrangement the Coordinator cancelled as a venue change (SCRUM-118). The
 safety approval that let it be confirmed judged the old plan, so it stops counting and
 the plan has to be reviewed again before the event is reconfirmed.
 
@@ -19,6 +20,8 @@ class ReplanCause(StrEnum):
 
     CHANGE_REQUEST = "change_request"
     VENUE_CLOSURE = "venue_closure"
+    # SCRUM-118: the Coordinator cancelled an arrangement as a venue change (ADR-0066).
+    VENUE_CANCELLATION = "venue_cancellation"
 
 
 def needs_replanning(status: EventStatus) -> bool:

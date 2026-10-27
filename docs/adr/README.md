@@ -74,6 +74,7 @@ someone else made two weeks ago.
 | [0062](0062-event-history-from-retained-source-records.md) | Build an event's history from the records each story already keeps | Proposed |
 | [0063](0063-reminder-occurrences-as-rows-with-a-derived-due-time.md) | A reminder occurrence is a row, and its due time is derived | Proposed |
 | [0064](0064-venue-change-entries-and-field-changes-in-the-event-history.md) | Venue change entries, and before-and-after values as whitelisted field changes | Proposed |
+| [0066](0066-cancelling-a-confirmed-arrangement-is-a-venue-change.md) | Cancelling an arrangement of a Confirmed event is a venue change that returns it to planning | Proposed |
 
 ## When to write one
 
