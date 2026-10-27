@@ -46,6 +46,14 @@ class HistoryAction(StrEnum):
     REPLACEMENT_ADOPTED = "replacement_adopted"
     ARRANGEMENT_CANCELLED = "arrangement_cancelled"
     BUFFER_CHANGED = "buffer_changed"
+    # SCRUM-119 equipment. A change to a requirement ranks before the reservation flags it
+    # raises in the same instant, because the change is what raised them.
+    REQUIREMENT_ADDED = "requirement_added"
+    REQUIREMENT_UPDATED = "requirement_updated"
+    REQUIREMENT_REMOVED = "requirement_removed"
+    EQUIPMENT_RESERVED = "equipment_reserved"
+    RESERVATION_FLAGGED = "reservation_flagged"
+    RESERVATION_RELEASED = "reservation_released"
 
 
 class HistorySource(StrEnum):
@@ -56,6 +64,8 @@ class HistorySource(StrEnum):
     CLARIFICATION = "clarification"
     VENUE_BOOKING = "venue_booking"
     VENUE_BUFFER_CHANGE = "venue_buffer_change"
+    EQUIPMENT_REQUIREMENT_CHANGE = "equipment_requirement_change"
+    EQUIPMENT_RESERVATION = "equipment_reservation"
 
 
 class HistoryOutcome(StrEnum):
@@ -168,6 +178,37 @@ class BufferChangeRecord:
 
 
 @dataclass(frozen=True)
+class RequirementChangeRecord:
+    """One `equipment_requirement_changes` row (SCRUM-43 AC8). `action` is the stored
+    "added", "updated" or "removed"; an added row has no old values, a removed one no new."""
+
+    id: uuid.UUID
+    action: str
+    equipment_type: str
+    changed_by: Person
+    changed_at: datetime
+    old_quantity: int | None
+    new_quantity: int | None
+    old_technical_requirements: str | None
+    new_technical_requirements: str | None
+
+
+@dataclass(frozen=True)
+class ReservationRecord:
+    """One `equipment_reservations` row (SCRUM-53), with who reserved and who released it.
+    The quantity stays on the row after a release, so what was held is still known."""
+
+    id: uuid.UUID
+    equipment_type: str
+    quantity: int
+    reserved_by: Person
+    reserved_at: datetime
+    flagged_at: datetime | None
+    released_by: Person | None
+    released_at: datetime | None
+
+
+@dataclass(frozen=True)
 class HistoryEntry:
     """One action in the history. A None `actor` is the system (a hold's expiry)."""
 
@@ -190,6 +231,8 @@ class HistoryEntry:
     related_booking_id: uuid.UUID | None = None
     affected_booking_ids: tuple[uuid.UUID, ...] = ()
     changes: tuple[FieldChange, ...] = ()
+    equipment_type: str | None = None
+    quantity: int | None = None
 
     @property
     def key(self) -> str:
@@ -371,6 +414,80 @@ def buffer_change_entry(record: BufferChangeRecord) -> HistoryEntry:
     )
 
 
+_REQUIREMENT_ACTIONS = {
+    "added": HistoryAction.REQUIREMENT_ADDED,
+    "updated": HistoryAction.REQUIREMENT_UPDATED,
+    "removed": HistoryAction.REQUIREMENT_REMOVED,
+}
+
+
+def _text(value: int | None) -> str | None:
+    return None if value is None else str(value)
+
+
+def requirement_change_entry(record: RequirementChangeRecord) -> HistoryEntry:
+    """An equipment requirement added, changed or removed, by the assigned Coordinator.
+
+    Emits exactly quantity and technical requirements, both sides, as the row keeps them:
+    an addition has no old values and a removal no new ones (ADR-0064). The requirement
+    the organiser picked is carried across at approval with no change row (SCRUM-43), so
+    it has no "added" entry (ADR-0065).
+    """
+    return HistoryEntry(
+        _REQUIREMENT_ACTIONS[record.action],
+        record.changed_at,
+        record.changed_by,
+        HistorySource.EQUIPMENT_REQUIREMENT_CHANGE,
+        record.id,
+        equipment_type=record.equipment_type,
+        changes=(
+            FieldChange(
+                "quantity",
+                "Quantity",
+                _text(record.old_quantity),
+                _text(record.new_quantity),
+            ),
+            FieldChange(
+                "technical_requirements",
+                "Technical requirements",
+                record.old_technical_requirements,
+                record.new_technical_requirements,
+            ),
+        ),
+    )
+
+
+def reservation_entries(record: ReservationRecord) -> list[HistoryEntry]:
+    """A reservation made, flagged for reconsideration, and released, each with its
+    quantity.
+
+    A flag is set by the requirement change that made the reservation stop matching, in
+    the same commit, and stores no actor, so it is the system's; only the first flag is
+    kept (ADR-0033, ADR-0065). A release is recorded with who and when; today only a
+    whole-event cancellation (SCRUM-115) releases.
+    """
+
+    def entry(action: HistoryAction, at: datetime, actor: Person | None) -> HistoryEntry:
+        return HistoryEntry(
+            action,
+            at,
+            actor,
+            HistorySource.EQUIPMENT_RESERVATION,
+            record.id,
+            equipment_type=record.equipment_type,
+            quantity=record.quantity,
+        )
+
+    entries = [entry(HistoryAction.EQUIPMENT_RESERVED, record.reserved_at, record.reserved_by)]
+    if record.flagged_at is not None:
+        entries.append(entry(HistoryAction.RESERVATION_FLAGGED, record.flagged_at, None))
+    if record.released_at is not None:
+        entries.append(
+            entry(HistoryAction.RESERVATION_RELEASED, record.released_at, record.released_by)
+        )
+    return entries
+
+
 def visible(entries: Iterable[HistoryEntry], may_read_clarifications: bool) -> list[HistoryEntry]:
     """SCRUM-106: note entries only for a viewer who may read the notes. Anyone else gets
     no trace of them, not even an entry without its text (ADR-0036)."""
@@ -397,6 +514,8 @@ def timeline(
     bookings: Iterable[BookingRecord],
     may_read_clarifications: bool,
     buffer_changes: Iterable[BufferChangeRecord] = (),
+    requirement_changes: Iterable[RequirementChangeRecord] = (),
+    reservations: Iterable[ReservationRecord] = (),
 ) -> list[HistoryEntry]:
     """Every reader's entries for one event, filtered for the viewer, oldest first."""
     bookings = list(bookings)
@@ -414,4 +533,7 @@ def timeline(
             booking, request.confirmed_by, request.confirmed_at, adopted.get(booking.id)
         )
     entries += [buffer_change_entry(c) for c in buffer_changes]
+    entries += [requirement_change_entry(c) for c in requirement_changes]
+    for reservation in reservations:
+        entries += reservation_entries(reservation)
     return ordered(visible(entries, may_read_clarifications))

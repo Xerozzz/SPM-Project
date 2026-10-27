@@ -41,6 +41,8 @@ function entry(overrides: Partial<EventHistoryEntry>): EventHistoryEntry {
     related_booking_id: null,
     affected_booking_ids: [],
     changes: [],
+    equipment_type: null,
+    quantity: null,
     ...overrides,
   }
 }
@@ -366,5 +368,87 @@ describe('SCRUM-119 venue change entries (frontend unit)', () => {
     expect(row).toHaveTextContent('Record: venue buffer change bc-1')
     // Labels come from the API; the column names never reach the screen.
     expect(row).not.toHaveTextContent('setup_minutes')
+  })
+})
+
+// SCRUM-119 AC6: equipment entries. Quantities and who did it, "System" for a flag, and
+// requirement changes through the same labelled before-and-after renderer.
+describe('SCRUM-119 equipment entries (frontend unit)', () => {
+  const reservation = {
+    source_type: 'equipment_reservation' as const,
+    source_id: 'rs-1',
+    equipment_type: 'Projector',
+    quantity: 2,
+  }
+
+  test('a reservation, its flag and its release show the quantity and who', async () => {
+    renderWith(
+      ok([
+        entry({
+          ...reservation,
+          id: 'equipment_reserved:rs-1',
+          action: 'equipment_reserved',
+          actor_id: 'u-tech',
+          actor_email: 'tech@example.com',
+        }),
+        entry({
+          ...reservation,
+          id: 'reservation_flagged:rs-1',
+          action: 'reservation_flagged',
+          actor_id: null,
+          actor_email: null,
+        }),
+        entry({
+          ...reservation,
+          id: 'reservation_released:rs-1',
+          action: 'reservation_released',
+          actor_id: 'u-coord',
+          actor_email: 'coordinator@example.com',
+        }),
+      ]),
+      history,
+    )
+    const [reserved, flagged, released] = await screen.findAllByRole('listitem')
+
+    expect(reserved).toHaveTextContent('Equipment reserved by tech@example.com')
+    expect(reserved).toHaveTextContent('Projector × 2')
+    expect(flagged).toHaveTextContent('Reservation flagged for reconsideration by System')
+    expect(flagged).toHaveTextContent('Projector × 2')
+    expect(released).toHaveTextContent('Reservation released by coordinator@example.com')
+    expect(released).toHaveTextContent('Record: equipment reservation rs-1')
+  })
+
+  test('a requirement change shows its type and each labelled value, old and new', async () => {
+    renderWith(
+      ok([
+        entry({
+          id: 'requirement_updated:rc-1',
+          action: 'requirement_updated',
+          source_type: 'equipment_requirement_change',
+          source_id: 'rc-1',
+          actor_id: 'u-coord',
+          actor_email: 'coordinator@example.com',
+          equipment_type: 'Projector',
+          changes: [
+            { field: 'quantity', label: 'Quantity', old: '2', new: '3' },
+            {
+              field: 'technical_requirements',
+              label: 'Technical requirements',
+              old: null,
+              new: 'HDMI',
+            },
+          ],
+        }),
+      ]),
+      history,
+    )
+    const [row] = await screen.findAllByRole('listitem')
+
+    expect(row).toHaveTextContent('Equipment requirement changed by coordinator@example.com')
+    expect(row).toHaveTextContent('Projector')
+    expect(row).not.toHaveTextContent('×')
+    expect(row).toHaveTextContent('Quantity: 2 → 3')
+    expect(row).toHaveTextContent('Technical requirements: — → HDMI')
+    expect(row).not.toHaveTextContent('technical_requirements')
   })
 })

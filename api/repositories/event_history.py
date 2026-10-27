@@ -17,7 +17,11 @@ from domain.event_history import (
     ClarificationRecord,
     Person,
     RequestRecord,
+    RequirementChangeRecord,
+    ReservationRecord,
 )
+from models.equipment_requirement_change import EquipmentRequirementChange
+from models.equipment_reservation import EquipmentReservation
 from models.event_clarification import EventClarification
 from models.event_request import EventRequest
 from models.user import User
@@ -178,4 +182,55 @@ def buffer_change_records(db: Session, booking_ids: list[uuid.UUID]) -> list[Buf
             affected_booking_ids=tuple(b for b in change.flagged_booking_ids if b in ours),
         )
         for change, venue_name, email in db.execute(statement).tuples()
+    ]
+
+
+def requirement_change_records(
+    db: Session, event_request_id: uuid.UUID
+) -> list[RequirementChangeRecord]:
+    """SCRUM-43's change rows for the event, removed requirements included, with who."""
+    changer = aliased(User)
+    statement = (
+        select(EquipmentRequirementChange, changer.email)
+        .outerjoin(changer, EquipmentRequirementChange.changed_by_id == changer.id)
+        .where(EquipmentRequirementChange.event_request_id == event_request_id)
+    )
+    return [
+        RequirementChangeRecord(
+            id=change.id,
+            action=str(change.action),
+            equipment_type=change.equipment_type,
+            changed_by=Person(change.changed_by_id, email),
+            changed_at=change.changed_at,
+            old_quantity=change.old_quantity,
+            new_quantity=change.new_quantity,
+            old_technical_requirements=change.old_technical_requirements,
+            new_technical_requirements=change.new_technical_requirements,
+        )
+        for change, email in db.execute(statement).tuples()
+    ]
+
+
+def reservation_records(db: Session, event_request_id: uuid.UUID) -> list[ReservationRecord]:
+    """SCRUM-53's reservations for the event, released ones included, with who reserved
+    and who released each."""
+    reserver, releaser = aliased(User), aliased(User)
+    statement = (
+        select(EquipmentReservation, reserver.email, releaser.email)
+        .outerjoin(reserver, EquipmentReservation.created_by_id == reserver.id)
+        .outerjoin(releaser, EquipmentReservation.released_by_id == releaser.id)
+        .where(EquipmentReservation.event_request_id == event_request_id)
+    )
+    return [
+        ReservationRecord(
+            id=reservation.id,
+            equipment_type=reservation.equipment_type,
+            quantity=reservation.quantity,
+            reserved_by=Person(reservation.created_by_id, reserver_email),
+            reserved_at=reservation.created_at,
+            flagged_at=reservation.flagged_at,
+            released_by=_person(reservation.released_by_id, releaser_email),
+            released_at=reservation.released_at,
+        )
+        for reservation, reserver_email, releaser_email in db.execute(statement).tuples()
     ]
