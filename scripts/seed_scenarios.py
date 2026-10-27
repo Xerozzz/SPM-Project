@@ -162,13 +162,20 @@ def seed(db: Session, delete_dependents: DeleteDependents) -> None:
 
 
 def _ensure_venues(db: Session) -> list[Venue]:
+    """Create the test venues, or put back anything a tester changed on them, so a
+    restart really is a full reset. Buffers go back to none, the column default."""
     found: list[Venue] = []
     for values in _VENUES:
         venue = db.query(Venue).filter(Venue.name == values["name"]).first()
         if venue is None:
             venue = Venue(**values)
             db.add(venue)
-            db.flush()
+        else:
+            for key, value in values.items():
+                setattr(venue, key, value)
+            venue.setup_minutes = 0
+            venue.turnaround_minutes = 0
+        db.flush()
         found.append(venue)
     return found
 
@@ -400,7 +407,9 @@ def _confirmed_with_registrations(
     event, _ = _confirmed(
         db, people, 6, "Test 06: Confirmed, registrations open", venue, window, now
     )
-    registration_intake.open_intake(db, event.id, None, now)
+    # A closing deadline, so the Organiser can also try extending it (SCRUM-113).
+    assert event.start_at is not None
+    registration_intake.open_intake(db, event.id, event.start_at - timedelta(days=3), now)
     db.commit()
     _, accepted, waitlisted, withdrawn, pending = people.attendees
     _register(db, event, pending, "Eve Pending", now)
