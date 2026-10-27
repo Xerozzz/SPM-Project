@@ -10,6 +10,8 @@ every start, so a fresh `docker compose up` is immediately usable.
   These are *recreated on every run* — they are demo data, not user data.
 - Three venues for the catalogue (SCRUM-59), one of them deactivated so the selectable
   list and the staff list visibly differ. Inserted only when missing, like the users.
+- Twelve manual end-to-end test scenarios, one per stage of an event's life, built in
+  `seed_scenarios.py` and described in docs/manual-testing.md. Recreated on every run.
 """
 
 import uuid
@@ -59,6 +61,10 @@ _SEED_USERS: list[tuple[str, str, list[Role], uuid.UUID]] = [
     ("safety-officer@example.com", "password123", [Role.SAFETY_OFFICER], _PRIMARY_ORG_ID),
     ("attendee@example.com", "password123", [Role.ATTENDEE], _PRIMARY_ORG_ID),
     ("attendee2@example.com", "password123", [Role.ATTENDEE], _PRIMARY_ORG_ID),
+    # Manual testing: enough attendees for one event to hold every registration status.
+    ("attendee3@example.com", "password123", [Role.ATTENDEE], _PRIMARY_ORG_ID),
+    ("attendee4@example.com", "password123", [Role.ATTENDEE], _PRIMARY_ORG_ID),
+    ("attendee5@example.com", "password123", [Role.ATTENDEE], _PRIMARY_ORG_ID),
     (
         "multi-role@example.com",
         "password123",
@@ -368,6 +374,14 @@ def _approve_sample(db: Session, organiser_id: uuid.UUID, request_id: uuid.UUID)
     event_requests_service.approve(db, request_id, submitted.coordinator_id, now)
 
 
+def _seed_scenarios(db: Session) -> None:
+    """The manual testing scenarios. Imported here rather than at the top, because the
+    seed's own unit test loads this file by path, where `scripts/` is not importable."""
+    from seed_scenarios import seed
+
+    seed(db, _delete_dependents)
+
+
 def main() -> None:
     db = SessionLocal()
     try:
@@ -381,6 +395,7 @@ def main() -> None:
         db.flush()
         _seed_event_requests(db)
         db.commit()
+        _seed_scenarios(db)
     finally:
         db.close()
 
