@@ -22,6 +22,12 @@ export type HistoryAction =
   | 'replacement_adopted'
   | 'arrangement_cancelled'
   | 'buffer_changed'
+  | 'requirement_added'
+  | 'requirement_updated'
+  | 'requirement_removed'
+  | 'equipment_reserved'
+  | 'reservation_flagged'
+  | 'reservation_released'
 
 export type HistorySource =
   | 'event_request'
@@ -29,6 +35,8 @@ export type HistorySource =
   | 'clarification'
   | 'venue_booking'
   | 'venue_buffer_change'
+  | 'equipment_requirement_change'
+  | 'equipment_reservation'
 
 /** SCRUM-119: one value before and after, with its label. Only fields a reader names. */
 export interface FieldChange {
@@ -67,6 +75,9 @@ export interface EventHistoryEntry {
   /** The event's bookings a buffer change caught out. */
   affected_booking_ids: string[]
   changes: FieldChange[]
+  /** SCRUM-119 AC6: the equipment type, and a reservation's quantity. */
+  equipment_type: string | null
+  quantity: number | null
 }
 
 /** The caller may not read this event's history (AC6). */

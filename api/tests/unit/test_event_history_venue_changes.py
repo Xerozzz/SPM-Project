@@ -223,9 +223,9 @@ def test_new_actions_rank_after_every_scrum_88_action() -> None:
     """The SCRUM-88 tie-breaker is unchanged: the new actions only extend it."""
     order = list(HistoryAction)
 
-    assert order[-3:] == [
+    assert order.index(HistoryAction.HOLD_EXPIRED) == 11
+    assert order[12:15] == [
         HistoryAction.REPLACEMENT_ADOPTED,
         HistoryAction.ARRANGEMENT_CANCELLED,
         HistoryAction.BUFFER_CHANGED,
     ]
-    assert order.index(HistoryAction.HOLD_EXPIRED) == 11
