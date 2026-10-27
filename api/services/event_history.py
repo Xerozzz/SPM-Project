@@ -20,10 +20,12 @@ def history_of(
     event. `may_read_clarifications` is the SCRUM-106 rule for this caller: without it,
     note entries are left out entirely (ADR-0036).
     """
+    bookings = repo.booking_records(db, event.id)
     return timeline(
         repo.request_record(db, event.id),
         repo.assignment_records(db, event.id),
         repo.clarification_records(db, event.id),
-        repo.booking_records(db, event.id),
+        bookings,
         may_read_clarifications,
+        repo.buffer_change_records(db, [b.id for b in bookings]),
     )

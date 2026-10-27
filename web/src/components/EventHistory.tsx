@@ -104,9 +104,37 @@ function HistoryRow({ entry }: { entry: EventHistoryEntry }) {
       )}
       {entry.venue_name !== null && (
         <p>
-          {entry.venue_name}, {entry.session_label}
+          {entry.venue_name}
+          {entry.session_label !== null && `, ${entry.session_label}`}
+          {entry.session_start_at !== null && entry.session_end_at !== null && (
+            <>
+              ,{' '}
+              <time dateTime={entry.session_start_at}>
+                {formatSingaporeTime(entry.session_start_at)}
+              </time>{' '}
+              to{' '}
+              <time dateTime={entry.session_end_at}>
+                {formatSingaporeTime(entry.session_end_at)}
+              </time>
+            </>
+          )}
         </p>
       )}
+      {entry.related_booking_id !== null && (
+        <p>
+          {entry.action === 'arrangement_cancelled' ? 'Replaced by' : 'Replaces'} arrangement{' '}
+          {entry.related_booking_id}
+        </p>
+      )}
+      {entry.affected_booking_ids.length > 0 && (
+        <p>Affected arrangements: {entry.affected_booking_ids.join(', ')}</p>
+      )}
+      {/* SCRUM-119: only the fields the API's reader named, under its labels (ADR-0064). */}
+      {entry.changes.map((change) => (
+        <p key={change.field}>
+          {change.label}: {change.old ?? '—'} → {change.new ?? '—'}
+        </p>
+      ))}
       {entry.hold_expires_at !== null && (
         <p>
           Held until{' '}
@@ -135,6 +163,9 @@ const ACTION_LABELS: Record<HistoryAction, string> = {
   hold_created: 'Tentative hold placed',
   hold_confirmed: 'Hold confirmed',
   hold_expired: 'Hold expired',
+  replacement_adopted: 'Replacement adopted',
+  arrangement_cancelled: 'Venue arrangement cancelled',
+  buffer_changed: 'Venue buffers changed',
 }
 
 const SOURCE_LABELS: Record<HistorySource, string> = {
@@ -142,6 +173,7 @@ const SOURCE_LABELS: Record<HistorySource, string> = {
   coordinator_assignment: 'assignment',
   clarification: 'internal note',
   venue_booking: 'venue booking',
+  venue_buffer_change: 'venue buffer change',
 }
 
 /** A decision's outcome is part of what happened, so it is named with the action. */

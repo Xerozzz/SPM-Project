@@ -60,6 +60,15 @@ def booking(**overrides: Any) -> BookingRecord:
         held_by=None,
         held_at=None,
         expires_at=None,
+        # SCRUM-119 fields, empty for a plain pending request.
+        start_at=at(100),
+        end_at=at(102),
+        cancelled_by=None,
+        cancelled_at=None,
+        cancellation_reason=None,
+        replaces_booking_id=None,
+        adopted_by=None,
+        adopted_at=None,
     )
     return replace(pending, **overrides)
 
