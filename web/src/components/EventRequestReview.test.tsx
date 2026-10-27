@@ -463,8 +463,18 @@ test('SCRUM-78: adds another venue, retains both records on reload and accepts a
   expect(within(screen.getAllByRole('listitem')[2]).getByText('Studio')).toBeInTheDocument()
   const posts = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')
   expect(posts.map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
-    { venue_id: 'venue-2', session_label: 'Morning workshop', start_at: '2026-12-01T01:00:00.000Z', end_at: '2026-12-01T05:00:00.000Z' },
-    { venue_id: 'venue-3', session_label: 'Morning workshop', start_at: '2026-12-01T01:00:00.000Z', end_at: '2026-12-01T05:00:00.000Z' },
+    {
+      venue_id: 'venue-2',
+      session_label: 'Morning workshop',
+      start_at: '2026-12-01T01:00:00.000Z',
+      end_at: '2026-12-01T05:00:00.000Z',
+    },
+    {
+      venue_id: 'venue-3',
+      session_label: 'Morning workshop',
+      start_at: '2026-12-01T01:00:00.000Z',
+      end_at: '2026-12-01T05:00:00.000Z',
+    },
   ])
 })
 

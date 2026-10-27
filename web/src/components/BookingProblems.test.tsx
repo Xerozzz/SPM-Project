@@ -126,7 +126,6 @@ test('SCRUM-89: a failed load is reported rather than shown as nothing wrong', a
   expect(screen.queryByText(/Nothing needs attention/)).toBeNull()
 })
 
-
 test('SCRUM-89 AC4: a problem names the event, so staff know whose it is', async () => {
   // The panel tells Venue Staff the Coordinator decides what moves. Without the event it
   // names nobody, and a Venue Staff member has a time range and no way to act on it.

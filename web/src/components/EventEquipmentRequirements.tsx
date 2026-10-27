@@ -138,8 +138,8 @@ export default function EventEquipmentRequirements({ event }: { event: EventRequ
     <section className="mt-4 rounded border border-slate-200 p-3">
       <h4 className="font-medium">Equipment requirements</h4>
       <p className="mt-1 text-sm text-slate-500">
-        What this event needs. Adding or changing a line sends it back to Technical Support
-        to assess. Nothing here reserves equipment.
+        What this event needs. Adding or changing a line sends it back to Technical Support to
+        assess. Nothing here reserves equipment.
       </p>
 
       {requirements.isPending && <p className="mt-2 text-sm">Loading…</p>}
@@ -216,9 +216,7 @@ export default function EventEquipmentRequirements({ event }: { event: EventRequ
           <span className="block">Equipment type</span>
           <select
             value={values.equipment_type}
-            onChange={(changed) =>
-              setValues({ ...values, equipment_type: changed.target.value })
-            }
+            onChange={(changed) => setValues({ ...values, equipment_type: changed.target.value })}
             className="mt-1 rounded border border-slate-300 p-1"
           >
             <option value="">Select equipment</option>

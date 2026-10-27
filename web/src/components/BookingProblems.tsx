@@ -28,9 +28,8 @@ export default function BookingProblems() {
     <section className="mt-6 rounded-lg border border-slate-200 p-4">
       <h2 className="font-medium">Bookings needing attention</h2>
       <p className="mt-1 text-sm text-slate-500">
-        Confirmed bookings and tentative holds that no longer fit the setup and turnaround
-        times their venue needs. Nothing has been cancelled: the Coordinator decides what
-        moves.
+        Confirmed bookings and tentative holds that no longer fit the setup and turnaround times
+        their venue needs. Nothing has been cancelled: the Coordinator decides what moves.
       </p>
       {problems.isPending && <p className="mt-2 text-sm">Loading…</p>}
       {problems.isError && (

@@ -95,7 +95,9 @@ test('an occurrence already sent reads as sent', async () => {
 test('adding a common lead time sends the whole schedule', async () => {
   // AC1 refuses a schedule whole, so the client sends it whole rather than a delta.
   const spy = renderSchedule([reminder(60)], (key) =>
-    key === 'PUT /api/event-requests/event-1/reminders' ? json([reminder(60), reminder(1440)]) : undefined,
+    key === 'PUT /api/event-requests/event-1/reminders'
+      ? json([reminder(60), reminder(1440)])
+      : undefined,
   )
 
   // Wait for the existing schedule: the controls stay disabled until it is known, so

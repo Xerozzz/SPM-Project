@@ -165,9 +165,7 @@ export default function EventRequestForm({
   const saveDraft = useMutation({
     mutationFn: (draft: EventRequestDraftInput) => {
       const existing = editing?.id ?? started.current
-      return existing
-        ? updateDraft(token ?? '', existing, draft)
-        : createDraft(token ?? '', draft)
+      return existing ? updateDraft(token ?? '', existing, draft) : createDraft(token ?? '', draft)
     },
     onError: showProblems,
     onSuccess: (request) => {
@@ -237,11 +235,15 @@ export default function EventRequestForm({
   }
 
   return (
-    <section ref={section} className="mt-6 rounded-lg border border-slate-200 p-4">
-      <h2 className="font-medium">{editing ? 'Edit draft' : 'New event request'}</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        Fields marked * are required to submit a request. A draft can be saved without them.
-      </p>
+    <section ref={section} className="cs-panel mt-6">
+      <div className="border-b border-slate-100 pb-4">
+        <h2 className="text-3xl font-medium tracking-[-0.04em] text-[#202124]">
+          {editing ? 'Edit draft' : 'New event request'}
+        </h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Fields marked * are required to submit a request. A draft can be saved without them.
+        </p>
+      </div>
       <form className="mt-4 space-y-4" noValidate onSubmit={create}>
         {textFields.map(({ name, multiline }) => (
           <Field key={name} name={name} error={errors[name]}>
@@ -250,14 +252,14 @@ export default function EventRequestForm({
                 id={name}
                 value={values[name]}
                 onChange={(event) => change(name, event.target.value)}
-                className="min-h-20 w-full rounded border border-slate-300 p-2"
+                className="cs-field min-h-24 resize-y"
               />
             ) : (
               <input
                 id={name}
                 value={values[name]}
                 onChange={(event) => change(name, event.target.value)}
-                className="w-full rounded border border-slate-300 p-2"
+                className="cs-field"
               />
             )}
           </Field>
@@ -283,14 +285,14 @@ export default function EventRequestForm({
             {equipmentTypes.error?.message ?? venueNames.error?.message}
           </p>
         )}
-        <div className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-2">
           <Field name="start_at" error={errors.start_at}>
             <input
               id="start_at"
               type="datetime-local"
               value={values.start_at}
               onChange={(event) => change('start_at', event.target.value)}
-              className="w-full rounded border border-slate-300 p-2"
+              className="cs-field"
             />
           </Field>
           <Field name="end_at" error={errors.end_at}>
@@ -299,7 +301,7 @@ export default function EventRequestForm({
               type="datetime-local"
               value={values.end_at}
               onChange={(event) => change('end_at', event.target.value)}
-              className="w-full rounded border border-slate-300 p-2"
+              className="cs-field"
             />
           </Field>
         </div>
@@ -311,28 +313,34 @@ export default function EventRequestForm({
             step="1"
             value={values.expected_attendance}
             onChange={(event) => change('expected_attendance', event.target.value)}
-            className="w-full rounded border border-slate-300 p-2"
+            className="cs-field"
           />
         </Field>
         {/* Both buttons, not just the first: a Save draft that the API refuses used to
             fail silently, because `createDraft` throws a plain error that the field-level
             handler has nothing to do with. */}
         {(createRequest.error ?? saveDraft.error) && (
-          <p role="alert" className="text-sm text-red-600">
-            {(createRequest.error ?? saveDraft.error)?.message}. Your entered details are
-            still available to edit.
+          <p
+            role="alert"
+            className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          >
+            {(createRequest.error ?? saveDraft.error)?.message}. Your entered details are still
+            available to edit.
           </p>
         )}
         {outcome && (
-          <p role="status" className="text-sm text-green-700">
+          <p
+            role="status"
+            className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+          >
             {outcome}
           </p>
         )}
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">
           <button
             type="submit"
             disabled={createRequest.isPending || saveDraft.isPending}
-            className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+            className="cs-button"
           >
             {editing ? 'Submit for review' : 'Create event request'}
           </button>
@@ -340,16 +348,12 @@ export default function EventRequestForm({
             type="button"
             onClick={save}
             disabled={createRequest.isPending || saveDraft.isPending}
-            className="rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
+            className="cs-button-secondary"
           >
             Save draft
           </button>
           {editing && (
-            <button
-              type="button"
-              onClick={onDone}
-              className="rounded border border-slate-300 px-3 py-1.5 text-sm"
-            >
+            <button type="button" onClick={onDone} className="cs-button-secondary">
               Cancel
             </button>
           )}
@@ -408,7 +412,7 @@ function CatalogueRequirementField({
         id={name}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded border border-slate-300 p-2"
+        className="cs-field"
       >
         <option value="">{placeholder}</option>
         {options.map((option) => (
@@ -435,7 +439,7 @@ function Field({
 }) {
   return (
     <div>
-      <label htmlFor={name} className="mb-1 block text-sm font-medium">
+      <label htmlFor={name} className="mb-1 block text-sm font-medium text-slate-700">
         {FIELD_LABELS[name]} *
       </label>
       {children}

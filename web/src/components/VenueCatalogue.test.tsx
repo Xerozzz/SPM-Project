@@ -41,7 +41,10 @@ function venue(overrides: Record<string, unknown> = {}) {
 }
 
 function renderCatalogue(role: 'venue_staff' | 'coordinator', fetcher: typeof fetch) {
-  localStorage.setItem('connectsphere.token', JSON.stringify({ token: 'token', userId: 'user-1', roles: [role] }))
+  localStorage.setItem(
+    'connectsphere.token',
+    JSON.stringify({ token: 'token', userId: 'user-1', roles: [role] }),
+  )
   vi.spyOn(globalThis, 'fetch').mockImplementation(fetcher)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
@@ -420,7 +423,6 @@ test('an empty or untidy list of facilities is sent as a clean array', async () 
   expect(body.facilities).toEqual(['Projector', 'Hearing loop'])
   expect(body.accessibility_features).toEqual([])
 })
-
 
 // --------------------------------------------------------------- SCRUM-82 buffers
 

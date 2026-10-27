@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import {
   type EventRequest,
@@ -46,6 +46,7 @@ export default function MyEventRequests({
   const queryClient = useQueryClient()
   const [outcome, setOutcome] = useState<Outcome | null>(null)
   const [proposing, setProposing] = useState<string | null>(null)
+  const [selectedStatus, setSelectedStatus] = useState<EventRequest['status']>('draft')
 
   // The token is part of the key: the list is per-user, and without it a sign-out and
   // sign-in as someone else on the same tab could briefly show the previous user's data
@@ -56,6 +57,15 @@ export default function MyEventRequests({
     queryFn: () => listMyEventRequests(token ?? ''),
     enabled: token !== null,
   })
+  const groupedRequests = STATUS_ORDER.map((status) => ({
+    status,
+    requests: requests.data?.filter((request) => request.status === status) ?? [],
+  })).filter((group) => group.requests.length > 0)
+  useEffect(() => {
+    if (groupedRequests.length && !groupedRequests.some((group) => group.status === selectedStatus)) {
+      setSelectedStatus(groupedRequests[0].status)
+    }
+  }, [groupedRequests, selectedStatus])
 
   // The mutation variable carries the request id plus its current name, so validation
   // feedback can name the request even when the API refuses submission.
@@ -89,10 +99,15 @@ export default function MyEventRequests({
   })
 
   return (
-    <section className="mt-6 space-y-4">
-      <div className="rounded-lg border border-slate-200 p-4">
+    <section className="mt-0 space-y-4">
+      <div className="cs-panel bg-[#f7f7f5]">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-medium">My event requests</h2>
+          <div>
+            <h2 className="text-3xl font-medium tracking-[-0.04em] text-[#202124]">My event requests</h2>
+            <p className="mt-2 text-sm font-medium text-slate-400">
+              Overview
+            </p>
+          </div>
         </div>
 
         {requests.isPending && <p className="mt-2 text-sm">Loading...</p>}
@@ -106,15 +121,21 @@ export default function MyEventRequests({
         )}
 
         {requests.data && requests.data.length > 0 && (
-          <ul className="mt-3 divide-y divide-slate-200">
-            {requests.data.map((request) => (
+          <div className="mt-5">
+            <div role="tablist" aria-label="Event request status" className="flex gap-2 overflow-x-auto border-b border-slate-200 pb-3">
+              {groupedRequests.map((group) => <button key={group.status} role="tab" aria-selected={selectedStatus === group.status} onClick={() => setSelectedStatus(group.status)} className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium ${selectedStatus === group.status ? 'bg-[#202124] text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}>{STATUS_TITLES[group.status]} <span className="ml-1 opacity-70">{group.requests.length}</span></button>)}
+            </div>
+            {groupedRequests.filter((group) => group.status === selectedStatus).map((group) => (
+              <section key={group.status} aria-label={`${group.status} event requests`}>
+                <ul className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {group.requests.map((request) => (
               <li
                 key={request.id}
-                className="flex flex-wrap items-center justify-between gap-4 py-3"
+                className="rounded-2xl bg-white p-4 shadow-sm"
               >
                 <div>
-                  <p className="font-medium">{titleOf(request)}</p>
-                  <p className="text-sm text-slate-500">
+                  <p className="font-medium text-slate-950">{titleOf(request)}</p>
+                  <p className="mt-1 text-sm text-slate-500">
                     <StatusLabel status={request.status} />
                   </p>
                   {request.status === 'rejected' && request.rejection_reason && (
@@ -128,14 +149,14 @@ export default function MyEventRequests({
                     </p>
                   )}
                 </div>
-                {request.status_permits.includes('edit') ? (
+                <div className="mt-4">{request.status_permits.includes('edit') ? (
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => reopen.mutate(request.id)}
                       disabled={reopen.isPending}
                       aria-label={`Edit draft ${titleOf(request)}`}
-                      className="rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
+                      className="cs-button-secondary"
                     >
                       Edit draft
                     </button>
@@ -144,7 +165,7 @@ export default function MyEventRequests({
                         type="button"
                         onClick={() => submit.mutate(request)}
                         disabled={submit.isPending}
-                        className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+                        className="cs-button"
                       >
                         Submit for review
                       </button>
@@ -156,7 +177,7 @@ export default function MyEventRequests({
                     type="button"
                     onClick={() => setProposing(request.id)}
                     aria-label={`Propose a change to ${titleOf(request)}`}
-                    className="rounded border border-slate-300 px-3 py-1.5 text-sm"
+                    className="cs-button-secondary"
                   >
                     Propose a change
                   </button>
@@ -165,7 +186,7 @@ export default function MyEventRequests({
                     Locked - ask your coordinator to request changes
                   </span>
                 )}
-                {acceptsChangeRequest(request.status) && (
+                </div>{acceptsChangeRequest(request.status) && (
                   <div className="w-full">
                     {proposing === request.id && (
                       <ProposeChange eventId={request.id} onClose={() => setProposing(null)} />
@@ -208,7 +229,10 @@ export default function MyEventRequests({
                 </div>
               </li>
             ))}
-          </ul>
+                </ul>
+              </section>
+            ))}
+          </div>
         )}
       </div>
 
@@ -224,14 +248,30 @@ type Outcome =
 
 type SubmitTarget = Pick<EventRequest, 'id' | 'name'>
 
+const STATUS_ORDER: EventRequest['status'][] = [
+  'draft', 'submitted', 'approved', 'confirmed', 'completed', 'rejected', 'cancelled',
+]
+
+const STATUS_TITLES: Record<EventRequest['status'], string> = {
+  draft: 'Drafts', submitted: 'Submitted', approved: 'Approved', confirmed: 'Confirmed',
+  completed: 'Completed', rejected: 'Rejected', cancelled: 'Cancelled',
+}
+
 function StatusLabel({ status }: { status: EventRequest['status'] }) {
-  if (status === 'submitted') return <>Submitted</>
-  if (status === 'approved') return <>Approved</>
-  if (status === 'rejected') return <>Rejected</>
-  if (status === 'confirmed') return <>Confirmed</>
-  if (status === 'completed') return <>Completed</>
-  if (status === 'cancelled') return <>Cancelled</>
-  return <>Draft</>
+  const styles: Record<EventRequest['status'], string> = {
+    draft: 'bg-slate-100 text-slate-700',
+    submitted: 'bg-amber-50 text-amber-800',
+    approved: 'bg-sky-50 text-sky-800',
+    rejected: 'bg-red-50 text-red-800',
+    confirmed: 'bg-emerald-50 text-emerald-800',
+    completed: 'bg-indigo-50 text-indigo-800',
+    cancelled: 'bg-slate-200 text-slate-700',
+  }
+  return (
+    <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-medium ${styles[status]}`}>
+      {status}
+    </span>
+  )
 }
 
 function OutcomeMessage({ outcome }: { outcome: Outcome }) {

@@ -165,7 +165,9 @@ export default function EquipmentCatalogue() {
       )}
 
       <form className="mt-4 space-y-3 border-t border-slate-200 pt-4" noValidate onSubmit={submit}>
-        <h3 className="text-sm font-medium">{editing === null ? 'Add equipment' : 'Edit equipment'}</h3>
+        <h3 className="text-sm font-medium">
+          {editing === null ? 'Add equipment' : 'Edit equipment'}
+        </h3>
         <Field label="Equipment type" error={reasonFor('equipment_type')}>
           <input
             value={values.equipment_type}

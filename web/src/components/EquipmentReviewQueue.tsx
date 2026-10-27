@@ -81,8 +81,8 @@ export default function EquipmentReviewQueue() {
     <section id="equipment-review-queue" className="mt-6 rounded-lg border border-slate-200 p-4">
       <h2 className="font-medium">Equipment to assess</h2>
       <p className="mt-1 text-sm text-slate-500">
-        What events being planned have asked for. Recording an outcome says whether it can
-        be fulfilled; reserving commits equipment for the event&apos;s period.
+        What events being planned have asked for. Recording an outcome says whether it can be
+        fulfilled; reserving commits equipment for the event&apos;s period.
       </p>
 
       {queue.isPending && <p className="mt-2 text-sm">Loading…</p>}

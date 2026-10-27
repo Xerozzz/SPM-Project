@@ -46,7 +46,10 @@ export default function UnassignedQueue() {
   })
 
   return (
-    <section aria-label="Unassigned requests" className="mt-6 rounded-lg border border-slate-200 p-4">
+    <section
+      aria-label="Unassigned requests"
+      className="mt-6 rounded-lg border border-slate-200 p-4"
+    >
       <h2 className="font-medium">Unassigned requests</h2>
       {queue.isPending && <p className="mt-2 text-sm">Loading unassigned requests…</p>}
       {queue.isError && (

@@ -79,8 +79,8 @@ export default function ConfirmEvent({
     <section className="mt-4 rounded border border-slate-200 p-3">
       <h3 className="text-sm font-medium">Confirm this event</h3>
       <p className="mt-1 text-sm text-slate-500">
-        Confirming commits the venue holds as real bookings. It needs every arrangement
-        in place and the Safety Officer&apos;s approval of the plan as it stands.
+        Confirming commits the venue holds as real bookings. It needs every arrangement in place and
+        the Safety Officer&apos;s approval of the plan as it stands.
       </p>
 
       {readiness.isPending && <p className="mt-2 text-sm">Checking…</p>}

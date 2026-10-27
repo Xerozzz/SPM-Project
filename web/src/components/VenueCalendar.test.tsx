@@ -261,7 +261,6 @@ test.each([
   },
 )
 
-
 // --------------------------------------------------------------- SCRUM-82 buffers
 
 /** The same Singapore formatter the component uses, so the times are checked, not skipped. */

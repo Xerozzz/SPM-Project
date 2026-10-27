@@ -1,111 +1,275 @@
-import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 
-import { getHealth } from '../api/client'
 import type { EventRequest } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
-import MyEventRequests from '../components/MyEventRequests'
+import AppShell, { type NavigationItem } from '../components/AppShell'
 import ActiveAssignments from '../components/ActiveAssignments'
-import NotificationInbox from '../components/NotificationInbox'
-import OrganisationEventCalendar from '../components/OrganisationEventCalendar'
-import EventRequestForm from '../components/EventRequestForm'
+import AttendeeRegistrations from '../components/AttendeeRegistrations'
 import BookingProblems from '../components/BookingProblems'
-import CancelledEvents from '../components/CancelledEvents'
 import CompletedEvents from '../components/CompletedEvents'
-import EventRequestReview from '../components/EventRequestReview'
-import UnassignedQueue from '../components/UnassignedQueue'
 import EquipmentCatalogue from '../components/EquipmentCatalogue'
 import EquipmentReviewQueue from '../components/EquipmentReviewQueue'
+import EventRequestForm from '../components/EventRequestForm'
+import EventRequestReview from '../components/EventRequestReview'
+import MyEventRequests from '../components/MyEventRequests'
+import NotificationInbox from '../components/NotificationInbox'
+import OrganisationEventCalendar from '../components/OrganisationEventCalendar'
 import SafetyReviewQueue from '../components/SafetyReviewQueue'
+import UnassignedQueue from '../components/UnassignedQueue'
 import VenueBookingDecisions from '../components/VenueBookingDecisions'
 import VenueCalendar from '../components/VenueCalendar'
 import VenueCatalogue from '../components/VenueCatalogue'
 import VenueSearch from '../components/VenueSearch'
-import AttendeeRegistrations from '../components/AttendeeRegistrations'
 
-/**
- * Home page, visible only after sign-in. Shows the session roles and a sign-out button.
- */
+type View =
+  | 'my-events'
+  | 'event-calendar'
+  | 'registrations'
+  | 'review-queue'
+  | 'completed-events'
+  | 'venue-planning'
+  | 'unassigned-queue'
+  | 'active-assignments'
+  | 'venue-catalogue'
+  | 'booking-decisions'
+  | 'booking-problems'
+  | 'venue-calendar'
+  | 'equipment-catalogue'
+  | 'equipment-review'
+  | 'safety-review'
+  | 'notifications'
+
+const VIEW_DETAILS: Record<View, Omit<NavigationItem, 'group' | 'icon'>> = {
+  'my-events': {
+    id: 'my-events',
+    label: 'My Events',
+    description: 'Create, manage, and follow your event requests.',
+  },
+  'event-calendar': {
+    id: 'event-calendar',
+    label: 'Event Calendar',
+    description: 'Your organisation’s event schedule.',
+  },
+  registrations: {
+    id: 'registrations',
+    label: 'Event Registrations',
+    description: 'Browse open events and manage your registrations.',
+  },
+  'review-queue': {
+    id: 'review-queue',
+    label: 'Review Queue',
+    description: 'Review and progress your assigned event plans.',
+  },
+  'completed-events': {
+    id: 'completed-events',
+    label: 'Completed Events',
+    description: 'Review completed events and closure notes.',
+  },
+  'venue-planning': {
+    id: 'venue-planning',
+    label: 'Venue Planning',
+    description: 'Search venues, plan arrangements, and view availability.',
+  },
+  'unassigned-queue': {
+    id: 'unassigned-queue',
+    label: 'Unassigned Queue',
+    description: 'Assign coordinators to newly submitted events.',
+  },
+  'active-assignments': {
+    id: 'active-assignments',
+    label: 'Active Assignments',
+    description: 'Review event ownership and reassign work when needed.',
+  },
+  'venue-catalogue': {
+    id: 'venue-catalogue',
+    label: 'Venue Catalogue',
+    description: 'Maintain venue details and availability.',
+  },
+  'booking-decisions': {
+    id: 'booking-decisions',
+    label: 'Booking Decisions',
+    description: 'Review, hold, approve, or reject venue bookings.',
+  },
+  'booking-problems': {
+    id: 'booking-problems',
+    label: 'Booking Problems',
+    description: 'Identify confirmed arrangements affected by venue changes.',
+  },
+  'venue-calendar': {
+    id: 'venue-calendar',
+    label: 'Venue Calendar',
+    description: 'See venue bookings, holds, and availability.',
+  },
+  'equipment-catalogue': {
+    id: 'equipment-catalogue',
+    label: 'Equipment Catalogue',
+    description: 'Maintain the available equipment catalogue.',
+  },
+  'equipment-review': {
+    id: 'equipment-review',
+    label: 'Equipment Review Queue',
+    description: 'Review requirements and record equipment reservations.',
+  },
+  'safety-review': {
+    id: 'safety-review',
+    label: 'Safety Review Queue',
+    description: 'Assess active event plans and record safety decisions.',
+  },
+  notifications: {
+    id: 'notifications',
+    label: 'Notifications',
+    description: 'Read your event and workflow updates.',
+  },
+}
+
+/** The authenticated workspace. Views stay mounted while hidden to preserve workflow state. */
 export default function HomePage() {
   const { roles, signOut, hasRole } = useAuth()
-  // Held here because the form and the list are siblings: the list chooses a draft,
-  // the form edits it, and neither owns the other.
   const [editingDraft, setEditingDraft] = useState<EventRequest | null>(null)
-  const health = useQuery({ queryKey: ['health'], queryFn: getHealth })
+  const items: NavigationItem[] = [
+    ...(hasRole('organiser')
+      ? [nav('my-events', 'Organise', '◫'), nav('event-calendar', 'Organise', '◷')]
+      : []),
+    ...(hasRole('attendee') ? [nav('registrations', 'Attend', '✓')] : []),
+    ...(hasRole('coordinator')
+      ? [
+          nav('review-queue', 'Coordinate', '⌁'),
+          nav('completed-events', 'Coordinate', '✓'),
+          nav('venue-planning', 'Coordinate', '⌂'),
+        ]
+      : []),
+    ...(hasRole('coordinator_lead')
+      ? [nav('unassigned-queue', 'Lead', '↗'), nav('active-assignments', 'Lead', '⇄')]
+      : []),
+    ...(hasRole('venue_staff')
+      ? [
+          nav('venue-catalogue', 'Venues', '⌂'),
+          nav('booking-decisions', 'Venues', '□'),
+          nav('booking-problems', 'Venues', '!'),
+          nav('venue-calendar', 'Venues', '◷'),
+        ]
+      : []),
+    ...(hasRole('tech_support')
+      ? [nav('equipment-catalogue', 'Equipment', '▣'), nav('equipment-review', 'Equipment', '✓')]
+      : []),
+    ...(hasRole('safety_officer') ? [nav('safety-review', 'Safety', '⌁')] : []),
+    nav('notifications', 'Shared', '●'),
+  ]
+  const [activeView, setActiveView] = useState<View>(
+    (items[0]?.id as View | undefined) ?? 'notifications',
+  )
 
   return (
-    <main className="mx-auto max-w-xl p-8 font-sans">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">ConnectSphere</h1>
-          <p className="mt-1 text-sm text-slate-500">Signed in as: {roles.join(', ')}</p>
-        </div>
-        <button
-          type="button"
-          onClick={signOut}
-          className="rounded border border-slate-300 px-3 py-1.5 text-sm"
-        >
-          Sign out
-        </button>
-      </div>
-
+    <AppShell
+      activeId={activeView}
+      items={items}
+      onNavigate={(id) => setActiveView(id as View)}
+      onSignOut={signOut}
+      roles={roles}
+    >
       {hasRole('organiser') && (
-        <>
-          <OrganisationEventCalendar />
-          {/* One form. Choosing Edit draft in the list below fills in the form above
-              rather than opening a second one. */}
-          <EventRequestForm editing={editingDraft} onDone={() => setEditingDraft(null)} />
+        <ViewPanel active={activeView === 'my-events'} labelledBy="my-events-panel">
           <MyEventRequests onEditDraft={setEditingDraft} />
-        </>
+          <EventRequestForm editing={editingDraft} onDone={() => setEditingDraft(null)} />
+        </ViewPanel>
       )}
+      {hasRole('organiser') && (
+        <ViewPanel active={activeView === 'event-calendar'}>
+          <OrganisationEventCalendar />
+        </ViewPanel>
+      )}
+      {hasRole('attendee') && (
+        <ViewPanel active={activeView === 'registrations'}>
+          <AttendeeRegistrations />
+        </ViewPanel>
+      )}
+      {hasRole('coordinator') && (
+        <ViewPanel active={activeView === 'review-queue'}>
+          <EventRequestReview />
+        </ViewPanel>
+      )}
+      {hasRole('coordinator') && (
+        <ViewPanel active={activeView === 'completed-events'}>
+          <CompletedEvents />
+        </ViewPanel>
+      )}
+      {hasRole('coordinator') && (
+        <ViewPanel active={activeView === 'venue-planning'}>
+          <div className="grid gap-6 xl:grid-cols-2">
+            <VenueSearch />
+            <VenueCatalogue />
+          </div>
+          <VenueCalendar />
+        </ViewPanel>
+      )}
+      {hasRole('coordinator_lead') && (
+        <ViewPanel active={activeView === 'unassigned-queue'}>
+          <UnassignedQueue />
+        </ViewPanel>
+      )}
+      {hasRole('coordinator_lead') && (
+        <ViewPanel active={activeView === 'active-assignments'}>
+          <ActiveAssignments />
+        </ViewPanel>
+      )}
+      {hasRole('venue_staff') && (
+        <ViewPanel active={activeView === 'venue-catalogue'}>
+          <VenueCatalogue />
+        </ViewPanel>
+      )}
+      {hasRole('venue_staff') && (
+        <ViewPanel active={activeView === 'booking-decisions'}>
+          <VenueBookingDecisions />
+        </ViewPanel>
+      )}
+      {hasRole('venue_staff') && (
+        <ViewPanel active={activeView === 'booking-problems'}>
+          <BookingProblems />
+        </ViewPanel>
+      )}
+      {hasRole('venue_staff') && (
+        <ViewPanel active={activeView === 'venue-calendar'}>
+          <VenueCalendar />
+        </ViewPanel>
+      )}
+      {hasRole('tech_support') && (
+        <ViewPanel active={activeView === 'equipment-catalogue'}>
+          <EquipmentCatalogue />
+        </ViewPanel>
+      )}
+      {hasRole('tech_support') && (
+        <ViewPanel active={activeView === 'equipment-review'}>
+          <EquipmentReviewQueue />
+        </ViewPanel>
+      )}
+      {hasRole('safety_officer') && (
+        <ViewPanel active={activeView === 'safety-review'}>
+          <SafetyReviewQueue />
+        </ViewPanel>
+      )}
+      <ViewPanel active={activeView === 'notifications'}>
+        <NotificationInbox />
+      </ViewPanel>
+    </AppShell>
+  )
+}
 
-      {hasRole('coordinator') && <EventRequestReview />}
-      {hasRole('coordinator') && <CompletedEvents />}
-      {/* SCRUM-88 AC6: the assignee's or, for a Lead, every cancelled event's history. */}
-      {(hasRole('coordinator') || hasRole('coordinator_lead')) && <CancelledEvents />}
+function nav(id: View, group: string, icon: string): NavigationItem {
+  return { ...VIEW_DETAILS[id], group, icon }
+}
 
-      {hasRole('attendee') && <AttendeeRegistrations />}
-
-      {/* SCRUM-101: Coordinator Leads triage newly submitted requests. */}
-      {hasRole('coordinator_lead') && <UnassignedQueue />}
-
-      {/* SCRUM-100: Coordinator Leads see every active request and its current owner. */}
-      {hasRole('coordinator_lead') && <ActiveAssignments />}
-
-      {/* SCRUM-99: every signed-in user gets a private notification inbox. */}
-      <NotificationInbox />
-
-      {hasRole('tech_support') && <EquipmentCatalogue />}
-
-      {/* SCRUM-44 and SCRUM-53: the review routes have existed since SCRUM-44 merged
-          with nothing reaching them, so neither story could be shown through the UI. */}
-      {hasRole('tech_support') && <EquipmentReviewQueue />}
-
-      {/* SCRUM-79: Safety Officers review the plan an event is being run to. */}
-      {hasRole('safety_officer') && <SafetyReviewQueue />}
-
-      {/* SCRUM-55: coordinators search active venues by event requirements. */}
-      {hasRole('coordinator') && <VenueSearch />}
-
-      {/* SCRUM-59: Venue Staff maintain the catalogue; coordinators read it for planning. */}
-      {(hasRole('venue_staff') || hasRole('coordinator')) && <VenueCatalogue />}
-
-      {/* SCRUM-89: Venue Staff see confirmed bookings that no longer fit their venue. */}
-      {hasRole('venue_staff') && <BookingProblems />}
-
-      {/* SCRUM-40: Venue Staff review and decide booking requests. */}
-      {hasRole('venue_staff') && <VenueBookingDecisions />}
-      {/* SCRUM-54: what holds each venue across a date range. */}
-      {(hasRole('venue_staff') || hasRole('coordinator')) && <VenueCalendar />}
-
-      <section className="mt-6 rounded-lg border border-slate-200 p-4">
-        <h2 className="font-medium">API health</h2>
-        <p className="mt-2 text-sm" role="status">
-          {health.isPending && 'Checking the API…'}
-          {health.isError && `Cannot reach the API: ${health.error.message}`}
-          {health.data && `API and database are ${health.data.status}`}
-        </p>
-      </section>
-    </main>
+function ViewPanel({
+  active,
+  children,
+  labelledBy,
+}: {
+  active: boolean
+  children: React.ReactNode
+  labelledBy?: string
+}) {
+  return (
+    <section aria-labelledby={labelledBy} hidden={!active} className="min-w-0">
+      {children}
+    </section>
   )
 }

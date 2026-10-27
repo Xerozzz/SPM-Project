@@ -70,8 +70,8 @@ export default function ReminderSchedule({ event }: { event: EventRequest }) {
     <section className="mt-4 rounded border border-slate-200 p-3">
       <h3 className="text-sm font-medium">Reminders</h3>
       <p className="mt-1 text-sm text-slate-500">
-        Tell me before this event starts if anything is still outstanding. Only you see
-        these, and nothing is sent once the event has started.
+        Tell me before this event starts if anything is still outstanding. Only you see these, and
+        nothing is sent once the event has started.
       </p>
 
       {schedule.isPending && <p className="mt-2 text-sm">Loading…</p>}
@@ -99,9 +99,7 @@ export default function ReminderSchedule({ event }: { event: EventRequest }) {
                 type="button"
                 disabled={busy}
                 aria-label={`Remove the ${describeLeadTime(reminder.lead_minutes)} reminder for ${event.name}`}
-                onClick={() =>
-                  change(minutes.filter((value) => value !== reminder.lead_minutes))
-                }
+                onClick={() => change(minutes.filter((value) => value !== reminder.lead_minutes))}
                 className="text-xs underline disabled:opacity-50"
               >
                 Remove
@@ -112,19 +110,17 @@ export default function ReminderSchedule({ event }: { event: EventRequest }) {
       )}
 
       <div className="mt-2 flex flex-wrap gap-2">
-        {COMMON_LEAD_TIMES.filter((option) => !minutes.includes(option.minutes)).map(
-          (option) => (
-            <button
-              key={option.minutes}
-              type="button"
-              disabled={busy}
-              onClick={() => change([...minutes, option.minutes])}
-              className="rounded border border-slate-300 px-2 py-1 text-xs disabled:opacity-50"
-            >
-              Add {option.label}
-            </button>
-          ),
-        )}
+        {COMMON_LEAD_TIMES.filter((option) => !minutes.includes(option.minutes)).map((option) => (
+          <button
+            key={option.minutes}
+            type="button"
+            disabled={busy}
+            onClick={() => change([...minutes, option.minutes])}
+            className="rounded border border-slate-300 px-2 py-1 text-xs disabled:opacity-50"
+          >
+            Add {option.label}
+          </button>
+        ))}
       </div>
 
       <div className="mt-2 flex flex-wrap items-end gap-2">

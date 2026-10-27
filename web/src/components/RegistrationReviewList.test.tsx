@@ -50,13 +50,22 @@ test('SCRUM-114: shows the server-provided submission order without decision con
 })
 
 test('SCRUM-134: owner sees decision controls on the existing list', async () => {
-  renderList([
-    {
-      id: 'registration-1', event_request_id: 'event-1', full_name: 'Ada Lovelace', age: 24,
-      phone_number: '+65 8123 4567', dietary_accessibility_notes: null, status: 'pending',
-      submitted_at: '2030-01-01T00:00:00Z', submission_order: 1,
-    },
-  ], true)
+  renderList(
+    [
+      {
+        id: 'registration-1',
+        event_request_id: 'event-1',
+        full_name: 'Ada Lovelace',
+        age: 24,
+        phone_number: '+65 8123 4567',
+        dietary_accessibility_notes: null,
+        status: 'pending',
+        submitted_at: '2030-01-01T00:00:00Z',
+        submission_order: 1,
+      },
+    ],
+    true,
+  )
 
   expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Accept' })).toBeInTheDocument()
