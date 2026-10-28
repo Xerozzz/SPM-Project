@@ -39,6 +39,13 @@ class NotificationType(StrEnum):
     # names the new-request action, so staff can tell it apart from later revised
     # requests (SCRUM-127) without opening the event.
     VENUE_REQUEST_SUBMITTED = "venue_request_submitted"
+    # SCRUM-122 AC1/AC2: Venue Staff approved, rejected or updated the expiry of a
+    # venue arrangement for your event. The type names the outcome, so the Coordinator
+    # can tell without opening the event. The SCRUM-108 expiry itself stays on
+    # VENUE_HOLD_EXPIRED, never these types.
+    VENUE_BOOKING_APPROVED = "venue_booking_approved"
+    VENUE_BOOKING_REJECTED = "venue_booking_rejected"
+    VENUE_HOLD_EXPIRY_UPDATED = "venue_hold_expiry_updated"
     # SCRUM-124 AC1/AC2: a new or changed equipment requirement needs Technical
     # Support review. The type names the review action, so staff can tell it apart
     # from later review/reservation outcomes (SCRUM-125) without opening the event.
@@ -119,6 +126,12 @@ class NotificationSource(StrEnum):
     # later distinct request for the same event stays distinct. SCRUM-127 owns
     # revised requests and uses its own source identity.
     VENUE_REQUEST = "venue_request"
+    # SCRUM-122: one Venue Staff decision or expiry edit on a venue arrangement. The
+    # source_id carries the action and its time (approval/rejection at decided_at,
+    # each expiry edit at its new expiry), because a booking id alone cannot tell a
+    # retry of one action from a later distinct edit on the same row. The SCRUM-108
+    # expiry itself stays on VENUE_BOOKING, never this source.
+    VENUE_DECISION = "venue_decision"
     # SCRUM-124: one add or change of an equipment requirement. The audit row's id is
     # the source_id, so retrying the same change collides per recipient (idempotent)
     # while a later distinct change on the same requirement stays distinct.

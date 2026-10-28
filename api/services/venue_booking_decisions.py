@@ -10,8 +10,12 @@ from sqlalchemy.orm import Session
 
 from domain import venue_booking_decision as decision
 from domain.booking_conflict import BookingConflictError
+from domain.notifications import NotificationSource, NotificationType
 from domain.venue_booking import BookingStatus
+from models.event_request import EventRequest
 from models.venue_booking import VenueBooking
+from repositories import event_requests as event_repo
+from repositories import notifications as notifications_repo
 from repositories import venue_availability as booking_repo
 from repositories import venue_booking_decisions as repo
 from repositories.venue_booking_decisions import BookingContext
@@ -34,14 +38,26 @@ def list_requests(db: Session) -> list[ReviewItem]:
 def reject(
     db: Session, booking_id: uuid.UUID, decider_id: uuid.UUID, reason: str | None, now: datetime
 ) -> BookingContext:
-    """AC2: reject a pending request and record who, when and why (AC3)."""
+    """AC2: reject a pending request and record who, when and why (AC3).
+
+    SCRUM-122 AC1/AC2: the current Coordinator hears of the rejection. Staged before
+    the commit so the rejection and its notification land or roll back together; the
+    occurrence time is the decision time, not a second clock read. The source_id
+    carries the decision time because a booking id alone cannot tell a retry of one
+    rejection from a later distinct decision on the same row.
+    """
     booking = booking_repo.get_booking_for_update(db, booking_id)
     if booking is None:
         raise BookingRequestNotFoundError
+    # SCRUM-122: read the event before mutating, so no later read autoflushes the
+    # pending UPDATE outside the save below.
+    event = event_repo.get(db, booking.event_request_id)
+    assert event is not None
     booking.status = decision.reject(booking.status)
     booking.decided_by_id = decider_id
     booking.decided_at = now
     booking.decision_reason = decision.clean_reason(reason)
+    _stage_venue_rejection(db, event, booking, now)
     booking_repo.save_booking(db, booking)
     context = repo.get_with_context(db, booking_id)
     assert context is not None
@@ -66,3 +82,27 @@ def _conflict(db: Session, booking: VenueBooking) -> BookingConflictError | None
     except BookingConflictError as exc:
         return exc
     return None
+
+
+def _stage_venue_rejection(
+    db: Session, event: EventRequest, booking: VenueBooking, now: datetime
+) -> None:
+    """SCRUM-122 AC1/AC2: notify the current Coordinator of a rejection.
+
+    No commit here: the caller's save commits the rejection and this row together,
+    so a rolled-back rejection notifies nobody. With no Coordinator assigned nothing
+    is staged and the rejection still commits. The insert runs without autoflush so
+    the pending UPDATE is only flushed by the save below.
+    """
+    if event.coordinator_id is None:
+        return
+    with db.no_autoflush:
+        notifications_repo.stage(
+            db,
+            recipient_id=event.coordinator_id,
+            event_request_id=event.id,
+            type=NotificationType.VENUE_BOOKING_REJECTED,
+            source_type=NotificationSource.VENUE_DECISION,
+            source_id=f"{booking.id}:{now.isoformat()}",
+            occurred_at=now,
+        )
