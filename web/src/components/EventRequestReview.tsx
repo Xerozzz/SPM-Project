@@ -70,7 +70,7 @@ export default function EventRequestReview() {
     },
   })
   return (
-    <section className="mt-6 rounded-lg border border-slate-200 p-4">
+    <section id="coordinator-events" className="mt-6 rounded-lg border border-slate-200 p-4">
       <h2 className="font-medium">Coordinator events</h2>
       {requests.isPending && <p className="mt-2 text-sm">Loading…</p>}
       {requests.isError && (

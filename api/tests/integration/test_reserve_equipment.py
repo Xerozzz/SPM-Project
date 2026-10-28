@@ -25,6 +25,7 @@ from models.equipment import Equipment
 from models.equipment_reservation import EquipmentReservation
 from models.event_equipment_requirement import EventEquipmentRequirement
 from models.event_request import EventRequest
+from models.notification import Notification
 from models.organisation import Organisation
 from models.user import User
 from services import equipment_reservations as service
@@ -513,13 +514,19 @@ def _committed_requirements(count: int, in_service: int) -> _Committed:
 
 
 def _delete_committed(committed: _Committed) -> None:
-    """Delete children before parents, flushing between levels for the foreign keys."""
+    """Delete children before parents, flushing between levels for the foreign keys.
+
+    SCRUM-125 stages a notification per reservation, so the inbox rows go before the
+    reservations they point at.
+    """
     session = SessionLocal()
     try:
         held = select(EquipmentReservation).where(
             EquipmentReservation.equipment_type == committed.equipment_type
         )
+        inbox = select(Notification).where(Notification.event_request_id.in_(committed.event_ids))
         levels: list[list[object]] = [
+            list(session.scalars(inbox)),
             list(session.scalars(held)),
             [session.get(EventEquipmentRequirement, i) for i in committed.requirement_ids],
             [session.get(EventRequest, i) for i in committed.event_ids],

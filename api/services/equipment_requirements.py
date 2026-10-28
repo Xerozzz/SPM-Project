@@ -247,6 +247,15 @@ def review(
     turns a requirement into a commitment. No audit row is written, because
     `equipment_requirement_changes` has no column for a review outcome and adding one is a
     migration this story does not make.
+
+    SCRUM-125 AC1/AC3: the current assigned Coordinator is notified of the outcome.
+    Staged before the commit so the review and its notification land or roll back
+    together; the occurrence time is the review time, not a second clock read. The
+    source_id carries the review time because a requirement can be reviewed again —
+    each decision is its own notification, while a retried HTTP call never reaches
+    here (the outcome is already recorded, and a retry records the same outcome at a
+    new time only if it is a genuinely later decision). With no Coordinator assigned
+    the loop stages nothing and the review still commits.
     """
     requirement = repo.get(db, requirement_id)
     if requirement is None:
@@ -261,6 +270,7 @@ def review(
         raise ReviewNotAllowedError
     requirement.review_status = outcome
     requirement.updated_at = now
+    _stage_review_outcome(db, event, requirement.id, outcome, now)
     return repo.save(db, requirement)
 
 
@@ -375,6 +385,43 @@ def _stage_review_needed(
             source_id=str(change_id),
             occurred_at=now,
         )
+
+
+def _stage_review_outcome(
+    db: Session,
+    event: EventRequest,
+    requirement_id: uuid.UUID,
+    outcome: RequirementReview,
+    now: datetime,
+) -> None:
+    """SCRUM-125 AC1/AC3: notify the current Coordinator of a review outcome.
+
+    The recipient is resolved at commit time, so a reassigned event notifies the new
+    Coordinator and the former one gets nothing. The source_id carries the review
+    time, so a later distinct decision on the same requirement is a distinct item
+    while a retried HTTP call collides per recipient (idempotent). PENDING_REVIEW is
+    never staged: it is the unreviewed state, not an outcome.
+    """
+    if event.coordinator_id is None:
+        return
+    outcome_type = {
+        RequirementReview.AVAILABLE: NotificationType.EQUIPMENT_REVIEW_AVAILABLE,
+        RequirementReview.PARTIALLY_AVAILABLE: (
+            NotificationType.EQUIPMENT_REVIEW_PARTIALLY_AVAILABLE
+        ),
+        RequirementReview.UNAVAILABLE: NotificationType.EQUIPMENT_REVIEW_UNAVAILABLE,
+    }.get(outcome)
+    if outcome_type is None:
+        return
+    notifications_repo.stage(
+        db,
+        recipient_id=event.coordinator_id,
+        event_request_id=event.id,
+        type=outcome_type,
+        source_type=NotificationSource.EQUIPMENT_REVIEW,
+        source_id=f"{requirement_id}:{now.isoformat()}",
+        occurred_at=now,
+    )
 
 
 def seed_from_event(db: Session, event: EventRequest, now: datetime) -> None:

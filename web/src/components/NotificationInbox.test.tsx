@@ -142,6 +142,29 @@ test('links equipment-review notifications to the authorised review queue', asyn
   expect(link.getAttribute('href')).toBe('#equipment-review-queue')
 })
 
+// TC-125-05: a review-outcome and a reservation item each identify the requirement
+// (source id), the outcome (type) and the action time, and open the authorised
+// record view — the Coordinator's own assigned-events section, which the API scopes
+// by Coordinator ID so nobody else's event is reachable.
+test.each([
+  ['equipment_review_available', 'equipment_review'],
+  ['equipment_review_partially_available', 'equipment_review'],
+  ['equipment_review_unavailable', 'equipment_review'],
+  ['equipment_reserved_full', 'equipment_reservation'],
+  ['equipment_reserved_partial', 'equipment_reservation'],
+])('links %s notifications to the authorised coordinator view', async (type, source) => {
+  signIn()
+  renderInbox(async () =>
+    json([{ ...newer, type, source_type: source, source_id: 'outcome-1' }]),
+  )
+  const item = await screen.findByRole('listitem')
+  expect(item.textContent).toContain(type)
+  expect(item.textContent).toContain('outcome-1')
+  expect(item.textContent).toContain('2026-04-01T10:00:00Z')
+  const link = screen.getByRole('link', { name: 'View equipment outcome' })
+  expect(link.getAttribute('href')).toBe('#coordinator-events')
+})
+
 test('shows an error state when the inbox fails to load', async () => {
   signIn()
   renderInbox(async () => {

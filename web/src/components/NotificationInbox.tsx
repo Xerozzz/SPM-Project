@@ -88,6 +88,17 @@ export default function NotificationInbox() {
                     Review equipment requirements
                   </a>
                 )}
+                {/* SCRUM-125: review outcomes and reservations notify the assigned
+                    Coordinator. The coordinator events section renders only the
+                    viewer's own assigned events (the API scopes by Coordinator ID),
+                    so this link is an authorised record view for exactly the
+                    inbox's recipient. */}
+                {(notification.source_type === 'equipment_review' ||
+                  notification.source_type === 'equipment_reservation') && (
+                  <a href="#coordinator-events" className="text-blue-700 underline">
+                    View equipment outcome
+                  </a>
+                )}
                 {notification.is_unread && (
                   <button
                     type="button"
