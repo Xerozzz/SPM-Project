@@ -35,4 +35,6 @@ def history_of(
         replans,
         # SCRUM-120: only an event that went back to planning has causes to match.
         repo.replan_cause_records(db, event.id, booking_ids) if replans else [],
+        repo.change_request_records(db, event.id),
+        repo.closure_note_records(db, event.id),
     )

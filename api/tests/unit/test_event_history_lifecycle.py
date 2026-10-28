@@ -204,7 +204,8 @@ def test_lifecycle_actions_are_appended_without_moving_any_earlier_one() -> None
     order = list(HistoryAction)
 
     assert order.index(HistoryAction.RESERVATION_RELEASED) == 20
-    assert order[21:] == [
+    # Later SCRUM-120 actions append after these, so they are pinned as a slice.
+    assert order[21:24] == [
         HistoryAction.EVENT_CONFIRMED,
         HistoryAction.RETURNED_TO_PLANNING,
         HistoryAction.EVENT_CANCELLED,

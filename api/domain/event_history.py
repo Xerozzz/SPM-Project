@@ -18,7 +18,9 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
+from itertools import pairwise
 
+from domain.event_change import ChangeRequestStatus
 from domain.event_clarification import ClarificationKind
 from domain.event_replanning import ReplanCause
 from domain.venue_booking import BookingStatus
@@ -61,6 +63,13 @@ class HistoryAction(StrEnum):
     EVENT_CONFIRMED = "event_confirmed"
     RETURNED_TO_PLANNING = "returned_to_planning"
     EVENT_CANCELLED = "event_cancelled"
+    # SCRUM-120 change requests and completion, appended after the lifecycle actions. At
+    # one instant a return to planning lists before the decision that caused it, and links
+    # to it (ADR-0068).
+    CHANGE_REQUESTED = "change_requested"
+    CHANGE_DECIDED = "change_decided"
+    EVENT_COMPLETED = "event_completed"
+    CLOSURE_CORRECTED = "closure_corrected"
 
 
 class HistorySource(StrEnum):
@@ -75,6 +84,8 @@ class HistorySource(StrEnum):
     EQUIPMENT_RESERVATION = "equipment_reservation"
     # SCRUM-120: a return to planning is read from the approval it invalidated.
     SAFETY_REVIEW = "safety_review"
+    EVENT_CHANGE_REQUEST = "event_change_request"
+    EVENT_CLOSURE_NOTE = "event_closure_note"
 
 
 class HistoryOutcome(StrEnum):
@@ -92,18 +103,28 @@ class Person:
     email: str | None
 
 
+class FieldKind(StrEnum):
+    """How the UI shows a field change's values (ADR-0068)."""
+
+    TEXT = "text"
+    # A UTC ISO 8601 instant, shown in Singapore time by the UI, never converted here.
+    DATETIME = "datetime"
+
+
 @dataclass(frozen=True)
 class FieldChange:
     """One value before and after an action, under the label the UI shows for it.
 
     Values are text so one renderer shows numbers and text alike; None is "no value", the
-    old side of something added or the new side of something removed.
+    old side of something added or the new side of something removed. `kind` says when
+    the text is an instant the UI must show in local time (SCRUM-120, ADR-0068).
     """
 
     field: str
     label: str
     old: str | None
     new: str | None
+    kind: FieldKind = FieldKind.TEXT
 
 
 @dataclass(frozen=True)
@@ -123,6 +144,9 @@ class RequestRecord:
     cancelled_by: Person | None = None
     cancelled_at: datetime | None = None
     cancellation_reason: str | None = None
+    # SCRUM-86: set once, together, when the event is completed.
+    completed_by: Person | None = None
+    completed_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -219,6 +243,46 @@ class ReservationRecord:
     flagged_at: datetime | None
     released_by: Person | None
     released_at: datetime | None
+
+
+@dataclass(frozen=True)
+class ChangeItemRecord:
+    """One `event_change_items` row (SCRUM-37), as stored: the JSON current and proposed
+    values. `subject` is the session label or equipment type it changes, read from that
+    row when it exists; None for the event's own fields or when it is not found."""
+
+    target: str
+    field: str
+    current: object
+    proposed: object
+    subject: str | None
+
+
+@dataclass(frozen=True)
+class ChangeRequestRecord:
+    """One `event_change_requests` row (SCRUM-37/47) with its items in their order."""
+
+    id: uuid.UUID
+    requested_by: Person
+    created_at: datetime
+    reason: str
+    status: str
+    decided_by: Person | None
+    decided_at: datetime | None
+    decision_note: str | None
+    items: tuple[ChangeItemRecord, ...]
+
+
+@dataclass(frozen=True)
+class ClosureNoteRecord:
+    """One `event_closure_notes` version (SCRUM-86). Version 1 is written by completion."""
+
+    id: uuid.UUID
+    version: int
+    actual_attendance: int | None
+    notes: str | None
+    recorded_by: Person
+    recorded_at: datetime
 
 
 @dataclass(frozen=True)
@@ -613,6 +677,151 @@ def cancellation_entry(
     )
 
 
+# SCRUM-37: every value a change request can carry, as `target.field`, with its label
+# and kind. An item outside this list is never shown (ADR-0064 rule 1). A session or
+# equipment label is prefixed with what it changes.
+_CHANGE_FIELDS: dict[str, tuple[str, FieldKind]] = {
+    "event.start_at": ("Start date and time", FieldKind.DATETIME),
+    "event.end_at": ("End date and time", FieldKind.DATETIME),
+    "event.expected_attendance": ("Expected attendance", FieldKind.TEXT),
+    "event.venue_requirement": ("Venue requirement", FieldKind.TEXT),
+    "event.accessibility_requirement": ("Accessibility requirement", FieldKind.TEXT),
+    "event.layout_requirement": ("Layout requirement", FieldKind.TEXT),
+    "session.session_label": ("name", FieldKind.TEXT),
+    "session.start_at": ("start", FieldKind.DATETIME),
+    "session.end_at": ("end", FieldKind.DATETIME),
+    "equipment.quantity": ("quantity", FieldKind.TEXT),
+    "equipment.technical_requirements": ("technical requirements", FieldKind.TEXT),
+    "equipment.add": ("line added", FieldKind.TEXT),
+    "equipment.remove": ("line removed", FieldKind.TEXT),
+}
+
+
+def _change_value(value: object) -> str | None:
+    """A stored JSON value as text. A whole equipment line reads "Projector × 2 (HDMI)"."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        line = f"{value.get('equipment_type')} × {value.get('quantity')}"
+        technical = value.get("technical_requirements")
+        return line if technical is None else f"{line} ({technical})"
+    return str(value)
+
+
+def _change_label(item: ChangeItemRecord, label: str) -> str:
+    if item.target == "session":
+        return f"Session “{item.subject}”: {label}" if item.subject else f"A session: {label}"
+    if item.target == "equipment":
+        line = item.current if isinstance(item.current, dict) else item.proposed
+        subject = line.get("equipment_type") if isinstance(line, dict) else item.subject
+        return f"{subject or 'Equipment'}: {label}"
+    return label
+
+
+def change_request_entries(record: ChangeRequestRecord) -> list[HistoryEntry]:
+    """SCRUM-37/47: the Organiser's request, with its reason and every item's old and new
+    value, and the Coordinator's decision with its note.
+
+    The values are on the request entry only, so they are shown once. Each item is emitted
+    only if `target.field` is whitelisted, under its label; dates keep their stored UTC
+    text and are marked DATETIME so the UI shows them in local time (ADR-0068).
+    """
+    changes = tuple(
+        FieldChange(
+            key,
+            _change_label(item, _CHANGE_FIELDS[key][0]),
+            _change_value(item.current),
+            _change_value(item.proposed),
+            _CHANGE_FIELDS[key][1],
+        )
+        for item in record.items
+        if (key := f"{item.target}.{item.field}") in _CHANGE_FIELDS
+    )
+    entries = [
+        HistoryEntry(
+            HistoryAction.CHANGE_REQUESTED,
+            record.created_at,
+            record.requested_by,
+            HistorySource.EVENT_CHANGE_REQUEST,
+            record.id,
+            reason=record.reason,
+            changes=changes,
+        )
+    ]
+    if record.decided_at is not None:
+        approved = record.status == ChangeRequestStatus.APPROVED
+        entries.append(
+            HistoryEntry(
+                HistoryAction.CHANGE_DECIDED,
+                record.decided_at,
+                record.decided_by,
+                HistorySource.EVENT_CHANGE_REQUEST,
+                record.id,
+                outcome=HistoryOutcome.APPROVED if approved else HistoryOutcome.REJECTED,
+                reason=record.decision_note,
+            )
+        )
+    return entries
+
+
+def _closure_changes(
+    old: ClosureNoteRecord | None, new: ClosureNoteRecord
+) -> tuple[FieldChange, ...]:
+    """Exactly attendance and notes, both sides, whether or not each moved."""
+    return (
+        FieldChange(
+            "actual_attendance",
+            "Actual attendance",
+            None if old is None else _text(old.actual_attendance),
+            _text(new.actual_attendance),
+        ),
+        FieldChange(
+            "notes",
+            "Operational notes and issues",
+            None if old is None else old.notes,
+            new.notes,
+        ),
+    )
+
+
+def completion_entries(
+    record: RequestRecord, notes: Iterable[ClosureNoteRecord]
+) -> list[HistoryEntry]:
+    """SCRUM-86: the completion, carrying the closure record it wrote (version 1), and
+    each later correction against the version before it.
+
+    Completion writes version 1 in the same transaction, so its values belong to the
+    completion entry rather than a second one. Every version is kept (ADR-0059), so
+    each correction's old values are the previous version's, not reconstructed.
+    """
+    versions = sorted(notes, key=lambda n: n.version)
+    entries = []
+    if record.completed_at is not None:
+        first = next((n for n in versions if n.version == 1), None)
+        entries.append(
+            HistoryEntry(
+                HistoryAction.EVENT_COMPLETED,
+                record.completed_at,
+                record.completed_by,
+                HistorySource.EVENT_REQUEST,
+                record.id,
+                changes=() if first is None else _closure_changes(None, first),
+            )
+        )
+    for previous, note in pairwise(versions):
+        entries.append(
+            HistoryEntry(
+                HistoryAction.CLOSURE_CORRECTED,
+                note.recorded_at,
+                note.recorded_by,
+                HistorySource.EVENT_CLOSURE_NOTE,
+                note.id,
+                changes=_closure_changes(previous, note),
+            )
+        )
+    return entries
+
+
 def _booking_causes(bookings: Iterable[BookingRecord]) -> list[ReplanCauseRecord]:
     """SCRUM-118: every cancelled arrangement could be a venue change; only one cancelled
     in the same transaction as a return to planning will match it."""
@@ -658,6 +867,8 @@ def timeline(
     reservations: Iterable[ReservationRecord] = (),
     replans: Iterable[ReplanRecord] = (),
     replan_causes: Iterable[ReplanCauseRecord] = (),
+    change_requests: Iterable[ChangeRequestRecord] = (),
+    closure_notes: Iterable[ClosureNoteRecord] = (),
 ) -> list[HistoryEntry]:
     """Every reader's entries for one event, filtered for the viewer, oldest first.
 
@@ -692,4 +903,7 @@ def timeline(
         )
         if e is not None
     ]
+    for change in change_requests:
+        entries += change_request_entries(change)
+    entries += completion_entries(request, closure_notes)
     return ordered(visible(entries, may_read_clarifications))

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import {
   type EventHistoryEntry,
   EventHistoryForbiddenError,
+  type FieldChange,
   type HistoryAction,
   type HistorySource,
   getEventHistory,
@@ -155,10 +156,12 @@ function HistoryRow({
       {entry.affected_booking_ids.length > 0 && (
         <p>Affected arrangements: {entry.affected_booking_ids.join(', ')}</p>
       )}
-      {/* SCRUM-119: only the fields the API's reader named, under its labels (ADR-0064). */}
-      {entry.changes.map((change) => (
-        <p key={change.field}>
-          {change.label}: {change.old ?? '—'} → {change.new ?? '—'}
+      {/* SCRUM-119: only the fields the API's reader named, under its labels (ADR-0064).
+          SCRUM-120: keyed by position too, since two sessions can change the same field. */}
+      {entry.changes.map((change, index) => (
+        <p key={`${index}:${change.field}`}>
+          {change.label}: {changeValue(change.old, change.kind)} →{' '}
+          {changeValue(change.new, change.kind)}
         </p>
       ))}
       {entry.hold_expires_at !== null && (
@@ -211,6 +214,10 @@ const ACTION_LABELS: Record<HistoryAction, string> = {
   event_confirmed: 'Event confirmed',
   returned_to_planning: 'Returned to planning',
   event_cancelled: 'Event cancelled',
+  change_requested: 'Change requested',
+  change_decided: 'Change request decision',
+  event_completed: 'Event completed',
+  closure_corrected: 'Closure record corrected',
 }
 
 const CAUSE_LABELS: Record<ReplanCause, string> = {
@@ -228,6 +235,14 @@ const SOURCE_LABELS: Record<HistorySource, string> = {
   equipment_requirement_change: 'equipment requirement change',
   equipment_reservation: 'equipment reservation',
   safety_review: 'safety approval',
+  event_change_request: 'change request',
+  event_closure_note: 'closure record',
+}
+
+/** SCRUM-120: a missing value is "—"; a datetime is shown in Singapore time (ADR-0068). */
+function changeValue(value: string | null, kind: FieldChange['kind']): string {
+  if (value === null) return '—'
+  return kind === 'datetime' ? formatSingaporeTime(value) : value
 }
 
 function byId(entries: EventHistoryEntry[]): Map<string, EventHistoryEntry> {

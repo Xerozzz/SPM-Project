@@ -107,7 +107,7 @@ async def test_only_the_latest_confirmation_is_shown_after_a_reconfirmation(
 async def test_an_approved_change_returns_the_event_with_the_deciders_name(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
-    event, _, coordinator, _ = replanned_by_change(db, make_user)
+    event, _, coordinator, change_id = replanned_by_change(db, make_user)
 
     [entry] = of(await history(make_client, coordinator, event), "returned_to_planning")
 
@@ -117,8 +117,8 @@ async def test_an_approved_change_returns_the_event_with_the_deciders_name(
         True,
     )
     assert entry["source_type"] == "safety_review"
-    # The decision has no entry of its own yet (SCRUM-120 PR 2), so nothing to link.
-    assert entry["related_entry_ids"] == []
+    # SCRUM-120 PR 2 gives the decision its own entry, so the return links it.
+    assert entry["related_entry_ids"] == [f"change_decided:{change_id}"]
 
 
 @pytest.mark.story("SCRUM-120")

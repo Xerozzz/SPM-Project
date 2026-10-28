@@ -77,12 +77,14 @@ async def test_requirement_changes_and_reservation_lifecycle_appear_in_order(
     assert {e["equipment_type"] for e in rows} == {kind}
     added, reserved, updated, flagged, released = rows
     assert added["changes"] == [
-        {"field": "quantity", "label": "Quantity", "old": None, "new": "2"},
+        # SCRUM-120 adds `kind` to every change (ADR-0068).
+        {"field": "quantity", "label": "Quantity", "old": None, "new": "2", "kind": "text"},
         {
             "field": "technical_requirements",
             "label": "Technical requirements",
             "old": None,
             "new": "HDMI",
+            "kind": "text",
         },
     ]
     assert updated["changes"][0] == {
@@ -90,6 +92,7 @@ async def test_requirement_changes_and_reservation_lifecycle_appear_in_order(
         "label": "Quantity",
         "old": "2",
         "new": "3",
+        "kind": "text",
     }
     assert [e["quantity"] for e in (reserved, flagged, released)] == [2, 2, 2]
     assert (flagged["actor_id"], flagged["actor_email"]) == (None, None)

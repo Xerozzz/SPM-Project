@@ -77,6 +77,7 @@ someone else made two weeks ago.
 | [0065](0065-equipment-entries-in-the-event-history.md) | Equipment entries in the event history | Proposed |
 | [0066](0066-cancelling-a-confirmed-arrangement-is-a-venue-change.md) | Cancelling an arrangement of a Confirmed event is a venue change that returns it to planning | Proposed |
 | [0067](0067-lifecycle-entries-linked-by-their-transaction-time.md) | Lifecycle entries in the event history, linked by their shared transaction time | Proposed |
+| [0068](0068-change-request-and-completion-entries-with-typed-field-values.md) | Change request and completion entries, with a kind on each field change | Proposed |
 
 
 ## When to write one

@@ -242,12 +242,20 @@ async def test_a_buffer_change_shows_old_and_new_buffers_and_only_this_events_bo
     assert entry["actor_email"] == p.staff.email
     assert entry["affected_booking_ids"] == [str(p.first.id)]
     assert entry["changes"] == [
-        {"field": "setup_minutes", "label": "Setup time (minutes)", "old": "0", "new": "45"},
+        # SCRUM-120 adds `kind` to every change (ADR-0068).
+        {
+            "field": "setup_minutes",
+            "label": "Setup time (minutes)",
+            "old": "0",
+            "new": "45",
+            "kind": "text",
+        },
         {
             "field": "turnaround_minutes",
             "label": "Turnaround time (minutes)",
             "old": "15",
             "new": "30",
+            "kind": "text",
         },
     ]
     assert str(elsewhere) not in str(body)

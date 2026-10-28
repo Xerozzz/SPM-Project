@@ -31,6 +31,10 @@ export type HistoryAction =
   | 'event_confirmed'
   | 'returned_to_planning'
   | 'event_cancelled'
+  | 'change_requested'
+  | 'change_decided'
+  | 'event_completed'
+  | 'closure_corrected'
 
 export type HistorySource =
   | 'event_request'
@@ -41,6 +45,8 @@ export type HistorySource =
   | 'equipment_requirement_change'
   | 'equipment_reservation'
   | 'safety_review'
+  | 'event_change_request'
+  | 'event_closure_note'
 
 /** SCRUM-120: why an event went back to planning. */
 export type ReplanCause = 'change_request' | 'venue_closure' | 'venue_cancellation'
@@ -52,6 +58,8 @@ export interface FieldChange {
   /** Null is "no value". */
   old: string | null
   new: string | null
+  /** SCRUM-120: 'datetime' values are UTC instants, shown in Singapore time (ADR-0068). */
+  kind: 'text' | 'datetime'
 }
 
 export interface EventHistoryEntry {
