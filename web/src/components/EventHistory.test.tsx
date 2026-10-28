@@ -43,6 +43,9 @@ function entry(overrides: Partial<EventHistoryEntry>): EventHistoryEntry {
     changes: [],
     equipment_type: null,
     quantity: null,
+    actor_recorded: true,
+    replan_cause: null,
+    related_entry_ids: [],
     ...overrides,
   }
 }
@@ -450,5 +453,116 @@ describe('SCRUM-119 equipment entries (frontend unit)', () => {
     expect(row).toHaveTextContent('Quantity: 2 → 3')
     expect(row).toHaveTextContent('Technical requirements: — → HDMI')
     expect(row).not.toHaveTextContent('technical_requirements')
+  })
+})
+
+describe('SCRUM-120 lifecycle entries (frontend unit)', () => {
+  const coordinator = { actor_id: 'u-coord', actor_email: 'coordinator@example.com' }
+  const arrangement = entry({
+    ...coordinator,
+    id: 'arrangement_cancelled:bk-1',
+    action: 'arrangement_cancelled',
+    source_type: 'venue_booking',
+    source_id: 'bk-1',
+    venue_name: 'Hall A',
+    session_label: 'Morning',
+    reason: 'Funding withdrawn',
+  })
+  const released = entry({
+    ...coordinator,
+    id: 'reservation_released:rs-1',
+    action: 'reservation_released',
+    source_type: 'equipment_reservation',
+    source_id: 'rs-1',
+    equipment_type: 'Projector',
+    quantity: 2,
+  })
+
+  test('a confirmation names the Coordinator', async () => {
+    renderWith(
+      ok([entry({ ...coordinator, id: 'event_confirmed:ev-1', action: 'event_confirmed' })]),
+      history,
+    )
+
+    expect(await screen.findByRole('listitem')).toHaveTextContent(
+      'Event confirmed by coordinator@example.com',
+    )
+  })
+
+  test('a return to planning shows its cause and links what caused it', async () => {
+    renderWith(
+      ok([
+        arrangement,
+        entry({
+          ...coordinator,
+          id: 'returned_to_planning:sr-1',
+          action: 'returned_to_planning',
+          source_type: 'safety_review',
+          source_id: 'sr-1',
+          replan_cause: 'venue_cancellation',
+          related_entry_ids: [arrangement.id],
+        }),
+      ]),
+      history,
+    )
+    const rows = await screen.findAllByRole('listitem')
+    const back = rows.find((row) => row.textContent?.startsWith('Returned to planning'))
+
+    expect(back).toHaveTextContent('Returned to planning by coordinator@example.com')
+    expect(back).toHaveTextContent('Cause: a venue change')
+    expect(back).toHaveTextContent('Caused by:Venue arrangement cancelled: Hall A, Morning')
+    expect(back).toHaveTextContent('Record: safety approval sr-1')
+  })
+
+  test('a return with no recorded actor says so, never "System"', async () => {
+    renderWith(
+      ok([
+        entry({
+          id: 'returned_to_planning:sr-1',
+          action: 'returned_to_planning',
+          source_type: 'safety_review',
+          source_id: 'sr-1',
+          actor_id: null,
+          actor_email: null,
+          actor_recorded: false,
+          replan_cause: 'change_request',
+        }),
+      ]),
+      history,
+    )
+    const row = await screen.findByRole('listitem')
+
+    expect(row).toHaveTextContent('(actor not recorded)')
+    expect(row).not.toHaveTextContent('System')
+    expect(row).toHaveTextContent('Cause: a change request was approved')
+  })
+
+  test('a cancellation shows its reason once and names what it released', async () => {
+    renderWith(
+      ok([
+        arrangement,
+        released,
+        entry({
+          ...coordinator,
+          id: 'event_cancelled:ev-1',
+          action: 'event_cancelled',
+          reason: 'Funding withdrawn',
+          related_entry_ids: [arrangement.id, released.id],
+        }),
+      ]),
+      history,
+    )
+    const rows = await screen.findAllByRole('listitem')
+    const cancelled = rows.find((row) => row.textContent?.startsWith('Event cancelled'))
+
+    expect(cancelled).toHaveTextContent('Event cancelled by coordinator@example.com')
+    expect(cancelled).toHaveTextContent('Reason: Funding withdrawn')
+    expect(cancelled).toHaveTextContent(
+      'Released:Venue arrangement cancelled: Hall A, MorningReservation released: Projector × 2',
+    )
+    // The released entries are still their own rows, each shown once.
+    expect(
+      rows.filter((row) => row.textContent?.startsWith('Venue arrangement cancelled by')),
+    ).toHaveLength(1)
   })
 })

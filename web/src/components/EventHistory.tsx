@@ -7,6 +7,7 @@ import {
   type HistoryAction,
   type HistorySource,
   getEventHistory,
+  type ReplanCause,
 } from '../api/eventHistory'
 import { formatSingaporeTime } from '../api/venueCalendar'
 import { useAuth } from '../auth/useAuth'
@@ -31,6 +32,7 @@ export default function EventHistory({
     queryFn: () => getEventHistory(token ?? '', eventId),
     enabled: token !== null,
   })
+  const index = byId(history.data ?? [])
 
   return (
     <div className="mt-2 rounded border border-slate-100 p-2">
@@ -52,7 +54,7 @@ export default function EventHistory({
       {history.data && history.data.length > 0 && (
         <ol className="mt-1 space-y-2 text-sm text-slate-600">
           {history.data.map((entry) => (
-            <HistoryRow key={entry.id} entry={entry} />
+            <HistoryRow key={entry.id} entry={entry} byId={index} />
           ))}
         </ol>
       )}
@@ -88,14 +90,32 @@ export function EventHistoryToggle({
   )
 }
 
-function HistoryRow({ entry }: { entry: EventHistoryEntry }) {
+function HistoryRow({
+  entry,
+  byId,
+}: {
+  entry: EventHistoryEntry
+  byId: Map<string, EventHistoryEntry>
+}) {
+  // SCRUM-120: the entries this one links to are shown by name, never repeated in full.
+  const related = entry.related_entry_ids.flatMap((id) => byId.get(id) ?? [])
   return (
     <li>
-      <p>
-        <span className="font-medium text-slate-800">{actionLabel(entry)}</span> by{' '}
-        {actorLabel(entry)} at{' '}
-        <time dateTime={entry.occurred_at}>{formatSingaporeTime(entry.occurred_at)}</time>
-      </p>
+      {/* SCRUM-120: a person acted but the record keeps no actor; not "System" (ADR-0067). */}
+      {entry.actor_recorded ? (
+        <p>
+          <span className="font-medium text-slate-800">{actionLabel(entry)}</span> by{' '}
+          {actorLabel(entry)} at{' '}
+          <time dateTime={entry.occurred_at}>{formatSingaporeTime(entry.occurred_at)}</time>
+        </p>
+      ) : (
+        <p>
+          <span className="font-medium text-slate-800">{actionLabel(entry)}</span> at{' '}
+          <time dateTime={entry.occurred_at}>{formatSingaporeTime(entry.occurred_at)}</time> (actor
+          not recorded)
+        </p>
+      )}
+      {entry.replan_cause !== null && <p>Cause: {CAUSE_LABELS[entry.replan_cause]}</p>}
       {entry.new_coordinator_email !== null && (
         <p>
           {entry.previous_coordinator_email ?? 'No previous Coordinator'} →{' '}
@@ -148,6 +168,16 @@ function HistoryRow({ entry }: { entry: EventHistoryEntry }) {
         </p>
       )}
       {entry.reason !== null && <p>Reason: {entry.reason}</p>}
+      {related.length > 0 && (
+        <div>
+          <p>{entry.action === 'event_cancelled' ? 'Released:' : 'Caused by:'}</p>
+          <ul className="list-disc pl-5">
+            {related.map((other) => (
+              <li key={other.id}>{relatedLabel(other)}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {entry.note !== null && <p>Note: {entry.note}</p>}
       <p className="text-xs text-slate-400">
         Record: {SOURCE_LABELS[entry.source_type]} {entry.source_id}
@@ -178,6 +208,15 @@ const ACTION_LABELS: Record<HistoryAction, string> = {
   equipment_reserved: 'Equipment reserved',
   reservation_flagged: 'Reservation flagged for reconsideration',
   reservation_released: 'Reservation released',
+  event_confirmed: 'Event confirmed',
+  returned_to_planning: 'Returned to planning',
+  event_cancelled: 'Event cancelled',
+}
+
+const CAUSE_LABELS: Record<ReplanCause, string> = {
+  change_request: 'a change request was approved',
+  venue_closure: 'a venue closure',
+  venue_cancellation: 'a venue change',
 }
 
 const SOURCE_LABELS: Record<HistorySource, string> = {
@@ -188,6 +227,22 @@ const SOURCE_LABELS: Record<HistorySource, string> = {
   venue_buffer_change: 'venue buffer change',
   equipment_requirement_change: 'equipment requirement change',
   equipment_reservation: 'equipment reservation',
+  safety_review: 'safety approval',
+}
+
+function byId(entries: EventHistoryEntry[]): Map<string, EventHistoryEntry> {
+  return new Map(entries.map((entry) => [entry.id, entry]))
+}
+
+/** A linked entry in one line: what happened, and to which arrangement or equipment. */
+function relatedLabel(entry: EventHistoryEntry): string {
+  const what =
+    entry.venue_name !== null
+      ? [entry.venue_name, entry.session_label].filter((part) => part !== null).join(', ')
+      : entry.equipment_type !== null
+        ? `${entry.equipment_type}${entry.quantity !== null ? ` × ${entry.quantity}` : ''}`
+        : null
+  return what === null ? actionLabel(entry) : `${actionLabel(entry)}: ${what}`
 }
 
 /** A decision's outcome is part of what happened, so it is named with the action. */

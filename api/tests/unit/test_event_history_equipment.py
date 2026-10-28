@@ -177,7 +177,8 @@ def test_equipment_actions_extend_the_order_without_moving_any_earlier_one() -> 
     order = list(HistoryAction)
 
     assert order.index(HistoryAction.BUFFER_CHANGED) == 14
-    assert order[15:] == [
+    # SCRUM-120 appends after these, so they are pinned as a slice, not as the tail.
+    assert order[15:21] == [
         HistoryAction.REQUIREMENT_ADDED,
         HistoryAction.REQUIREMENT_UPDATED,
         HistoryAction.REQUIREMENT_REMOVED,

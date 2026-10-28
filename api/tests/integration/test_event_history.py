@@ -170,6 +170,8 @@ async def test_assignee_sees_every_recorded_action_once_oldest_first(
         *[("hold_created", str(b.id)) for b in tied if b is not r.rejected],
         ("hold_expired", str(r.expired.id)),
         ("hold_confirmed", str(r.confirmed.id)),
+        # SCRUM-120: the event's own confirmation, ranked after every SCRUM-88 action.
+        ("event_confirmed", event_id),
     ]
     assert len({e["id"] for e in body}) == len(body)
 
