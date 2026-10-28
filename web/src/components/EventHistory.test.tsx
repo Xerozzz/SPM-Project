@@ -348,10 +348,17 @@ describe('SCRUM-119 venue change entries (frontend unit)', () => {
           venue_name: 'Hall A',
           affected_booking_ids: ['bk-1'],
           changes: [
-            { field: 'setup_minutes', label: 'Setup time (minutes)', old: '0', new: '45' },
+            {
+              field: 'setup_minutes',
+              label: 'Setup time (minutes)',
+              old: '0',
+              new: '45',
+              kind: 'text',
+            },
             {
               field: 'turnaround_minutes',
               label: 'Turnaround time (minutes)',
+              kind: 'text',
               old: null,
               new: '30',
             },
@@ -433,12 +440,13 @@ describe('SCRUM-119 equipment entries (frontend unit)', () => {
           actor_email: 'coordinator@example.com',
           equipment_type: 'Projector',
           changes: [
-            { field: 'quantity', label: 'Quantity', old: '2', new: '3' },
+            { field: 'quantity', label: 'Quantity', old: '2', new: '3', kind: 'text' },
             {
               field: 'technical_requirements',
               label: 'Technical requirements',
               old: null,
               new: 'HDMI',
+              kind: 'text',
             },
           ],
         }),
@@ -564,5 +572,129 @@ describe('SCRUM-120 lifecycle entries (frontend unit)', () => {
     expect(
       rows.filter((row) => row.textContent?.startsWith('Venue arrangement cancelled by')),
     ).toHaveLength(1)
+  })
+})
+
+describe('SCRUM-120 change request and completion entries (frontend unit)', () => {
+  const start = { old: '2030-01-10T02:00:00+00:00', new: '2030-01-11T02:00:00+00:00' }
+
+  test('a change request shows its reason, and dates in Singapore time', async () => {
+    renderWith(
+      ok([
+        entry({
+          id: 'change_requested:cr-1',
+          action: 'change_requested',
+          source_type: 'event_change_request',
+          source_id: 'cr-1',
+          reason: 'Speaker moved',
+          changes: [
+            { field: 'event.start_at', label: 'Start date and time', ...start, kind: 'datetime' },
+            {
+              field: 'event.expected_attendance',
+              label: 'Expected attendance',
+              old: '80',
+              new: '120',
+              kind: 'text',
+            },
+          ],
+        }),
+      ]),
+      history,
+    )
+    const row = await screen.findByRole('listitem')
+
+    expect(row).toHaveTextContent('Change requested by owner@example.com')
+    expect(row).toHaveTextContent('Reason: Speaker moved')
+    expect(row).toHaveTextContent(
+      `Start date and time: ${formatSingaporeTime(start.old)} → ${formatSingaporeTime(start.new)}`,
+    )
+    expect(row).not.toHaveTextContent(start.old)
+    expect(row).toHaveTextContent('Expected attendance: 80 → 120')
+    expect(row).toHaveTextContent('Record: change request cr-1')
+  })
+
+  test('two sessions changing the same field are both shown', async () => {
+    renderWith(
+      ok([
+        entry({
+          id: 'change_requested:cr-1',
+          action: 'change_requested',
+          changes: [
+            { field: 'session.start_at', label: 'Session “AM”: start', ...start, kind: 'datetime' },
+            { field: 'session.start_at', label: 'Session “PM”: start', ...start, kind: 'datetime' },
+          ],
+        }),
+      ]),
+      history,
+    )
+    const row = await screen.findByRole('listitem')
+
+    expect(row).toHaveTextContent('Session “AM”: start')
+    expect(row).toHaveTextContent('Session “PM”: start')
+  })
+
+  test('a decision names its outcome and note', async () => {
+    renderWith(
+      ok([
+        entry({
+          id: 'change_decided:cr-1',
+          action: 'change_decided',
+          source_type: 'event_change_request',
+          source_id: 'cr-1',
+          actor_id: 'u-coord',
+          actor_email: 'coordinator@example.com',
+          outcome: 'rejected',
+          reason: 'Programme is printed',
+        }),
+      ]),
+      history,
+    )
+
+    expect(await screen.findByRole('listitem')).toHaveTextContent(
+      'Change request decision: rejected by coordinator@example.com',
+    )
+  })
+
+  test('completion and a correction show the closure values, old and new', async () => {
+    renderWith(
+      ok([
+        entry({
+          id: 'event_completed:ev-1',
+          action: 'event_completed',
+          changes: [
+            {
+              field: 'actual_attendance',
+              label: 'Actual attendance',
+              old: null,
+              new: '40',
+              kind: 'text',
+            },
+          ],
+        }),
+        entry({
+          id: 'closure_corrected:cn-2',
+          action: 'closure_corrected',
+          source_type: 'event_closure_note',
+          source_id: 'cn-2',
+          changes: [
+            {
+              field: 'actual_attendance',
+              label: 'Actual attendance',
+              old: '40',
+              new: '42',
+              kind: 'text',
+            },
+          ],
+        }),
+      ]),
+      history,
+    )
+    const [done, corrected] = await screen.findAllByRole('listitem')
+
+    expect(done).toHaveTextContent('Event completed by owner@example.com')
+    expect(done).toHaveTextContent('Actual attendance: — → 40')
+    expect(corrected).toHaveTextContent('Closure record corrected')
+    expect(corrected).toHaveTextContent('Actual attendance: 40 → 42')
+    expect(corrected).toHaveTextContent('Record: closure record cn-2')
   })
 })

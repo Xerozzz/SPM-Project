@@ -6,7 +6,13 @@ from typing import Self
 
 from pydantic import BaseModel
 
-from domain.event_history import HistoryAction, HistoryEntry, HistoryOutcome, HistorySource
+from domain.event_history import (
+    FieldKind,
+    HistoryAction,
+    HistoryEntry,
+    HistoryOutcome,
+    HistorySource,
+)
 from domain.event_replanning import ReplanCause
 
 
@@ -18,6 +24,8 @@ class FieldChangeRead(BaseModel):
     label: str
     old: str | None
     new: str | None
+    # SCRUM-120: "datetime" when the values are UTC instants to show in local time.
+    kind: FieldKind
 
 
 class EventHistoryEntryRead(BaseModel):
@@ -87,7 +95,7 @@ class EventHistoryEntryRead(BaseModel):
             related_booking_id=entry.related_booking_id,
             affected_booking_ids=list(entry.affected_booking_ids),
             changes=[
-                FieldChangeRead(field=c.field, label=c.label, old=c.old, new=c.new)
+                FieldChangeRead(field=c.field, label=c.label, old=c.old, new=c.new, kind=c.kind)
                 for c in entry.changes
             ],
             equipment_type=entry.equipment_type,

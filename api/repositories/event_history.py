@@ -15,7 +15,11 @@ from domain.event_history import (
     AssignmentRecord,
     BookingRecord,
     BufferChangeRecord,
+    ChangeItemRecord,
+    ChangeRequestRecord,
     ClarificationRecord,
+    ClosureNoteRecord,
+    HistoryAction,
     Person,
     ReplanCauseRecord,
     ReplanRecord,
@@ -26,8 +30,10 @@ from domain.event_history import (
 from domain.event_replanning import ReplanCause
 from models.equipment_requirement_change import EquipmentRequirementChange
 from models.equipment_reservation import EquipmentReservation
-from models.event_change_request import EventChangeRequest
+from models.event_change_request import EventChangeItem, EventChangeRequest
 from models.event_clarification import EventClarification
+from models.event_closure_note import EventClosureNote
+from models.event_equipment_requirement import EventEquipmentRequirement
 from models.event_request import EventRequest
 from models.safety_review import SafetyReview
 from models.user import User
@@ -44,19 +50,27 @@ def _person(user_id: uuid.UUID | None, email: str | None) -> Person | None:
 
 def request_record(db: Session, event_request_id: uuid.UUID) -> RequestRecord:
     """The request's milestone columns with the owner, decider, confirmer and (SCRUM-120)
-    canceller's emails. The request must exist: the history route's dependency has
+    canceller and completer's emails. The request must exist: the history route's dependency has
     already loaded it."""
     owner, decider, confirmer = aliased(User), aliased(User), aliased(User)
-    canceller = aliased(User)
+    canceller, completer = aliased(User), aliased(User)
     statement = (
-        select(EventRequest, owner.email, decider.email, confirmer.email, canceller.email)
+        select(
+            EventRequest,
+            owner.email,
+            decider.email,
+            confirmer.email,
+            canceller.email,
+            completer.email,
+        )
         .outerjoin(owner, EventRequest.organiser_id == owner.id)
         .outerjoin(decider, EventRequest.decided_by_id == decider.id)
         .outerjoin(confirmer, EventRequest.confirmed_by_id == confirmer.id)
         .outerjoin(canceller, EventRequest.cancelled_by_id == canceller.id)
+        .outerjoin(completer, EventRequest.completed_by_id == completer.id)
         .where(EventRequest.id == event_request_id)
     )
-    request, owner_email, decider_email, confirmer_email, canceller_email = (
+    request, owner_email, decider_email, confirmer_email, canceller_email, completer_email = (
         db.execute(statement).tuples().one()
     )
     return RequestRecord(
@@ -72,6 +86,8 @@ def request_record(db: Session, event_request_id: uuid.UUID) -> RequestRecord:
         cancelled_by=_person(request.cancelled_by_id, canceller_email),
         cancelled_at=request.cancelled_at,
         cancellation_reason=request.cancellation_reason,
+        completed_by=_person(request.completed_by_id, completer_email),
+        completed_at=request.completed_at,
     )
 
 
@@ -271,8 +287,8 @@ def replan_cause_records(
 ) -> list[ReplanCauseRecord]:
     """The other actions that send an event back to planning, with who and when: approved
     change requests (SCRUM-47) and closures that hit one of these bookings (SCRUM-132).
-    Venue changes are read from the bookings themselves. Neither has an entry of its own
-    yet, so there is nothing to link to (ADR-0067)."""
+    Venue changes are read from the bookings themselves. A decision links to its own
+    entry (ADR-0068); a closure has none yet, so it links nothing (ADR-0067)."""
     decider = aliased(User)
     changes = (
         select(EventChangeRequest, decider.email)
@@ -284,7 +300,10 @@ def replan_cause_records(
     )
     causes = [
         ReplanCauseRecord(
-            ReplanCause.CHANGE_REQUEST, Person(change.decided_by_id, email), change.decided_at, None
+            ReplanCause.CHANGE_REQUEST,
+            Person(change.decided_by_id, email),
+            change.decided_at,
+            f"{HistoryAction.CHANGE_DECIDED}:{change.id}",
         )
         for change, email in db.execute(changes).tuples()
         if change.decided_by_id is not None and change.decided_at is not None
@@ -305,4 +324,84 @@ def replan_cause_records(
             None,
         )
         for impact, email in db.execute(closures).tuples()
+    ]
+
+
+def change_request_records(db: Session, event_request_id: uuid.UUID) -> list[ChangeRequestRecord]:
+    """SCRUM-37/47's requests for the event, every status, with their items in order and
+    the requester and decider's emails. Each item's subject is the session label or
+    equipment type of the row it changes; removed lines keep their row (SCRUM-43)."""
+    requester, decider = aliased(User), aliased(User)
+    statement = (
+        select(EventChangeRequest, requester.email, decider.email)
+        .outerjoin(requester, EventChangeRequest.requested_by_id == requester.id)
+        .outerjoin(decider, EventChangeRequest.decided_by_id == decider.id)
+        .where(EventChangeRequest.event_request_id == event_request_id)
+    )
+    rows = db.execute(statement).tuples().all()
+    items = db.scalars(
+        select(EventChangeItem)
+        .where(EventChangeItem.change_request_id.in_([change.id for change, _, _ in rows]))
+        .order_by(EventChangeItem.position)
+    ).all()
+    subjects = _item_subjects(db, event_request_id)
+    return [
+        ChangeRequestRecord(
+            id=change.id,
+            requested_by=Person(change.requested_by_id, requester_email),
+            created_at=change.created_at,
+            reason=change.reason,
+            status=change.status,
+            decided_by=_person(change.decided_by_id, decider_email),
+            decided_at=change.decided_at,
+            decision_note=change.decision_note,
+            items=tuple(
+                ChangeItemRecord(
+                    item.target,
+                    item.field,
+                    item.current_value,
+                    item.proposed_value,
+                    None if item.target_id is None else subjects.get(item.target_id),
+                )
+                for item in items
+                if item.change_request_id == change.id
+            ),
+        )
+        for change, requester_email, decider_email in rows
+    ]
+
+
+def _item_subjects(db: Session, event_request_id: uuid.UUID) -> dict[uuid.UUID, str]:
+    """The event's session labels and equipment types by row id, removed lines included."""
+    sessions = db.execute(
+        select(VenueBooking.id, VenueBooking.session_label).where(
+            VenueBooking.event_request_id == event_request_id
+        )
+    ).tuples()
+    lines = db.execute(
+        select(EventEquipmentRequirement.id, EventEquipmentRequirement.equipment_type).where(
+            EventEquipmentRequirement.event_request_id == event_request_id
+        )
+    ).tuples()
+    return dict(sessions.all()) | dict(lines.all())
+
+
+def closure_note_records(db: Session, event_request_id: uuid.UUID) -> list[ClosureNoteRecord]:
+    """SCRUM-86's closure record versions for the event, with who recorded each."""
+    recorder = aliased(User)
+    statement = (
+        select(EventClosureNote, recorder.email)
+        .outerjoin(recorder, EventClosureNote.recorded_by_id == recorder.id)
+        .where(EventClosureNote.event_request_id == event_request_id)
+    )
+    return [
+        ClosureNoteRecord(
+            id=note.id,
+            version=note.version,
+            actual_attendance=note.actual_attendance,
+            notes=note.notes,
+            recorded_by=Person(note.recorded_by_id, email),
+            recorded_at=note.recorded_at,
+        )
+        for note, email in db.execute(statement).tuples()
     ]
