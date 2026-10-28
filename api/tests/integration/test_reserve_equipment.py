@@ -524,9 +524,7 @@ def _delete_committed(committed: _Committed) -> None:
         held = select(EquipmentReservation).where(
             EquipmentReservation.equipment_type == committed.equipment_type
         )
-        inbox = select(Notification).where(
-            Notification.event_request_id.in_(committed.event_ids)
-        )
+        inbox = select(Notification).where(Notification.event_request_id.in_(committed.event_ids))
         levels: list[list[object]] = [
             list(session.scalars(inbox)),
             list(session.scalars(held)),
