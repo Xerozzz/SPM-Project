@@ -12,9 +12,31 @@ export function canOfferCancel(
   viewerId: string | null,
   now: Date = new Date(),
 ): boolean {
-  if (event.status !== 'approved' || viewerId === null || event.coordinator_id !== viewerId) {
-    return false
-  }
+  return offeredWhile('approved', event, viewerId) && isCancellable(booking, now)
+}
+
+/**
+ * SCRUM-118: the same offer on a Confirmed event, where cancelling an arrangement is a
+ * venue change that returns the event to planning (ADR-0066). The booking rule is SCRUM-109's.
+ */
+export function canOfferVenueChange(
+  booking: VenueBooking,
+  event: Pick<EventRequest, 'status' | 'coordinator_id'>,
+  viewerId: string | null,
+  now: Date = new Date(),
+): boolean {
+  return offeredWhile('confirmed', event, viewerId) && isCancellable(booking, now)
+}
+
+function offeredWhile(
+  status: EventRequest['status'],
+  event: Pick<EventRequest, 'status' | 'coordinator_id'>,
+  viewerId: string | null,
+) {
+  return event.status === status && viewerId !== null && event.coordinator_id === viewerId
+}
+
+function isCancellable(booking: VenueBooking, now: Date) {
   if (booking.status === 'pending' || booking.status === 'confirmed') return true
   if (booking.status !== 'tentative' || !booking.expires_at) return false
   return new Date(booking.expires_at).getTime() > now.getTime()

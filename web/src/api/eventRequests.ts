@@ -599,6 +599,43 @@ export async function cancelVenueArrangement(
   )
 }
 
+/** SCRUM-118: every arrangement of a Confirmed event, for its assigned Coordinator. */
+export async function listVenueArrangements(
+  token: string,
+  eventId: string,
+): Promise<VenueBooking[]> {
+  return readBookingResponse(
+    await fetch(`/api/event-requests/${eventId}/venue-arrangements`, {
+      headers: authHeaders(token),
+    }),
+  )
+}
+
+/** SCRUM-118: the cancelled arrangement, and the status the event went back to. */
+export interface VenueChange {
+  booking: VenueBooking
+  event_status: EventStatus
+}
+
+/**
+ * SCRUM-118: cancel one arrangement of a Confirmed event, which returns it to planning.
+ * `confirm_venue_change` is the Coordinator's agreement to that; the API refuses without it.
+ */
+export async function startVenueChange(
+  token: string,
+  eventId: string,
+  bookingId: string,
+  reason: string,
+): Promise<VenueChange> {
+  return readBookingResponse(
+    await fetch(`/api/event-requests/${eventId}/venue-bookings/${bookingId}/venue-change`, {
+      method: 'POST',
+      headers: jsonHeaders(token),
+      body: JSON.stringify({ reason, confirm_venue_change: true }),
+    }),
+  )
+}
+
 /** Human-readable field names, in the order the ticket lists them. */
 export const FIELD_LABELS: Record<string, string> = {
   name: 'Name',
