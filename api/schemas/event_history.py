@@ -7,6 +7,7 @@ from typing import Self
 from pydantic import BaseModel
 
 from domain.event_history import HistoryAction, HistoryEntry, HistoryOutcome, HistorySource
+from domain.event_replanning import ReplanCause
 
 
 class FieldChangeRead(BaseModel):
@@ -30,6 +31,11 @@ class EventHistoryEntryRead(BaseModel):
     SCRUM-119 adds the session period to venue entries, the other arrangement of a
     replacement, the bookings a buffer change caught out, and before-and-after `changes`,
     and to equipment entries their equipment type and, for a reservation, its quantity.
+
+    SCRUM-120: `actor_recorded` is False when a person acted but the record keeps no
+    actor ("actor not recorded", not the system); `replan_cause` says why an event went
+    back to planning; `related_entry_ids` are the `id`s of the entries an event-level
+    entry links to, which are not repeated in it (ADR-0067).
     """
 
     id: str
@@ -54,6 +60,9 @@ class EventHistoryEntryRead(BaseModel):
     changes: list[FieldChangeRead]
     equipment_type: str | None
     quantity: int | None
+    actor_recorded: bool
+    replan_cause: ReplanCause | None
+    related_entry_ids: list[str]
 
     @classmethod
     def from_entry(cls, entry: HistoryEntry) -> Self:
@@ -83,4 +92,7 @@ class EventHistoryEntryRead(BaseModel):
             ],
             equipment_type=entry.equipment_type,
             quantity=entry.quantity,
+            actor_recorded=entry.actor_recorded,
+            replan_cause=entry.replan_cause,
+            related_entry_ids=list(entry.related_entry_ids),
         )

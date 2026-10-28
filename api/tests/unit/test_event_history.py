@@ -361,7 +361,8 @@ def test_the_timeline_has_every_readers_entries_once_and_oldest_first() -> None:
 
     entries = timeline(record, [assignment], [note(hours=0)], [rejected, confirmed], True)
 
-    assert len({e.key for e in entries}) == len(entries) == 10
+    # SCRUM-120 adds the event's own confirmation, ranked after every SCRUM-88 action.
+    assert len({e.key for e in entries}) == len(entries) == 11
     assert actions(entries) == [
         HistoryAction.DRAFT_CREATED,
         HistoryAction.SUBMITTED,
@@ -372,6 +373,7 @@ def test_the_timeline_has_every_readers_entries_once_and_oldest_first() -> None:
         HistoryAction.VENUE_DECIDED,
         HistoryAction.HOLD_CREATED,
         HistoryAction.HOLD_CONFIRMED,
+        HistoryAction.EVENT_CONFIRMED,
     ]
     assert timeline(record, [assignment], [note(hours=0)], [rejected, confirmed], False) == [
         e for e in entries if e.source_type is not HistorySource.CLARIFICATION

@@ -76,6 +76,7 @@ someone else made two weeks ago.
 | [0064](0064-venue-change-entries-and-field-changes-in-the-event-history.md) | Venue change entries, and before-and-after values as whitelisted field changes | Proposed |
 | [0065](0065-equipment-entries-in-the-event-history.md) | Equipment entries in the event history | Proposed |
 | [0066](0066-cancelling-a-confirmed-arrangement-is-a-venue-change.md) | Cancelling an arrangement of a Confirmed event is a venue change that returns it to planning | Proposed |
+| [0067](0067-lifecycle-entries-linked-by-their-transaction-time.md) | Lifecycle entries in the event history, linked by their shared transaction time | Proposed |
 
 
 ## When to write one

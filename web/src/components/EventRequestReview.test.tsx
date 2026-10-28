@@ -780,6 +780,9 @@ describe('SCRUM-88 assigned coordinator views the event history (frontend unit)'
           changes: [],
           equipment_type: null,
           quantity: null,
+          actor_recorded: true,
+          replan_cause: null,
+          related_entry_ids: [],
         },
       ]),
     )

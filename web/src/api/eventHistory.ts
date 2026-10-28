@@ -28,6 +28,9 @@ export type HistoryAction =
   | 'equipment_reserved'
   | 'reservation_flagged'
   | 'reservation_released'
+  | 'event_confirmed'
+  | 'returned_to_planning'
+  | 'event_cancelled'
 
 export type HistorySource =
   | 'event_request'
@@ -37,6 +40,10 @@ export type HistorySource =
   | 'venue_buffer_change'
   | 'equipment_requirement_change'
   | 'equipment_reservation'
+  | 'safety_review'
+
+/** SCRUM-120: why an event went back to planning. */
+export type ReplanCause = 'change_request' | 'venue_closure' | 'venue_cancellation'
 
 /** SCRUM-119: one value before and after, with its label. Only fields a reader names. */
 export interface FieldChange {
@@ -78,6 +85,11 @@ export interface EventHistoryEntry {
   /** SCRUM-119 AC6: the equipment type, and a reservation's quantity. */
   equipment_type: string | null
   quantity: number | null
+  /** SCRUM-120: false when a person acted but the record keeps no actor (not the system). */
+  actor_recorded: boolean
+  replan_cause: ReplanCause | null
+  /** SCRUM-120: the `id`s of the entries this one links to rather than repeats. */
+  related_entry_ids: string[]
 }
 
 /** The caller may not read this event's history (AC6). */

@@ -10,24 +10,31 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session, aliased
 
+from domain.event_change import ChangeRequestStatus
 from domain.event_history import (
     AssignmentRecord,
     BookingRecord,
     BufferChangeRecord,
     ClarificationRecord,
     Person,
+    ReplanCauseRecord,
+    ReplanRecord,
     RequestRecord,
     RequirementChangeRecord,
     ReservationRecord,
 )
+from domain.event_replanning import ReplanCause
 from models.equipment_requirement_change import EquipmentRequirementChange
 from models.equipment_reservation import EquipmentReservation
+from models.event_change_request import EventChangeRequest
 from models.event_clarification import EventClarification
 from models.event_request import EventRequest
+from models.safety_review import SafetyReview
 from models.user import User
 from models.venue import Venue
 from models.venue_booking import VenueBooking
 from models.venue_buffer_change import VenueBufferChange
+from models.venue_closure_impact import VenueClosureImpact
 from repositories import coordinator_assignments
 
 
@@ -36,17 +43,22 @@ def _person(user_id: uuid.UUID | None, email: str | None) -> Person | None:
 
 
 def request_record(db: Session, event_request_id: uuid.UUID) -> RequestRecord:
-    """The request's milestone columns with the owner, decider and confirmer's emails.
-    The request must exist: the history route's dependency has already loaded it."""
+    """The request's milestone columns with the owner, decider, confirmer and (SCRUM-120)
+    canceller's emails. The request must exist: the history route's dependency has
+    already loaded it."""
     owner, decider, confirmer = aliased(User), aliased(User), aliased(User)
+    canceller = aliased(User)
     statement = (
-        select(EventRequest, owner.email, decider.email, confirmer.email)
+        select(EventRequest, owner.email, decider.email, confirmer.email, canceller.email)
         .outerjoin(owner, EventRequest.organiser_id == owner.id)
         .outerjoin(decider, EventRequest.decided_by_id == decider.id)
         .outerjoin(confirmer, EventRequest.confirmed_by_id == confirmer.id)
+        .outerjoin(canceller, EventRequest.cancelled_by_id == canceller.id)
         .where(EventRequest.id == event_request_id)
     )
-    request, owner_email, decider_email, confirmer_email = db.execute(statement).tuples().one()
+    request, owner_email, decider_email, confirmer_email, canceller_email = (
+        db.execute(statement).tuples().one()
+    )
     return RequestRecord(
         id=request.id,
         owner=Person(request.organiser_id, owner_email),
@@ -57,6 +69,9 @@ def request_record(db: Session, event_request_id: uuid.UUID) -> RequestRecord:
         rejection_reason=request.rejection_reason,
         confirmed_by=_person(request.confirmed_by_id, confirmer_email),
         confirmed_at=request.confirmed_at,
+        cancelled_by=_person(request.cancelled_by_id, canceller_email),
+        cancelled_at=request.cancelled_at,
+        cancellation_reason=request.cancellation_reason,
     )
 
 
@@ -233,4 +248,61 @@ def reservation_records(db: Session, event_request_id: uuid.UUID) -> list[Reserv
             released_at=reservation.released_at,
         )
         for reservation, reserver_email, releaser_email in db.execute(statement).tuples()
+    ]
+
+
+def replan_records(db: Session, event_request_id: uuid.UUID) -> list[ReplanRecord]:
+    """SCRUM-130's invalidated approvals: each is one return to planning, with its cause."""
+    statement = select(SafetyReview).where(
+        SafetyReview.event_request_id == event_request_id,
+        SafetyReview.invalidated_at.is_not(None),
+    )
+    return [
+        ReplanRecord(review.id, review.invalidated_at, ReplanCause(review.invalidation_cause))
+        for review in db.scalars(statement)
+        # Drops nothing: the query and a check constraint set both together. It only
+        # narrows the types for mypy.
+        if review.invalidated_at is not None and review.invalidation_cause is not None
+    ]
+
+
+def replan_cause_records(
+    db: Session, event_request_id: uuid.UUID, booking_ids: list[uuid.UUID]
+) -> list[ReplanCauseRecord]:
+    """The other actions that send an event back to planning, with who and when: approved
+    change requests (SCRUM-47) and closures that hit one of these bookings (SCRUM-132).
+    Venue changes are read from the bookings themselves. Neither has an entry of its own
+    yet, so there is nothing to link to (ADR-0067)."""
+    decider = aliased(User)
+    changes = (
+        select(EventChangeRequest, decider.email)
+        .outerjoin(decider, EventChangeRequest.decided_by_id == decider.id)
+        .where(
+            EventChangeRequest.event_request_id == event_request_id,
+            EventChangeRequest.status == ChangeRequestStatus.APPROVED,
+        )
+    )
+    causes = [
+        ReplanCauseRecord(
+            ReplanCause.CHANGE_REQUEST, Person(change.decided_by_id, email), change.decided_at, None
+        )
+        for change, email in db.execute(changes).tuples()
+        if change.decided_by_id is not None and change.decided_at is not None
+    ]
+    if not booking_ids:
+        return causes
+    recorder = aliased(User)
+    closures = (
+        select(VenueClosureImpact, recorder.email)
+        .outerjoin(recorder, VenueClosureImpact.recorded_by_id == recorder.id)
+        .where(VenueClosureImpact.affected_booking_ids.overlap(booking_ids))
+    )
+    return causes + [
+        ReplanCauseRecord(
+            ReplanCause.VENUE_CLOSURE,
+            Person(impact.recorded_by_id, email),
+            impact.recorded_at,
+            None,
+        )
+        for impact, email in db.execute(closures).tuples()
     ]

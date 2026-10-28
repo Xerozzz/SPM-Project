@@ -20,6 +20,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from domain.event_clarification import ClarificationKind
+from domain.event_replanning import ReplanCause
 from domain.venue_booking import BookingStatus
 
 
@@ -54,6 +55,12 @@ class HistoryAction(StrEnum):
     EQUIPMENT_RESERVED = "equipment_reserved"
     RESERVATION_FLAGGED = "reservation_flagged"
     RESERVATION_RELEASED = "reservation_released"
+    # SCRUM-120 lifecycle. Appended, so every earlier pair keeps its order: at one instant
+    # a hold's confirmation lists before the event's, and what a cause or a cancellation
+    # changed lists before the event-level entry that links to it (ADR-0067).
+    EVENT_CONFIRMED = "event_confirmed"
+    RETURNED_TO_PLANNING = "returned_to_planning"
+    EVENT_CANCELLED = "event_cancelled"
 
 
 class HistorySource(StrEnum):
@@ -66,6 +73,8 @@ class HistorySource(StrEnum):
     VENUE_BUFFER_CHANGE = "venue_buffer_change"
     EQUIPMENT_REQUIREMENT_CHANGE = "equipment_requirement_change"
     EQUIPMENT_RESERVATION = "equipment_reservation"
+    # SCRUM-120: a return to planning is read from the approval it invalidated.
+    SAFETY_REVIEW = "safety_review"
 
 
 class HistoryOutcome(StrEnum):
@@ -110,6 +119,10 @@ class RequestRecord:
     rejection_reason: str | None
     confirmed_by: Person | None
     confirmed_at: datetime | None
+    # SCRUM-115: set once, together, when the event is cancelled.
+    cancelled_by: Person | None = None
+    cancelled_at: datetime | None = None
+    cancellation_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -209,6 +222,30 @@ class ReservationRecord:
 
 
 @dataclass(frozen=True)
+class ReplanRecord:
+    """One `safety_reviews` approval that stopped counting because the event went back to
+    planning (SCRUM-130). The return writes no row of its own; this marker is its only
+    record, with the time and the cause but not who (ADR-0052, ADR-0067)."""
+
+    id: uuid.UUID
+    invalidated_at: datetime
+    cause: ReplanCause
+
+
+@dataclass(frozen=True)
+class ReplanCauseRecord:
+    """An action that can send an event back to planning, with who did it and when.
+
+    `entry_key` is the history entry that action has, when it has one, so the return can
+    link to it rather than repeat it."""
+
+    cause: ReplanCause
+    actor: Person
+    at: datetime
+    entry_key: str | None
+
+
+@dataclass(frozen=True)
 class HistoryEntry:
     """One action in the history. A None `actor` is the system (a hold's expiry)."""
 
@@ -233,6 +270,12 @@ class HistoryEntry:
     changes: tuple[FieldChange, ...] = ()
     equipment_type: str | None = None
     quantity: int | None = None
+    # SCRUM-120. False when the record keeps no actor for a person's action, which is not
+    # the system: shown as "actor not recorded" rather than guessed (ADR-0067).
+    actor_recorded: bool = True
+    replan_cause: ReplanCause | None = None
+    # The `key`s of other entries this one is about, so nothing is shown twice.
+    related_entry_ids: tuple[str, ...] = ()
 
     @property
     def key(self) -> str:
@@ -488,6 +531,103 @@ def reservation_entries(record: ReservationRecord) -> list[HistoryEntry]:
     return entries
 
 
+def confirmation_entry(record: RequestRecord) -> HistoryEntry | None:
+    """SCRUM-80: the event's confirmation, by the assigned Coordinator.
+
+    `confirmed_by` / `confirmed_at` hold only the latest confirmation: confirming a
+    replanned event again overwrites them, so an earlier confirmation is not shown. They
+    are not cleared by a return to planning, so the last one stays (ADR-0062, ADR-0067).
+    """
+    if record.confirmed_at is None:
+        return None
+    return HistoryEntry(
+        HistoryAction.EVENT_CONFIRMED,
+        record.confirmed_at,
+        record.confirmed_by,
+        HistorySource.EVENT_REQUEST,
+        record.id,
+    )
+
+
+def replan_entry(record: ReplanRecord, causes: Iterable[ReplanCauseRecord]) -> HistoryEntry:
+    """SCRUM-130: the event went back to planning, when and why.
+
+    The action that caused it is written in the same transaction, with the same time, so
+    its actor is the return's: matched by cause and exact time, never by nearness. Unless
+    exactly one action matches, no actor is shown and the entry says it was not recorded
+    (ADR-0067). A matched action with an entry of its own is linked, not repeated.
+    """
+    matches = [c for c in causes if c.cause is record.cause and c.at == record.invalidated_at]
+    entry = HistoryEntry(
+        HistoryAction.RETURNED_TO_PLANNING,
+        record.invalidated_at,
+        None,
+        HistorySource.SAFETY_REVIEW,
+        record.id,
+        actor_recorded=False,
+        replan_cause=record.cause,
+    )
+    if len(matches) != 1:
+        return entry
+    [cause] = matches
+    return replace(
+        entry,
+        actor=cause.actor,
+        actor_recorded=True,
+        related_entry_ids=() if cause.entry_key is None else (cause.entry_key,),
+    )
+
+
+def cancellation_entry(
+    record: RequestRecord,
+    bookings: Iterable[BookingRecord],
+    reservations: Iterable[ReservationRecord],
+) -> HistoryEntry | None:
+    """SCRUM-115: the event's cancellation, once, with its reason, linked to what it released.
+
+    The cancellation cancels each live arrangement and releases each reservation in its
+    own transaction, stamping them with the event's actor and time. Those already have
+    their own SCRUM-119 entries, so this one names them by `key` instead of repeating
+    them: exactly the ones with the same actor and the same time (ADR-0067).
+    """
+    if record.cancelled_at is None:
+        return None
+    by, at = record.cancelled_by, record.cancelled_at
+    released = [
+        f"{HistoryAction.ARRANGEMENT_CANCELLED}:{b.id}"
+        for b in bookings
+        if b.cancelled_at == at and b.cancelled_by == by
+    ] + [
+        f"{HistoryAction.RESERVATION_RELEASED}:{r.id}"
+        for r in reservations
+        if r.released_at == at and r.released_by == by
+    ]
+    return HistoryEntry(
+        HistoryAction.EVENT_CANCELLED,
+        at,
+        by,
+        HistorySource.EVENT_REQUEST,
+        record.id,
+        reason=record.cancellation_reason,
+        related_entry_ids=tuple(sorted(released)),
+    )
+
+
+def _booking_causes(bookings: Iterable[BookingRecord]) -> list[ReplanCauseRecord]:
+    """SCRUM-118: every cancelled arrangement could be a venue change; only one cancelled
+    in the same transaction as a return to planning will match it."""
+    return [
+        ReplanCauseRecord(
+            ReplanCause.VENUE_CANCELLATION,
+            b.cancelled_by,
+            b.cancelled_at,
+            f"{HistoryAction.ARRANGEMENT_CANCELLED}:{b.id}",
+        )
+        for b in bookings
+        if b.cancelled_by is not None and b.cancelled_at is not None
+    ]
+
+
 def visible(entries: Iterable[HistoryEntry], may_read_clarifications: bool) -> list[HistoryEntry]:
     """SCRUM-106: note entries only for a viewer who may read the notes. Anyone else gets
     no trace of them, not even an entry without its text (ADR-0036)."""
@@ -516,9 +656,15 @@ def timeline(
     buffer_changes: Iterable[BufferChangeRecord] = (),
     requirement_changes: Iterable[RequirementChangeRecord] = (),
     reservations: Iterable[ReservationRecord] = (),
+    replans: Iterable[ReplanRecord] = (),
+    replan_causes: Iterable[ReplanCauseRecord] = (),
 ) -> list[HistoryEntry]:
-    """Every reader's entries for one event, filtered for the viewer, oldest first."""
+    """Every reader's entries for one event, filtered for the viewer, oldest first.
+
+    `replan_causes` are the change-request decisions and closures; the venue changes
+    among the causes are read from `bookings`, which are already here."""
     bookings = list(bookings)
+    reservations = list(reservations)
     # The other side of each adoption, read from the replacement's own link.
     adopted = {
         b.replaces_booking_id: b.id
@@ -536,4 +682,14 @@ def timeline(
     entries += [requirement_change_entry(c) for c in requirement_changes]
     for reservation in reservations:
         entries += reservation_entries(reservation)
+    causes = _booking_causes(bookings) + list(replan_causes)
+    entries += [replan_entry(r, causes) for r in replans]
+    entries += [
+        e
+        for e in (
+            confirmation_entry(request),
+            cancellation_entry(request, bookings, reservations),
+        )
+        if e is not None
+    ]
     return ordered(visible(entries, may_read_clarifications))
