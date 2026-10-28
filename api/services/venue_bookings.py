@@ -282,6 +282,11 @@ def hold(
     booking = booking_repo.get_booking_for_update(db, booking_id)
     if booking is None:
         raise BookingNotFoundError
+    # SCRUM-122: read the event before mutating the booking. A later read would
+    # autoflush the pending UPDATE and fire the exclusion constraint outside the
+    # save below that translates it into a domain conflict.
+    event = event_repo.get(db, booking.event_request_id)
+    assert event is not None
     held = venue_booking.hold(booking.status)
     problems = venue_hold.expiry_problems(expires_at, now, booking.start_at)
     if problems:
@@ -296,6 +301,19 @@ def hold(
     booking.expires_at = expires_at
     booking.held_by_id = held_by_id
     booking.held_at = now
+    # SCRUM-122 AC1/AC2: the current Coordinator hears of the approval. Staged before
+    # the commit so the hold and its notification land or roll back together; the
+    # occurrence time is the approval time, not a second clock read. The source_id
+    # carries the approval time because a booking id alone cannot tell a retry of one
+    # approval from a later distinct decision on the same row. With no Coordinator
+    # assigned the helper stages nothing and the hold still commits.
+    _stage_venue_decision(
+        db,
+        event,
+        NotificationType.VENUE_BOOKING_APPROVED,
+        f"{booking.id}:{now.isoformat()}",
+        now,
+    )
     return booking_repo.save_confirmed_booking(db, booking)
 
 
@@ -316,7 +334,22 @@ def update_hold_expiry(
     problems = venue_hold.expiry_problems(expires_at, now, booking.start_at)
     if problems:
         raise InvalidHoldError(problems)
+    # SCRUM-122: read the event before mutating, as in hold(), so no later read
+    # autoflushes the pending UPDATE outside the save below.
+    event = event_repo.get(db, booking.event_request_id)
+    assert event is not None
     booking.expires_at = expires_at
+    # SCRUM-122 AC1/AC2: the current Coordinator hears of each expiry edit. Staged
+    # before the commit so the edit and its notification land or roll back together.
+    # The source_id carries the new expiry, so a later edit is a distinct item while
+    # a retried HTTP call collides per recipient (idempotent).
+    _stage_venue_decision(
+        db,
+        event,
+        NotificationType.VENUE_HOLD_EXPIRY_UPDATED,
+        f"{booking.id}:{expires_at.isoformat()}",
+        now,
+    )
     try:
         return booking_repo.save_booking(db, booking)
     except Exception:
@@ -405,6 +438,38 @@ def _buffers(venue: Venue) -> VenueBuffers:
     return VenueBuffers(
         setup_minutes=venue.setup_minutes, turnaround_minutes=venue.turnaround_minutes
     )
+
+
+def _stage_venue_decision(
+    db: Session,
+    event: EventRequest,
+    type: NotificationType,
+    source_id: str,
+    now: datetime,
+) -> None:
+    """SCRUM-122 AC1/AC2: notify the current Coordinator of a venue decision.
+
+    The recipient is resolved at action time, so a reassigned event notifies the new
+    Coordinator and the former one gets nothing. No commit here: the caller's save
+    commits the decision and this row together, so a rolled-back action notifies
+    nobody. With no Coordinator assigned nothing is staged and the action commits.
+
+    The insert runs without autoflush: flushing here would fire the booking's pending
+    UPDATE early, raising the exclusion violation outside the save below that
+    translates it into a domain conflict.
+    """
+    if event.coordinator_id is None:
+        return
+    with db.no_autoflush:
+        notifications_repo.stage(
+            db,
+            recipient_id=event.coordinator_id,
+            event_request_id=event.id,
+            type=type,
+            source_type=NotificationSource.VENUE_DECISION,
+            source_id=source_id,
+            occurred_at=now,
+        )
 
 
 def _ensure_no_conflict(db: Session, booking: VenueBooking) -> None:

@@ -213,6 +213,10 @@ def test_an_edit_racing_expiry_has_one_valid_serial_outcome() -> None:
         }
     finally:
         with SessionLocal() as cleanup:
-            cleanup.query(Notification).filter(Notification.source_id == str(booking_id)).delete()
+            # SCRUM-122: approval and expiry-edit rows key on `booking_id:time`,
+            # so match by event, not by a bare booking id.
+            cleanup.query(Notification).filter(
+                Notification.event_request_id.in_(committed.event_ids)
+            ).delete(synchronize_session=False)
             cleanup.commit()
         _delete_committed(committed)

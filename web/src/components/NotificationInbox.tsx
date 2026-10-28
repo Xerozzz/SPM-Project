@@ -99,6 +99,16 @@ export default function NotificationInbox() {
                     View equipment outcome
                   </a>
                 )}
+                {/* SCRUM-122: venue decisions and hold-expiry edits notify the
+                    assigned Coordinator. The coordinator events section renders only
+                    the viewer's own assigned events (the API scopes by Coordinator
+                    ID), so this link is an authorised record view for exactly the
+                    inbox's recipient. */}
+                {notification.source_type === 'venue_decision' && (
+                  <a href="#coordinator-events" className="text-blue-700 underline">
+                    View venue decision
+                  </a>
+                )}
                 {notification.is_unread && (
                   <button
                     type="button"

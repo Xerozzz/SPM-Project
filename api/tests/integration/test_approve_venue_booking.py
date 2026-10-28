@@ -25,6 +25,7 @@ from core.security import hash_password
 from domain.booking_conflict import BookingConflictError, ConcurrentBookingConflictError
 from domain.venue_booking import BookingStatus, InvalidBookingTransitionError
 from models.event_request import EventRequest
+from models.notification import Notification
 from models.organisation import Organisation
 from models.user import User
 from models.venue import Venue
@@ -400,6 +401,13 @@ def _delete_committed(committed: _Committed) -> None:
     session = SessionLocal()
     try:
         request_form_venue = session.scalar(select(Venue).where(Venue.name == _VENUE_NAME))
+        # SCRUM-122: the winning approval stages a notification row referencing the
+        # event, so it must go before the events or their delete is FK-blocked and
+        # the venue survives to collide with the next test's `Hall A`.
+        session.query(Notification).filter(
+            Notification.event_request_id.in_(committed.event_ids)
+        ).delete(synchronize_session=False)
+        session.flush()
         levels: list[list[object]] = [
             [session.get(VenueBooking, i) for i in committed.booking_ids],
             [session.get(EventRequest, i) for i in committed.event_ids],
