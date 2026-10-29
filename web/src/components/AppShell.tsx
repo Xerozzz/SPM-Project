@@ -36,7 +36,7 @@ export default function AppShell({
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5] p-0 lg:p-6 text-slate-900">
+    <div className="min-h-screen bg-[#f5f5f5] p-0 text-slate-900 lg:h-screen lg:overflow-hidden lg:p-6">
       <aside
         aria-label="Primary navigation"
         className={`${mobileOpen ? 'fixed inset-y-0 left-0 z-40 w-72 shadow-2xl' : 'hidden'} border-r border-slate-100 bg-white text-slate-700 lg:fixed lg:inset-y-6 lg:left-6 lg:z-30 lg:block lg:w-64 lg:rounded-l-[28px] lg:shadow-sm`}
@@ -96,8 +96,8 @@ export default function AppShell({
         />
       )}
 
-      <div className="lg:pl-64 lg:pr-6 lg:pb-6">
-        <div className="min-h-screen bg-white lg:rounded-r-[28px]">
+      <div className="lg:h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pl-64 lg:pr-6">
+        <div className="min-h-screen bg-white lg:min-h-full lg:rounded-r-[28px]">
         <header className="sticky top-0 z-20 border-b border-slate-100 bg-white/95 backdrop-blur">
           <div className="flex min-h-16 items-center gap-3 px-4 sm:px-6">
             <button
