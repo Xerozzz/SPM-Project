@@ -161,13 +161,14 @@ def test_a_replacement_not_adopted_links_nothing_to_the_originals_cancellation()
     assert cancelled.related_booking_id is None
 
 
-# --------------------------------------------------------------- AC2 expiry update gap
+# --------------------------------------------------------------- AC2 expiry update
 
 
 @pytest.mark.story("SCRUM-119")
-def test_an_expiry_update_leaves_no_entry_and_the_hold_shows_the_latest_expiry() -> None:
-    """ADR-0064 gap, pinned: an updated hold is indistinguishable from one placed with
-    that expiry, because the update keeps no old value, actor or time."""
+def test_the_booking_reader_alone_shows_only_the_holds_latest_expiry() -> None:
+    """The booking reader on its own shows only the hold's latest expiry, with no entry
+    for a change. Expiry-change entries now come from SCRUM-136's hold-expiry reader
+    (ADR-0070)."""
     updated = held(expires_at=at(50))
 
     entries = booking_entries(updated, None, None)
