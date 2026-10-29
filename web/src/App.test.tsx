@@ -143,3 +143,78 @@ test('a stored session carrying a user id is kept', async () => {
 
   expect(await screen.findByRole('button', { name: 'Sign out' })).toBeInTheDocument()
 })
+
+// SCRUM-46 / SCRUM-29: create, save, reopen and return through My Events.
+test('My Events opens creation separately and returns to the saved draft with feedback', async () => {
+  localStorage.setItem(
+    'connectsphere.token',
+    JSON.stringify({
+      token: 'token',
+      userId: 'user-1',
+      roles: ['organiser'],
+    }),
+  )
+  const draft = {
+    id: 'draft-1',
+    name: 'Welcome Fair',
+    description: null,
+    status: 'draft',
+    status_permits: ['edit', 'submit'],
+    start_at: null,
+    end_at: null,
+    expected_attendance: null,
+    venue_requirement: null,
+  }
+  let saved = false
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const url = String(input)
+    let body: unknown = []
+    if (url === '/api/event-requests') body = saved ? [draft] : []
+    if (url === '/api/event-requests/draft-1') body = draft
+    if (url === '/api/event-requests/drafts' && init?.method === 'POST') {
+      saved = true
+      body = draft
+    }
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  })
+  renderApp()
+
+  expect(await screen.findByText(/No events yet/)).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: 'New event request' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: /Create event/ }))
+  expect(screen.getByRole('heading', { name: 'New event request' })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: /Back to My Events/ }))
+  expect(screen.queryByRole('heading', { name: 'New event request' })).toBeNull()
+
+  fireEvent.click(screen.getByRole('button', { name: /Create event/ }))
+  fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'Welcome Fair' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    '“Welcome Fair” has been saved as a draft.',
+  )
+  expect(screen.queryByRole('heading', { name: 'New event request' })).toBeNull()
+  fireEvent.click(await screen.findByRole('button', { name: 'View details for Welcome Fair' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Edit draft Welcome Fair' }))
+  expect(await screen.findByRole('heading', { name: 'Edit draft' })).toBeInTheDocument()
+  expect(screen.getByLabelText(/^Name/)).toHaveValue('Welcome Fair')
+})
+
+// SCRUM-46: only the organiser workspace exposes event creation.
+test('an attendee has no My Events creation action', async () => {
+  localStorage.setItem(
+    'connectsphere.token',
+    JSON.stringify({
+      token: 'token',
+      userId: 'user-1',
+      roles: ['attendee'],
+    }),
+  )
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify([]), { status: 200 }))
+  renderApp()
+
+  expect(await screen.findByRole('heading', { name: 'Event Registrations' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Create event/ })).toBeNull()
+})

@@ -100,6 +100,7 @@ function renderOrganiser(post: Post, requests: unknown[] = [summary]) {
 }
 
 async function openForm() {
+  fireEvent.click(await screen.findByRole('button', { name: 'View details for Orientation Day' }))
   fireEvent.click(
     await screen.findByRole('button', { name: 'Propose a change to Orientation Day' }),
   )
@@ -181,6 +182,7 @@ describe('SCRUM-37 propose a significant change', () => {
       [{ ...summary, status: 'rejected', status_permits: ['edit'], rejection_reason: 'Too big' }],
     )
 
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Orientation Day' }))
     expect(
       await screen.findByText('To change this request, edit it and submit it again.'),
     ).toBeInTheDocument()

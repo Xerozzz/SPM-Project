@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import {
   type EventRequest,
@@ -10,6 +10,7 @@ import {
   submitEventRequest,
   SubmissionRejectedError,
 } from '../api/eventRequests'
+import { formatSingaporeTime } from '../api/venueCalendar'
 import { useAuth } from '../auth/useAuth'
 import { acceptsChangeRequest } from '../validation/eventChange'
 import { AssignmentHistoryToggle } from './AssignmentHistory'
@@ -38,15 +39,20 @@ import RequestCancellation from './RequestCancellation'
  */
 export default function MyEventRequests({
   onEditDraft = () => {},
+  onCreateEvent = () => {},
 }: {
-  /** Hands a draft to the form above, so there is only ever one form on the page. */
+  /** Opens the existing form with the full saved draft. */
   onEditDraft?: (request: EventRequest) => void
+  onCreateEvent?: () => void
 } = {}) {
   const { token } = useAuth()
   const queryClient = useQueryClient()
   const [outcome, setOutcome] = useState<Outcome | null>(null)
   const [proposing, setProposing] = useState<string | null>(null)
-  const [selectedStatus, setSelectedStatus] = useState<EventRequest['status']>('draft')
+  const [selectedStatus, setSelectedStatus] = useState<EventRequest['status'] | 'all'>('all')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const detailsHeading = useRef<HTMLHeadingElement>(null)
+  const openedFrom = useRef<string | null>(null)
 
   // The token is part of the key: the list is per-user, and without it a sign-out and
   // sign-in as someone else on the same tab could briefly show the previous user's data
@@ -61,14 +67,16 @@ export default function MyEventRequests({
     status,
     requests: requests.data?.filter((request) => request.status === status) ?? [],
   })).filter((group) => group.requests.length > 0)
+  const visibleRequests =
+    requests.data?.filter((request) =>
+      selectedId
+        ? request.id === selectedId
+        : selectedStatus === 'all' || request.status === selectedStatus,
+    ) ?? []
   useEffect(() => {
-    if (
-      groupedRequests.length &&
-      !groupedRequests.some((group) => group.status === selectedStatus)
-    ) {
-      setSelectedStatus(groupedRequests[0].status)
-    }
-  }, [groupedRequests, selectedStatus])
+    if (selectedId) detailsHeading.current?.focus()
+    else document.getElementById(openedFrom.current ?? '')?.focus()
+  }, [selectedId])
 
   // The mutation variable carries the request id plus its current name, so validation
   // feedback can name the request even when the API refuses submission.
@@ -88,8 +96,7 @@ export default function MyEventRequests({
     },
   })
 
-  // The list carries a summary, so the full request is fetched before the form above is
-  // filled in. Editing happens there, not here: one form on the page, not two.
+  // Fetch the full saved request before opening the existing editing form.
   const reopen = useMutation({
     mutationFn: (id: string) => getEventRequest(token ?? '', id),
     onSuccess: (request) => {
@@ -103,6 +110,18 @@ export default function MyEventRequests({
 
   return (
     <section className="mt-0 space-y-4">
+      {selectedId ? (
+        <button type="button" className="cs-button-secondary" onClick={() => setSelectedId(null)}>
+          ← Back to My Events
+        </button>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-slate-500">Your events, from first draft to final wrap-up.</p>
+          <button type="button" className="cs-button" onClick={onCreateEvent}>
+            + Create event
+          </button>
+        </div>
+      )}
       <div>
         {requests.isPending && <p className="mt-2 text-sm">Loading...</p>}
         {requests.isError && (
@@ -111,52 +130,112 @@ export default function MyEventRequests({
           </p>
         )}
         {requests.data && requests.data.length === 0 && (
-          <p className="mt-2 text-sm text-slate-500">You have no event requests yet.</p>
+          <p className="mt-2 text-sm text-slate-500">
+            No events yet. Create your first event to get started.
+          </p>
         )}
 
         {requests.data && requests.data.length > 0 && (
           <div className="mt-5">
-            <div
-              role="tablist"
-              aria-label="Event request status"
-              className="flex gap-2 overflow-x-auto border-b border-slate-200 pb-3"
-            >
-              {groupedRequests.map((group) => (
-                <button
-                  key={group.status}
-                  role="tab"
-                  aria-selected={selectedStatus === group.status}
-                  onClick={() => setSelectedStatus(group.status)}
-                  className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium ${selectedStatus === group.status ? 'bg-[#202124] text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}
+            {!selectedId && (
+              <div
+                role="group"
+                aria-label="Filter events by status"
+                className="flex gap-2 overflow-x-auto border-b border-slate-200 pb-3"
+              >
+                {[{ status: 'all' as const, requests: requests.data }, ...groupedRequests].map(
+                  (group) => (
+                    <button
+                      key={group.status}
+                      type="button"
+                      aria-pressed={selectedStatus === group.status}
+                      onClick={() => setSelectedStatus(group.status)}
+                      className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium ${selectedStatus === group.status ? 'bg-[#202124] text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}
+                    >
+                      {group.status === 'all' ? 'All events' : STATUS_TITLES[group.status]}{' '}
+                      <span className="ml-1 opacity-70">{group.requests.length}</span>
+                    </button>
+                  ),
+                )}
+              </div>
+            )}
+            {visibleRequests.length === 0 && (
+              <p className="py-8 text-sm text-slate-500">
+                No events in this status. Choose All events to see the rest.
+              </p>
+            )}
+            <ul className={`mt-5 grid gap-4 ${selectedId ? '' : 'md:grid-cols-2 xl:grid-cols-3'}`}>
+              {visibleRequests.map((request) => (
+                <li
+                  key={request.id}
+                  className="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-5"
                 >
-                  {STATUS_TITLES[group.status]}{' '}
-                  <span className="ml-1 opacity-70">{group.requests.length}</span>
-                </button>
-              ))}
-            </div>
-            {groupedRequests
-              .filter((group) => group.status === selectedStatus)
-              .map((group) => (
-                <section key={group.status} aria-label={`${group.status} event requests`}>
-                  <ul className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {group.requests.map((request) => (
-                      <li key={request.id} className="rounded-2xl bg-white p-4 shadow-sm">
-                        <div>
-                          <p className="font-medium text-slate-950">{titleOf(request)}</p>
-                          <p className="mt-1 text-sm text-slate-500">
-                            <StatusLabel status={request.status} />
-                          </p>
-                          {request.status === 'rejected' && request.rejection_reason && (
-                            <p className="mt-1 text-sm text-red-700">
-                              Rejection reason: {request.rejection_reason}
-                            </p>
-                          )}
-                          {(request.status === 'draft' || request.status === 'rejected') && (
-                            <p className="mt-1 text-xs text-slate-500">
-                              To change this request, edit it and submit it again.
-                            </p>
-                          )}
-                        </div>
+                  <StatusLabel status={request.status} />
+                  {selectedId ? (
+                    <h2 ref={detailsHeading} tabIndex={-1} className="mt-3 break-words">
+                      {titleOf(request)}
+                    </h2>
+                  ) : (
+                    <h3 className="mt-3 break-words text-lg font-semibold tracking-normal">
+                      {titleOf(request)}
+                    </h3>
+                  )}
+                  <dl className="mt-4 flex-1 space-y-3 text-sm">
+                    <div>
+                      <dt className="text-xs text-slate-500">Schedule · Singapore time</dt>
+                      <dd className="mt-1">
+                        {request.start_at
+                          ? formatSingaporeTime(request.start_at)
+                          : 'Date to be confirmed'}
+                        {selectedId &&
+                          request.end_at &&
+                          ` – ${formatSingaporeTime(request.end_at)}`}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-slate-500">Venue preference</dt>
+                      <dd className="mt-1 break-words">
+                        {request.venue_requirement || 'Not specified'}
+                      </dd>
+                    </div>
+                    {selectedId && (
+                      <div>
+                        <dt className="text-xs text-slate-500">Expected attendance</dt>
+                        <dd className="mt-1">{request.expected_attendance ?? 'Not specified'}</dd>
+                      </div>
+                    )}
+                  </dl>
+                  {!selectedId ? (
+                    <button
+                      type="button"
+                      id={`view-event-${request.id}`}
+                      className="cs-button-secondary mt-5 w-full"
+                      aria-label={`View details for ${titleOf(request)}`}
+                      onClick={(event) => {
+                        openedFrom.current = event.currentTarget.id
+                        setOutcome(null)
+                        setProposing(null)
+                        setSelectedId(request.id)
+                      }}
+                    >
+                      View details →
+                    </button>
+                  ) : (
+                    <div className="mt-6 space-y-5 border-t border-slate-100 pt-5">
+                      <p className="whitespace-pre-wrap break-words text-sm text-slate-600">
+                        {request.description || 'No description added yet.'}
+                      </p>
+                      {request.status === 'rejected' && request.rejection_reason && (
+                        <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                          Rejection reason: {request.rejection_reason}
+                        </p>
+                      )}
+                      {(request.status === 'draft' || request.status === 'rejected') && (
+                        <p className="text-sm text-slate-500">
+                          To change this request, edit it and submit it again.
+                        </p>
+                      )}
+                      <section aria-label="Manage event" className="space-y-5">
                         <div className="mt-4">
                           {request.status_permits.includes('edit') ? (
                             <div className="flex flex-wrap gap-2">
@@ -243,11 +322,12 @@ export default function MyEventRequests({
                         <div className="w-full">
                           <EventHistoryToggle eventId={request.id} eventName={request.name} />
                         </div>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
+                      </section>
+                    </div>
+                  )}
+                </li>
               ))}
+            </ul>
           </div>
         )}
       </div>
@@ -295,8 +375,10 @@ function StatusLabel({ status }: { status: EventRequest['status'] }) {
     cancelled: 'bg-slate-200 text-slate-700',
   }
   return (
-    <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-medium ${styles[status]}`}>
-      {status}
+    <span
+      className={`inline-flex self-start rounded-md px-2 py-0.5 text-xs font-medium ${styles[status]}`}
+    >
+      {status === 'draft' ? 'Draft' : STATUS_TITLES[status]}
     </span>
   )
 }

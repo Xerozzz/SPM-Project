@@ -80,7 +80,7 @@ someone else made two weeks ago.
 | [0068](0068-change-request-and-completion-entries-with-typed-field-values.md) | Change request and completion entries, with a kind on each field change | Proposed |
 | [0069](0069-safety-decisions-hidden-by-a-shared-rule-and-closure-entries.md) | Safety decision entries hidden by a shared rule, and venue closure entries | Proposed |
 | [0070](0070-hold-expiry-changes-recorded-in-the-update-transaction.md) | Hold expiry changes recorded in the update's transaction | Proposed |
-
+| [0071](0071-my-events-summary-and-details-views.md) | Separate My Events summaries, details and creation | Proposed |
 
 ## When to write one
 

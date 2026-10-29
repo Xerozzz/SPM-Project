@@ -63,10 +63,10 @@ export default function EventRequestForm({
   editing = null,
   onDone = () => {},
 }: {
-  /** A draft the organiser chose to edit, from the list below. Null means a new one. */
+  /** A draft the organiser chose to edit. Null means a new request. */
   editing?: EventRequest | null
-  /** Called when the form has nothing left to show, so the list can clear its selection. */
-  onDone?: () => void
+  /** Return to My Events, with a confirmation after a successful save or submission. */
+  onDone?: (message?: string) => void
 } = {}) {
   const { token } = useAuth()
   const queryClient = useQueryClient()
@@ -90,13 +90,10 @@ export default function EventRequestForm({
     if (editing) setOutcome(null)
     started.current = null
   }
-  // The form is above a long list, far enough up the page to be off screen by the time
-  // anyone reaches the draft they want. Choosing one filled it in where nobody could see
-  // it, so pressing Edit draft looked like it did nothing at all. Keyed on the id, not
-  // the object, so a list refresh does not drag the page around while someone is typing.
+  // Focus the name when opening the form or choosing a different draft. Using the id
+  // keeps list refreshes from interrupting someone who is typing.
   const editingId = editing?.id ?? null
   useEffect(() => {
-    if (editingId === null) return
     section.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
     // Moving focus is what tells a keyboard or screen reader user the form is now theirs;
     // the scroll only helps people who can see it.
@@ -153,7 +150,7 @@ export default function EventRequestForm({
       setErrors({})
       refreshLists()
       setOutcome(`“${request.name}” has been submitted for review.`)
-      onDone()
+      onDone(`“${request.name}” has been submitted for review.`)
     },
   })
 
@@ -174,7 +171,7 @@ export default function EventRequestForm({
       setErrors({})
       refreshLists()
       setOutcome(`“${request.name || 'Untitled request'}” has been saved as a draft.`)
-      onDone()
+      onDone(`“${request.name || 'Untitled request'}” has been saved as a draft.`)
     },
   })
 
@@ -353,7 +350,7 @@ export default function EventRequestForm({
             Save draft
           </button>
           {editing && (
-            <button type="button" onClick={onDone} className="cs-button-secondary">
+            <button type="button" onClick={() => onDone()} className="cs-button-secondary">
               Cancel
             </button>
           )}

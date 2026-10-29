@@ -126,6 +126,8 @@ const VIEW_DETAILS: Record<View, Omit<NavigationItem, 'group' | 'icon'>> = {
 export default function HomePage() {
   const { roles, signOut, hasRole } = useAuth()
   const [editingDraft, setEditingDraft] = useState<EventRequest | null>(null)
+  const [showEventForm, setShowEventForm] = useState(false)
+  const [eventNotice, setEventNotice] = useState<string | null>(null)
   const items: NavigationItem[] = [
     ...(hasRole('organiser')
       ? [nav('my-events', 'Organise', '◫'), nav('event-calendar', 'Organise', '◷')]
@@ -169,8 +171,44 @@ export default function HomePage() {
     >
       {hasRole('organiser') && (
         <ViewPanel active={activeView === 'my-events'} labelledBy="my-events-panel">
-          <MyEventRequests onEditDraft={setEditingDraft} />
-          <EventRequestForm editing={editingDraft} onDone={() => setEditingDraft(null)} />
+          {eventNotice && (
+            <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
+              {eventNotice}
+            </p>
+          )}
+          <div hidden={showEventForm}>
+            <MyEventRequests
+              onCreateEvent={() => {
+                setEditingDraft(null)
+                setEventNotice(null)
+                setShowEventForm(true)
+              }}
+              onEditDraft={(request) => {
+                setEditingDraft(request)
+                setEventNotice(null)
+                setShowEventForm(true)
+              }}
+            />
+          </div>
+          {showEventForm && (
+            <div>
+              <button
+                type="button"
+                className="cs-button-secondary"
+                onClick={() => setShowEventForm(false)}
+              >
+                ← Back to My Events
+              </button>
+              <EventRequestForm
+                editing={editingDraft}
+                onDone={(message) => {
+                  setEventNotice(message ?? null)
+                  setEditingDraft(null)
+                  setShowEventForm(false)
+                }}
+              />
+            </div>
+          )}
         </ViewPanel>
       )}
       {hasRole('organiser') && (
