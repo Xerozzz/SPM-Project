@@ -122,6 +122,16 @@ def list_confirmed_for_coordinator(db: Session, coordinator_id: uuid.UUID) -> li
     return list(db.scalars(statement))
 
 
+def list_cancelled(db: Session, coordinator_id: uuid.UUID | None) -> list[EventRequest]:
+    """SCRUM-88 AC6: cancelled events, newest cancellation first; only those assigned to
+    `coordinator_id` when one is given."""
+    statement = select(EventRequest).where(EventRequest.status == EventStatus.CANCELLED)
+    if coordinator_id is not None:
+        statement = statement.where(EventRequest.coordinator_id == coordinator_id)
+    statement = statement.order_by(EventRequest.cancelled_at.desc(), EventRequest.id.asc())
+    return list(db.scalars(statement))
+
+
 def list_confirmed(db: Session) -> list[EventRequest]:
     """Confirmed events; the registration service applies the time-sensitive intake guard."""
     statement = (

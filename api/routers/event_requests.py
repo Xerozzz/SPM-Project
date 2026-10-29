@@ -18,6 +18,7 @@ from schemas.event_requests import (
     ActiveAssignmentRead,
     AssignableCoordinatorRead,
     AssignmentHistoryRead,
+    CancelledEventRead,
     EventCalendarEntryRead,
     EventRequestAssign,
     EventRequestCreate,
@@ -131,6 +132,16 @@ def list_active_assignments(_user: CoordinatorLead, db: Db) -> list[ActiveAssign
     ]
 
 
+@router.get("/cancelled", response_model=list[CancelledEventRead])
+def list_cancelled_events(_user: CoordinatorLead, db: Db) -> list[CancelledEventRead]:
+    """SCRUM-88 AC6: every cancelled event, so a Lead can open its history.
+
+    Static route declared above `/{request_id}` so FastAPI matches it literally.
+    """
+    rows = service.list_cancelled_for_lead(db)
+    return [CancelledEventRead.model_validate(row) for row in rows]
+
+
 @router.post("/{request_id}/assign", response_model=EventRequestRead)
 def assign_coordinator(
     request_id: uuid.UUID, body: EventRequestAssign, user: CoordinatorLead, db: Db
@@ -221,6 +232,13 @@ def list_confirmed_events(user: Coordinator, db: Db) -> list[EventRequestRead]:
     """Confirmed events assigned to this Coordinator for read-only operational settings."""
     rows = service.list_confirmed_for_coordinator(db, _coordinator_id(user))
     return [EventRequestRead.model_validate(row) for row in rows]
+
+
+@router.get("/assigned-cancelled", response_model=list[CancelledEventRead])
+def list_assigned_cancelled_events(user: Coordinator, db: Db) -> list[CancelledEventRead]:
+    """SCRUM-88 AC6: cancelled events assigned to this Coordinator, to open their history."""
+    rows = service.list_cancelled_for_coordinator(db, _coordinator_id(user))
+    return [CancelledEventRead.model_validate(row) for row in rows]
 
 
 @router.get("/organisation-calendar", response_model=list[EventCalendarEntryRead])

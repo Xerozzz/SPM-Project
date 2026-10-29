@@ -63,6 +63,11 @@ function ownRow(page: Page, name: string) {
     .first()
 }
 
+function cancelledCard(page: Page, name: string) {
+  const section = page.getByRole('heading', { name: 'Cancelled events' }).locator('..')
+  return section.getByRole('article').filter({ hasText: name })
+}
+
 function coordinatorCard(page: Page, name: string) {
   const section = page.getByRole('heading', { name: 'Coordinator events' }).locator('..')
   return section.getByRole('article').filter({ hasText: name })
@@ -133,4 +138,34 @@ test('an internal note appears for the assigned Coordinator and never for the ow
   ])
   await expect(row.getByText(note)).toHaveCount(0)
   await expect(row.getByText(/Internal note/)).toHaveCount(0)
+})
+
+test('the assigned Coordinator and a Lead open a cancelled event history from its list', async ({
+  page,
+  request,
+}) => {
+  // SCRUM-88 AC6. Not kept in `event`: a cancelled event has left the review page, so the
+  // hand-back above is neither needed nor possible.
+  const stamp = Date.now()
+  const reason = `E2E history cancel ${stamp}: venue withdrawn`
+  const cancelled = await createAssignedEvent(request, {
+    name: `E2E history cancelled ${stamp}`,
+    lane: 2,
+    coordinator: COORDINATOR,
+  })
+  const coordinator = await tokenFor(request, COORDINATOR)
+  const response = await request.post(`${API}/api/event-requests/${cancelled.id}/cancel`, {
+    headers: { Authorization: `Bearer ${coordinator}` },
+    data: { reason },
+  })
+  expect(response.ok(), `cancel -> ${response.status()}`).toBe(true)
+
+  for (const viewer of [COORDINATOR, LEAD]) {
+    await signIn(page, viewer)
+    const card = cancelledCard(page, cancelled.name)
+    await expect(card).toContainText(`Reason: ${reason}`)
+    const entries = await openHistory(card)
+    await expect(entries.last()).toContainText(`Event cancelled by ${COORDINATOR}`)
+    await signOut(page)
+  }
 })

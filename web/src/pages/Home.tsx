@@ -10,6 +10,7 @@ import NotificationInbox from '../components/NotificationInbox'
 import OrganisationEventCalendar from '../components/OrganisationEventCalendar'
 import EventRequestForm from '../components/EventRequestForm'
 import BookingProblems from '../components/BookingProblems'
+import CancelledEvents from '../components/CancelledEvents'
 import CompletedEvents from '../components/CompletedEvents'
 import EventRequestReview from '../components/EventRequestReview'
 import UnassignedQueue from '../components/UnassignedQueue'
@@ -60,6 +61,8 @@ export default function HomePage() {
 
       {hasRole('coordinator') && <EventRequestReview />}
       {hasRole('coordinator') && <CompletedEvents />}
+      {/* SCRUM-88 AC6: the assignee's or, for a Lead, every cancelled event's history. */}
+      {(hasRole('coordinator') || hasRole('coordinator_lead')) && <CancelledEvents />}
 
       {hasRole('attendee') && <AttendeeRegistrations />}
 
