@@ -106,8 +106,7 @@ export default function EquipmentCatalogue() {
   }
 
   return (
-    <section className="mt-6 rounded-lg border border-slate-200 p-4">
-      <h2 className="font-medium">Equipment catalogue</h2>
+    <section>
       {catalogue.isPending && <p className="mt-2 text-sm">Loading equipment…</p>}
       {catalogue.isError && <p className="mt-2 text-sm">{catalogue.error.message}</p>}
       {catalogue.data?.length === 0 && (

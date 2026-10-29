@@ -27,6 +27,7 @@ export default function AppShell({
   children,
 }: Props) {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const active = items.find((item) => item.id === activeId) ?? items[0]
   const groups = [...new Set(items.map((item) => item.group))]
   const roleSummary = roles.map(formatRole).join(', ')
 
@@ -86,9 +87,7 @@ export default function AppShell({
           ))}
         </nav>
         <div className="border-t border-slate-100 p-4">
-          <p className="text-sm font-medium text-slate-500">
-            You are logged in as: {roleSummary}
-          </p>
+          <p className="text-sm font-medium text-slate-500">You are logged in as: {roleSummary}</p>
           <button type="button" onClick={onSignOut} className="cs-button-secondary mt-4 w-full">
             Sign out
           </button>
@@ -104,9 +103,9 @@ export default function AppShell({
         />
       )}
 
-      <div className="lg:h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pl-64 lg:pr-6">
-        <div className="min-h-screen bg-white lg:min-h-full lg:rounded-r-[28px]">
-          <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
+      <div className="bg-white lg:h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pl-64 lg:pr-6 lg:rounded-r-[28px]">
+        <div className="min-h-screen bg-white lg:min-h-[calc(100vh-3rem)]">
+          <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:px-8 lg:pb-8 lg:pt-6">
             <button
               type="button"
               aria-label="Open navigation"
@@ -115,6 +114,12 @@ export default function AppShell({
             >
               ☰
             </button>
+            <div className="mb-6 border-b border-slate-200 pb-4">
+              <h1 className="text-3xl font-medium tracking-[-0.04em] text-[#202124]">
+                {active.label}
+              </h1>
+              <p className="mt-1 text-sm text-slate-500">{active.description}</p>
+            </div>
             {children}
           </main>
         </div>

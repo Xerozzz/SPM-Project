@@ -78,13 +78,7 @@ export default function EquipmentReviewQueue() {
   const busy = record.isPending || reserve.isPending
 
   return (
-    <section id="equipment-review-queue" className="mt-6 rounded-lg border border-slate-200 p-4">
-      <h2 className="font-medium">Equipment to assess</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        What events being planned have asked for. Recording an outcome says whether it can be
-        fulfilled; reserving commits equipment for the event&apos;s period.
-      </p>
-
+    <section id="equipment-review-queue">
       {queue.isPending && <p className="mt-2 text-sm">Loading…</p>}
       {queue.isError && (
         <p role="alert" className="mt-2 text-sm text-red-600">

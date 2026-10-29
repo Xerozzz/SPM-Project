@@ -59,14 +59,8 @@ export default function VenueCalendar() {
   })
 
   return (
-    <section className="mt-6">
-      <div className="border-b border-slate-200 pb-4">
-        <h2 className="font-medium">Venue calendar</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          View bookings and venue availability across a selected date range.
-        </p>
-      </div>
-      <div className="mt-5 grid grid-cols-3 gap-2 text-sm">
+    <section>
+      <div className="grid grid-cols-3 gap-2 text-sm">
         <label className="flex flex-col">
           Venue
           <select

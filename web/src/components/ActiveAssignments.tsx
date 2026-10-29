@@ -54,8 +54,7 @@ export default function ActiveAssignments() {
   })
 
   return (
-    <section aria-label="Active requests" className="mt-6 rounded-lg border border-slate-200 p-4">
-      <h2 className="font-medium">Active requests</h2>
+    <section aria-label="Active requests">
       {overview.isPending && <p className="mt-2 text-sm">Loading assignments…</p>}
       {overview.isError && (
         <p role="alert" className="mt-2 text-sm text-red-600">

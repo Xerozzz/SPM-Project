@@ -26,8 +26,7 @@ export default function NotificationInbox() {
   })
 
   return (
-    <section aria-label="Notifications" className="mt-6">
-      <h2 className="font-medium">Notifications</h2>
+    <section aria-label="Notifications">
       {inbox.isPending && <p className="mt-2 text-sm">Loading notifications…</p>}
       {inbox.isError && (
         <p role="alert" className="mt-2 text-sm text-red-600">

@@ -62,7 +62,10 @@ export default function MyEventRequests({
     requests: requests.data?.filter((request) => request.status === status) ?? [],
   })).filter((group) => group.requests.length > 0)
   useEffect(() => {
-    if (groupedRequests.length && !groupedRequests.some((group) => group.status === selectedStatus)) {
+    if (
+      groupedRequests.length &&
+      !groupedRequests.some((group) => group.status === selectedStatus)
+    ) {
       setSelectedStatus(groupedRequests[0].status)
     }
   }, [groupedRequests, selectedStatus])
@@ -100,16 +103,7 @@ export default function MyEventRequests({
 
   return (
     <section className="mt-0 space-y-4">
-      <div className="cs-panel bg-[#f7f7f5]">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-3xl font-medium tracking-[-0.04em] text-[#202124]">My event requests</h2>
-            <p className="mt-2 text-sm font-medium text-slate-400">
-              Overview
-            </p>
-          </div>
-        </div>
-
+      <div>
         {requests.isPending && <p className="mt-2 text-sm">Loading...</p>}
         {requests.isError && (
           <p className="mt-2 text-sm text-red-600" role="alert">
@@ -122,116 +116,138 @@ export default function MyEventRequests({
 
         {requests.data && requests.data.length > 0 && (
           <div className="mt-5">
-            <div role="tablist" aria-label="Event request status" className="flex gap-2 overflow-x-auto border-b border-slate-200 pb-3">
-              {groupedRequests.map((group) => <button key={group.status} role="tab" aria-selected={selectedStatus === group.status} onClick={() => setSelectedStatus(group.status)} className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium ${selectedStatus === group.status ? 'bg-[#202124] text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}>{STATUS_TITLES[group.status]} <span className="ml-1 opacity-70">{group.requests.length}</span></button>)}
+            <div
+              role="tablist"
+              aria-label="Event request status"
+              className="flex gap-2 overflow-x-auto border-b border-slate-200 pb-3"
+            >
+              {groupedRequests.map((group) => (
+                <button
+                  key={group.status}
+                  role="tab"
+                  aria-selected={selectedStatus === group.status}
+                  onClick={() => setSelectedStatus(group.status)}
+                  className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium ${selectedStatus === group.status ? 'bg-[#202124] text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}
+                >
+                  {STATUS_TITLES[group.status]}{' '}
+                  <span className="ml-1 opacity-70">{group.requests.length}</span>
+                </button>
+              ))}
             </div>
-            {groupedRequests.filter((group) => group.status === selectedStatus).map((group) => (
-              <section key={group.status} aria-label={`${group.status} event requests`}>
-                <ul className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {group.requests.map((request) => (
-              <li
-                key={request.id}
-                className="rounded-2xl bg-white p-4 shadow-sm"
-              >
-                <div>
-                  <p className="font-medium text-slate-950">{titleOf(request)}</p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    <StatusLabel status={request.status} />
-                  </p>
-                  {request.status === 'rejected' && request.rejection_reason && (
-                    <p className="mt-1 text-sm text-red-700">
-                      Rejection reason: {request.rejection_reason}
-                    </p>
-                  )}
-                  {(request.status === 'draft' || request.status === 'rejected') && (
-                    <p className="mt-1 text-xs text-slate-500">
-                      To change this request, edit it and submit it again.
-                    </p>
-                  )}
-                </div>
-                <div className="mt-4">{request.status_permits.includes('edit') ? (
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => reopen.mutate(request.id)}
-                      disabled={reopen.isPending}
-                      aria-label={`Edit draft ${titleOf(request)}`}
-                      className="cs-button-secondary"
-                    >
-                      Edit draft
-                    </button>
-                    {request.status_permits.includes('submit') && (
-                      <button
-                        type="button"
-                        onClick={() => submit.mutate(request)}
-                        disabled={submit.isPending}
-                        className="cs-button"
-                      >
-                        Submit for review
-                      </button>
-                    )}
-                  </div>
-                ) : acceptsChangeRequest(request.status) ? (
-                  // SCRUM-37: after submission, significant changes are proposed, not edited.
-                  <button
-                    type="button"
-                    onClick={() => setProposing(request.id)}
-                    aria-label={`Propose a change to ${titleOf(request)}`}
-                    className="cs-button-secondary"
-                  >
-                    Propose a change
-                  </button>
-                ) : request.status === 'cancelled' ? null : (
-                  <span className="text-sm text-slate-500">
-                    Locked - ask your coordinator to request changes
-                  </span>
-                )}
-                </div>{acceptsChangeRequest(request.status) && (
-                  <div className="w-full">
-                    {proposing === request.id && (
-                      <ProposeChange eventId={request.id} onClose={() => setProposing(null)} />
-                    )}
-                    <ChangeRequestList eventId={request.id} />
-                  </div>
-                )}
-                {request.status === 'confirmed' && (
-                  <div className="w-full">
-                    <RegistrationIntakeControls event={request} />
-                    <RegistrationReviewList eventId={request.id} canDecide />
-                  </div>
-                )}
-                {/* SCRUM-86 AC4: the owning Organiser reads the closure record. */}
-                {request.status === 'completed' && (
-                  <div className="w-full">
-                    <ClosureRecord eventId={request.id} />
-                  </div>
-                )}
-                {/* SCRUM-115: ask the Coordinator to cancel, or see why it was cancelled. */}
-                {request.status_permits.includes('cancel') && (
-                  <div className="w-full">
-                    <RequestCancellation event={request} />
-                  </div>
-                )}
-                {request.status === 'cancelled' && (
-                  <div className="w-full">
-                    <CancellationRecord eventId={request.id} />
-                  </div>
-                )}
-                {/* SCRUM-105: a draft has never been submitted, so it has no history. */}
-                {request.status !== 'draft' && (
-                  <div className="w-full">
-                    <AssignmentHistoryToggle requestId={request.id} requestName={request.name} />
-                  </div>
-                )}
-                {/* SCRUM-88: this list holds only the viewer's own requests, drafts included. */}
-                <div className="w-full">
-                  <EventHistoryToggle eventId={request.id} eventName={request.name} />
-                </div>
-              </li>
-            ))}
-                </ul>
-              </section>
-            ))}
+            {groupedRequests
+              .filter((group) => group.status === selectedStatus)
+              .map((group) => (
+                <section key={group.status} aria-label={`${group.status} event requests`}>
+                  <ul className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {group.requests.map((request) => (
+                      <li key={request.id} className="rounded-2xl bg-white p-4 shadow-sm">
+                        <div>
+                          <p className="font-medium text-slate-950">{titleOf(request)}</p>
+                          <p className="mt-1 text-sm text-slate-500">
+                            <StatusLabel status={request.status} />
+                          </p>
+                          {request.status === 'rejected' && request.rejection_reason && (
+                            <p className="mt-1 text-sm text-red-700">
+                              Rejection reason: {request.rejection_reason}
+                            </p>
+                          )}
+                          {(request.status === 'draft' || request.status === 'rejected') && (
+                            <p className="mt-1 text-xs text-slate-500">
+                              To change this request, edit it and submit it again.
+                            </p>
+                          )}
+                        </div>
+                        <div className="mt-4">
+                          {request.status_permits.includes('edit') ? (
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => reopen.mutate(request.id)}
+                                disabled={reopen.isPending}
+                                aria-label={`Edit draft ${titleOf(request)}`}
+                                className="cs-button-secondary"
+                              >
+                                Edit draft
+                              </button>
+                              {request.status_permits.includes('submit') && (
+                                <button
+                                  type="button"
+                                  onClick={() => submit.mutate(request)}
+                                  disabled={submit.isPending}
+                                  className="cs-button"
+                                >
+                                  Submit for review
+                                </button>
+                              )}
+                            </div>
+                          ) : acceptsChangeRequest(request.status) ? (
+                            // SCRUM-37: after submission, significant changes are proposed, not edited.
+                            <button
+                              type="button"
+                              onClick={() => setProposing(request.id)}
+                              aria-label={`Propose a change to ${titleOf(request)}`}
+                              className="cs-button-secondary"
+                            >
+                              Propose a change
+                            </button>
+                          ) : request.status === 'cancelled' ? null : (
+                            <span className="text-sm text-slate-500">
+                              Locked - ask your coordinator to request changes
+                            </span>
+                          )}
+                        </div>
+                        {acceptsChangeRequest(request.status) && (
+                          <div className="w-full">
+                            {proposing === request.id && (
+                              <ProposeChange
+                                eventId={request.id}
+                                onClose={() => setProposing(null)}
+                              />
+                            )}
+                            <ChangeRequestList eventId={request.id} />
+                          </div>
+                        )}
+                        {request.status === 'confirmed' && (
+                          <div className="w-full">
+                            <RegistrationIntakeControls event={request} />
+                            <RegistrationReviewList eventId={request.id} canDecide />
+                          </div>
+                        )}
+                        {/* SCRUM-86 AC4: the owning Organiser reads the closure record. */}
+                        {request.status === 'completed' && (
+                          <div className="w-full">
+                            <ClosureRecord eventId={request.id} />
+                          </div>
+                        )}
+                        {/* SCRUM-115: ask the Coordinator to cancel, or see why it was cancelled. */}
+                        {request.status_permits.includes('cancel') && (
+                          <div className="w-full">
+                            <RequestCancellation event={request} />
+                          </div>
+                        )}
+                        {request.status === 'cancelled' && (
+                          <div className="w-full">
+                            <CancellationRecord eventId={request.id} />
+                          </div>
+                        )}
+                        {/* SCRUM-105: a draft has never been submitted, so it has no history. */}
+                        {request.status !== 'draft' && (
+                          <div className="w-full">
+                            <AssignmentHistoryToggle
+                              requestId={request.id}
+                              requestName={request.name}
+                            />
+                          </div>
+                        )}
+                        {/* SCRUM-88: this list holds only the viewer's own requests, drafts included. */}
+                        <div className="w-full">
+                          <EventHistoryToggle eventId={request.id} eventName={request.name} />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
           </div>
         )}
       </div>
@@ -249,12 +265,23 @@ type Outcome =
 type SubmitTarget = Pick<EventRequest, 'id' | 'name'>
 
 const STATUS_ORDER: EventRequest['status'][] = [
-  'draft', 'submitted', 'approved', 'confirmed', 'completed', 'rejected', 'cancelled',
+  'draft',
+  'submitted',
+  'approved',
+  'confirmed',
+  'completed',
+  'rejected',
+  'cancelled',
 ]
 
 const STATUS_TITLES: Record<EventRequest['status'], string> = {
-  draft: 'Drafts', submitted: 'Submitted', approved: 'Approved', confirmed: 'Confirmed',
-  completed: 'Completed', rejected: 'Rejected', cancelled: 'Cancelled',
+  draft: 'Drafts',
+  submitted: 'Submitted',
+  approved: 'Approved',
+  confirmed: 'Confirmed',
+  completed: 'Completed',
+  rejected: 'Rejected',
+  cancelled: 'Cancelled',
 }
 
 function StatusLabel({ status }: { status: EventRequest['status'] }) {

@@ -35,14 +35,7 @@ export default function AttendeeRegistrations() {
   })
 
   return (
-    <section
-      className="mt-6 rounded-lg border border-slate-200 p-4"
-      aria-label="Event registration"
-    >
-      <h2 className="font-medium">Open events</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        Your signed-in account is used for registration.
-      </p>
+    <section aria-label="Event registration">
       {events.isPending && <p className="mt-2 text-sm text-slate-500">Loading events…</p>}
       {events.isError && (
         <p role="alert" className="mt-2 text-sm text-red-600">

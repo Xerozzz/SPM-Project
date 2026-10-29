@@ -19,7 +19,6 @@ import ClarificationThread from './ClarificationThread'
 import CompleteEvent from './CompleteEvent'
 import ConfirmEvent from './ConfirmEvent'
 import ReminderSchedule from './ReminderSchedule'
-import VenueArrangements from './VenueArrangements'
 import { EventHistoryToggle } from './EventHistory'
 import EventEquipmentRequirements from './EventEquipmentRequirements'
 import PlanningInfoEditor from './PlanningInfoEditor'
@@ -70,8 +69,7 @@ export default function EventRequestReview() {
     },
   })
   return (
-    <section id="coordinator-events" className="mt-6 rounded-lg border border-slate-200 p-4">
-      <h2 className="font-medium">Coordinator events</h2>
+    <section>
       {requests.isPending && <p className="mt-2 text-sm">Loading…</p>}
       {requests.isError && (
         <p role="alert" className="mt-2 text-sm text-red-600">
@@ -224,11 +222,6 @@ function ReviewCard({
       {request.status === 'approved' && <ConfirmEvent event={request} onConfirmed={onConfirmed} />}
       {/* SCRUM-85: the Coordinator's own reminders about outstanding arrangements. */}
       {request.status === 'approved' && <ReminderSchedule event={request} />}
-      {/* SCRUM-118: cancelling an arrangement here is a venue change; the event goes back
-          to planning, so it is reported to the section like a confirmation. */}
-      {request.status === 'confirmed' && (
-        <VenueArrangements event={request} onVenueChanged={onConfirmed} />
-      )}
       {request.status === 'confirmed' && (
         <>
           <RegistrationSettingsCard event={request} />

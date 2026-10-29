@@ -95,14 +95,8 @@ export default function VenueBookingDecisions() {
   }, [populatedTabs, selectedTab])
 
   return (
-    <section className="mt-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
-        <div>
-          <h2 className="font-medium">Venue booking requests</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Review each request, record a reason when needed, and set a hold before approval.
-          </p>
-        </div>
+    <section className="mt-0">
+      <div className="flex flex-wrap justify-end gap-3">
         {pending.length > 0 && (
           <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-sm font-medium text-amber-800">
             {pending.length} awaiting review

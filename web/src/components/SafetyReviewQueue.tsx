@@ -141,13 +141,7 @@ export default function SafetyReviewQueue() {
   const waiting = worklist.data?.filter((plan) => !plan.may_review) ?? []
 
   return (
-    <section className="mt-6 rounded-lg border border-slate-200 p-4">
-      <h2 className="font-medium">Events to review for safety</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        The plan each event is being run to. A decision is recorded against the plan you are looking
-        at, and approving it does not confirm the event.
-      </p>
-
+    <section>
       {worklist.isPending && <p className="mt-2 text-sm">Loading…</p>}
       {worklist.isError && (
         <p role="alert" className="mt-2 text-sm text-red-600">
@@ -160,22 +154,46 @@ export default function SafetyReviewQueue() {
 
       {worklist.isSuccess && worklist.data.length > 0 && (
         <>
-          <div role="tablist" aria-label="Safety review status" className="mt-5 flex gap-2 border-b border-slate-200 pb-3">
-            <button type="button" role="tab" aria-selected={selectedTab === 'ready'} onClick={() => setSelectedTab('ready')} className={`rounded-lg px-4 py-2 text-sm font-medium ${selectedTab === 'ready' ? 'bg-[#202124] text-white' : 'bg-white text-slate-600'}`}>Ready to review <span className="ml-1 opacity-70">{ready.length}</span></button>
-            <button type="button" role="tab" aria-selected={selectedTab === 'waiting'} onClick={() => setSelectedTab('waiting')} className={`rounded-lg px-4 py-2 text-sm font-medium ${selectedTab === 'waiting' ? 'bg-[#202124] text-white' : 'bg-white text-slate-600'}`}>Waiting on arrangements <span className="ml-1 opacity-70">{waiting.length}</span></button>
+          <div
+            role="tablist"
+            aria-label="Safety review status"
+            className="mt-5 flex gap-2 border-b border-slate-200 pb-3"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selectedTab === 'ready'}
+              onClick={() => setSelectedTab('ready')}
+              className={`rounded-lg px-4 py-2 text-sm font-medium ${selectedTab === 'ready' ? 'bg-[#202124] text-white' : 'bg-white text-slate-600'}`}
+            >
+              Ready to review <span className="ml-1 opacity-70">{ready.length}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selectedTab === 'waiting'}
+              onClick={() => setSelectedTab('waiting')}
+              className={`rounded-lg px-4 py-2 text-sm font-medium ${selectedTab === 'waiting' ? 'bg-[#202124] text-white' : 'bg-white text-slate-600'}`}
+            >
+              Waiting on arrangements <span className="ml-1 opacity-70">{waiting.length}</span>
+            </button>
           </div>
-          {selectedTab === 'ready' && (ready.length === 0 ? (
-            <p className="mt-1 text-sm text-slate-500">Nothing is arranged enough to review yet.</p>
-          ) : (
-            ready.map(card)
-          ))}
-          {selectedTab === 'waiting' && (waiting.length === 0 ? (
-            <p className="mt-1 text-sm text-slate-500">
-              Every event being planned is ready to review.
-            </p>
-          ) : (
-            waiting.map(card)
-          ))}
+          {selectedTab === 'ready' &&
+            (ready.length === 0 ? (
+              <p className="mt-1 text-sm text-slate-500">
+                Nothing is arranged enough to review yet.
+              </p>
+            ) : (
+              ready.map(card)
+            ))}
+          {selectedTab === 'waiting' &&
+            (waiting.length === 0 ? (
+              <p className="mt-1 text-sm text-slate-500">
+                Every event being planned is ready to review.
+              </p>
+            ) : (
+              waiting.map(card)
+            ))}
         </>
       )}
     </section>

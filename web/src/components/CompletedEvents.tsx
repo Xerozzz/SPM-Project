@@ -18,8 +18,7 @@ export default function CompletedEvents() {
   })
   if (!events.data || events.data.length === 0) return null
   return (
-    <section className="mt-6 rounded-lg border border-slate-200 p-4">
-      <h2 className="font-medium">Completed events</h2>
+    <section>
       {events.data.map((event) => (
         <article key={event.id} className="mt-3 rounded border border-slate-100 p-3">
           <h3 className="font-medium">{event.name ?? 'Untitled event'}</h3>
