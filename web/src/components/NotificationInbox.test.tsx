@@ -209,6 +209,29 @@ test('links venue-cancellation notifications to the authorised staff view', asyn
   expect(link.getAttribute('href')).toBe('#venue-booking-decisions')
 })
 
+// TC-127-04 (frontend part): a revised request identifies the replacement booking
+// (source id), the revision action (type) and the submission time, and opens the
+// authorised review view — the Venue Staff-only decisions section.
+test('links venue-revision notifications to the authorised staff view', async () => {
+  signIn()
+  renderInbox(async () =>
+    json([
+      {
+        ...newer,
+        type: 'venue_revision_submitted',
+        source_type: 'venue_revision',
+        source_id: 'revision-1',
+      },
+    ]),
+  )
+  const item = await screen.findByRole('listitem')
+  expect(item.textContent).toContain('venue_revision_submitted')
+  expect(item.textContent).toContain('revision-1')
+  expect(item.textContent).toContain('2026-04-01T10:00:00Z')
+  const link = screen.getByRole('link', { name: 'Review revised venue request' })
+  expect(link.getAttribute('href')).toBe('#venue-booking-decisions')
+})
+
 test('shows an error state when the inbox fails to load', async () => {
   signIn()
   renderInbox(async () => {
