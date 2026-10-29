@@ -92,6 +92,16 @@ def list_confirmed_for_coordinator(db: Session, coordinator_id: uuid.UUID) -> li
     return repo.list_confirmed_for_coordinator(db, coordinator_id)
 
 
+def list_cancelled_for_coordinator(db: Session, coordinator_id: uuid.UUID) -> list[EventRequest]:
+    """SCRUM-88 AC6: cancelled events this Coordinator is still assigned to."""
+    return repo.list_cancelled(db, coordinator_id)
+
+
+def list_cancelled_for_lead(db: Session) -> list[EventRequest]:
+    """SCRUM-88 AC6: every cancelled event, since any Lead may read its history."""
+    return repo.list_cancelled(db, None)
+
+
 def create(
     db: Session, organiser_id: uuid.UUID, fields: EventRequestFields, now: datetime
 ) -> EventRequest:

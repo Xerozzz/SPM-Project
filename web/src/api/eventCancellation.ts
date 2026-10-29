@@ -2,8 +2,9 @@
  * SCRUM-115: cancel a whole event, and the Organiser's requests to do so.
  *
  * Mirrors `/event-requests/{id}/cancellation-requests`, `/cancel`, `.../decline` and
- * `/cancellation`. No rules live here. Who may act and which events can be cancelled are
- * the API's answers.
+ * `/cancellation`, and SCRUM-88's `/assigned-cancelled` and `/cancelled` lists. No rules
+ * live here. Who may act, which events can be cancelled and which cancelled events each
+ * viewer sees are the API's answers.
  */
 
 export interface CancellationRequest {
@@ -25,6 +26,15 @@ export interface Cancellation {
   cancellation_reason: string | null
   /** Every request, oldest first. */
   requests: CancellationRequest[]
+}
+
+/** SCRUM-88 AC6: one cancelled event a Coordinator or Lead may open the history of. */
+export interface CancelledEvent {
+  id: string
+  name: string | null
+  start_at: string | null
+  cancelled_at: string | null
+  cancellation_reason: string | null
 }
 
 function headers(token: string): HeadersInit {
@@ -94,4 +104,14 @@ export async function readCancellation(token: string, eventId: string): Promise<
     headers: headers(token),
   })
   return read<Cancellation>(response, 'Could not load the cancellation')
+}
+
+/** SCRUM-88 AC6: the Coordinator's own cancelled events, or every one for a Lead. */
+export async function listCancelledEvents(
+  token: string,
+  scope: 'assigned' | 'all',
+): Promise<CancelledEvent[]> {
+  const path = scope === 'assigned' ? 'assigned-cancelled' : 'cancelled'
+  const response = await fetch(`/api/event-requests/${path}`, { headers: headers(token) })
+  return read<CancelledEvent[]>(response, 'Could not load cancelled events')
 }

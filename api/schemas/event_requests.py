@@ -256,6 +256,18 @@ class AssignmentHistoryRead(BaseModel):
         )
 
 
+class CancelledEventRead(BaseModel):
+    """SCRUM-88 AC6: one cancelled event a Coordinator or Lead may open the history of."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str | None
+    start_at: datetime | None
+    cancelled_at: datetime | None
+    cancellation_reason: str | None
+
+
 class AssignableCoordinatorRead(BaseModel):
     """SCRUM-98: one eligible owner the Lead may pick — active Event Coordinators only."""
 
