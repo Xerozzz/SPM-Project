@@ -245,7 +245,7 @@ export default function VenueBookingDecisions() {
           {held.map((booking) => (
             <article
               key={booking.id}
-              className="mt-3 rounded-2xl border border-violet-200 bg-white p-5 shadow-sm"
+              className="mt-5 rounded-2xl border border-violet-200 bg-white p-5 shadow-sm"
             >
               <BookingDetails booking={booking} />
               <p className="mt-1 text-sm text-violet-900">
@@ -315,7 +315,7 @@ export default function VenueBookingDecisions() {
           {decided.map((booking) => (
             <article
               key={booking.id}
-              className="mt-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+              className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
             >
               <BookingDetails booking={booking} />
               <p className="mt-1 text-sm">
