@@ -227,6 +227,7 @@ const ACTION_LABELS: Record<HistoryAction, string> = {
   closure_corrected: 'Closure record corrected',
   safety_decided: 'Safety decision',
   venue_closed: 'Venue closure',
+  hold_expiry_changed: 'Hold expiry changed',
 }
 
 const CAUSE_LABELS: Record<ReplanCause, string> = {
@@ -247,6 +248,7 @@ const SOURCE_LABELS: Record<HistorySource, string> = {
   event_change_request: 'change request',
   event_closure_note: 'closure record',
   venue_closure_impact: 'venue closure',
+  venue_hold_expiry_change: 'hold expiry change',
 }
 
 /** SCRUM-120: a missing value is "—"; a datetime is shown in Singapore time (ADR-0068). */

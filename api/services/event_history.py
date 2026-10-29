@@ -43,5 +43,6 @@ def history_of(
         repo.closure_note_records(db, event.id),
         repo.safety_decision_records(db, event.id),
         repo.closure_impact_records(db, booking_ids),
+        repo.hold_expiry_change_records(db, booking_ids),
         may_read_safety_reviews=may_read_safety_reviews,
     )

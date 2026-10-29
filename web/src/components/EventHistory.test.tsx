@@ -757,3 +757,33 @@ describe('SCRUM-120 safety decision and venue closure entries (frontend unit)', 
     expect(row).toHaveTextContent('Record: venue closure ci-1')
   })
 })
+
+describe('SCRUM-136 hold expiry change entries (frontend unit)', () => {
+  test('an expiry change shows the hold and its old and new expiry in Singapore time', async () => {
+    const expiry = { old: '2030-01-08T02:00:00+00:00', new: '2030-01-09T02:00:00+00:00' }
+    renderWith(
+      ok([
+        entry({
+          id: 'hold_expiry_changed:hx-1',
+          action: 'hold_expiry_changed',
+          source_type: 'venue_hold_expiry_change',
+          source_id: 'hx-1',
+          actor_id: 'u-staff',
+          actor_email: 'staff@example.com',
+          venue_name: 'Hall A',
+          session_label: 'Morning',
+          changes: [{ field: 'expires_at', label: 'Held until', ...expiry, kind: 'datetime' }],
+        }),
+      ]),
+      history,
+    )
+    const row = await screen.findByRole('listitem')
+
+    expect(row).toHaveTextContent('Hold expiry changed by staff@example.com')
+    expect(row).toHaveTextContent('Hall A, Morning')
+    expect(row).toHaveTextContent(
+      `Held until: ${formatSingaporeTime(expiry.old)} → ${formatSingaporeTime(expiry.new)}`,
+    )
+    expect(row).toHaveTextContent('Record: hold expiry change hx-1')
+  })
+})

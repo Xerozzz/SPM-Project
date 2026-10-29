@@ -165,22 +165,25 @@ async def test_adopting_a_replacement_links_both_arrangements_both_ways(
     assert len({e["id"] for e in body}) == len(body)
 
 
-# --------------------------------------------------------------- AC2 expiry update gap
+# --------------------------------------------------------------- AC2 expiry update
 
 
 @pytest.mark.story("SCRUM-119")
-async def test_an_expiry_update_adds_no_entry_and_the_hold_shows_the_new_expiry(
+async def test_an_expiry_update_adds_exactly_one_entry_and_the_hold_shows_the_latest_expiry(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
-    """ADR-0064 gap, pinned: SCRUM-121 overwrites the expiry and records nothing else."""
+    """The ADR-0064 gap, closed by SCRUM-136 (ADR-0070): the update now adds its own
+    entry, and the hold's entry still shows the latest expiry."""
     p = planning(db, make_user)
     before = await history(make_client, p.owner, p.event)
     new_expiry = (datetime.now(UTC) + timedelta(days=10)).replace(microsecond=0)
 
-    booking_service.update_hold_expiry(db, p.first.id, new_expiry, datetime.now(UTC))
+    booking_service.update_hold_expiry(db, p.first.id, new_expiry, datetime.now(UTC), p.staff.id)
     after = await history(make_client, p.owner, p.event)
 
-    assert [e["id"] for e in after] == [e["id"] for e in before]
+    added = [e for e in after if e["id"] not in {b["id"] for b in before}]
+    assert [e["action"] for e in added] == ["hold_expiry_changed"]
+    assert len(after) == len(before) + 1
     [hold] = [e for e in of(after, "hold_created") if e["source_id"] == str(p.first.id)]
     assert datetime.fromisoformat(hold["hold_expires_at"]) == new_expiry
 

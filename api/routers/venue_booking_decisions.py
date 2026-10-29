@@ -77,10 +77,12 @@ def hold_booking_request(
 def update_hold_expiry(
     booking_id: uuid.UUID, body: VenueBookingHold, user: VenueStaff, db: Db
 ) -> VenueBookingDecisionRead:
-    """SCRUM-121: revise the expiry of an active Tentative hold."""
-    del user
+    """SCRUM-121: revise the expiry of an active Tentative hold. SCRUM-136: recorded
+    with the Venue Staff member who made the change."""
     try:
-        venue_bookings.update_hold_expiry(db, booking_id, body.expires_at, datetime.now(UTC))
+        venue_bookings.update_hold_expiry(
+            db, booking_id, body.expires_at, datetime.now(UTC), _user_id(user)
+        )
     except venue_bookings.BookingNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Venue booking request not found") from exc
     except venue_bookings.InvalidHoldError as exc:
