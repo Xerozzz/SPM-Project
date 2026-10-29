@@ -85,13 +85,15 @@ export default function VenueCatalogue() {
   })
 
   return (
-    <section className="mt-6 rounded-lg border border-slate-200 p-4">
-      <h2 className="font-medium">Venue catalogue</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        {isStaff
-          ? 'Add venues, change their details, and take them out of use.'
-          : 'Venues available for planning. Venue Staff maintain this list.'}
-      </p>
+    <section className="mt-6">
+      <div className="border-b border-slate-200 pb-4">
+        <h2 className="font-medium">Venue catalogue</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          {isStaff
+            ? 'Add venues, change their details, and take them out of use.'
+            : 'Venues available for planning. Venue Staff maintain this list.'}
+        </p>
+      </div>
 
       {venues.isPending && <p className="mt-2 text-sm">Loading…</p>}
       {venues.isError && (
