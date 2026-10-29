@@ -188,6 +188,26 @@ def submit(
         db.commit()
         db.refresh(booking)
         return booking, suitability
+    # SCRUM-127 AC1/AC2: a revised (replacement) Pending request needing review alerts
+    # responsible active Venue Staff — active review-role staff, since no venue→staff
+    # mapping exists. Staged before the commit so the revision and its alerts land or
+    # roll back together (ADR-0060); the (venue_revision, replacement id) source pair
+    # makes a retry collide while a later distinct revision stays distinct (ADR-0022).
+    # A Pending revision alone creates no occupancy (ADR-0002 covers Tentative+ only).
+    db.add(booking)
+    db.flush()
+    for staff in users_repo.list_active_venue_staff(db):
+        notifications_repo.stage(
+            db,
+            recipient_id=staff.id,
+            event_request_id=locked.id,
+            type=NotificationType.VENUE_REVISION_SUBMITTED,
+            source_type=NotificationSource.VENUE_REVISION,
+            source_id=str(booking.id),
+            occurred_at=now,
+        )
+    db.commit()
+    db.refresh(booking)
     return booking_repo.save_booking(db, booking), suitability
 
 

@@ -118,6 +118,15 @@ export default function NotificationInbox() {
                     View venue booking decisions
                   </a>
                 )}
+                {/* SCRUM-127: a revised (replacement) request needs Venue Staff
+                    review. The decisions section renders for Venue Staff only, so
+                    this link is an authorised review view for exactly the inbox's
+                    recipients. */}
+                {notification.source_type === 'venue_revision' && (
+                  <a href="#venue-booking-decisions" className="text-blue-700 underline">
+                    Review revised venue request
+                  </a>
+                )}
                 {notification.is_unread && (
                   <button
                     type="button"

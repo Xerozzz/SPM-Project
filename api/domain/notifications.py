@@ -82,7 +82,14 @@ class NotificationType(StrEnum):
     # the space. The type names the cancellation action, so Venue Staff can tell it
     # apart from a new request (SCRUM-49) or a whole-event cancellation (SCRUM-115)
     # without opening the event.
+    # SCRUM-127 AC1/AC2: a revised (replacement) Pending venue request needs Venue
+    # Staff review. The type names the revision action, so staff can tell it apart
+    # from a brand-new request (SCRUM-49) without opening the event.
     VENUE_ARRANGEMENT_CANCELLED = "venue_arrangement_cancelled"
+    # SCRUM-127 AC1/AC2: a revised (replacement) Pending venue request needs Venue
+    # Staff review. The type names the revision action, so staff can tell it apart
+    # from a brand-new request (SCRUM-49) without opening the event.
+    VENUE_REVISION_SUBMITTED = "venue_revision_submitted"
     # SCRUM-85 AC5: arrangements for one of your events are still incomplete with the
     # event approaching. Which of them is read live from the event (ADR-0022 keeps
     # presentation out of the row), so a reminder can never name stale work.
@@ -178,3 +185,8 @@ class NotificationSource(StrEnum):
     # silent here; replacements (SCRUM-116) and venue changes (SCRUM-118) cancel
     # through their own flows and do not notify as a Coordinator cancellation.
     VENUE_CANCELLATION = "venue_cancellation"
+    # SCRUM-127: one revised (replacement) Pending venue request. The replacement
+    # booking row's id is the source_id, so retrying the same revision collides per
+    # recipient (idempotent) while a later distinct revision (a new replacement row)
+    # stays distinct. New requests stay on VENUE_REQUEST (SCRUM-49).
+    VENUE_REVISION = "venue_revision"
