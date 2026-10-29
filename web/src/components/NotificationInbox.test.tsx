@@ -186,6 +186,29 @@ test.each([
   expect(link.getAttribute('href')).toBe('#coordinator-events')
 })
 
+// TC-123-05 (frontend part): a cancelled arrangement identifies the booking
+// (source id), the cancellation action (type) and the cancellation time, and
+// opens the authorised record view — the Venue Staff-only decisions section.
+test('links venue-cancellation notifications to the authorised staff view', async () => {
+  signIn()
+  renderInbox(async () =>
+    json([
+      {
+        ...newer,
+        type: 'venue_arrangement_cancelled',
+        source_type: 'venue_cancellation',
+        source_id: 'booking-1',
+      },
+    ]),
+  )
+  const item = await screen.findByRole('listitem')
+  expect(item.textContent).toContain('venue_arrangement_cancelled')
+  expect(item.textContent).toContain('booking-1')
+  expect(item.textContent).toContain('2026-04-01T10:00:00Z')
+  const link = screen.getByRole('link', { name: 'View venue booking decisions' })
+  expect(link.getAttribute('href')).toBe('#venue-booking-decisions')
+})
+
 test('shows an error state when the inbox fails to load', async () => {
   signIn()
   renderInbox(async () => {

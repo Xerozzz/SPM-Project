@@ -109,6 +109,15 @@ export default function NotificationInbox() {
                     View venue decision
                   </a>
                 )}
+                {/* SCRUM-123: a cancelled arrangement notifies the responsible Venue
+                    Staff. The decisions section renders for Venue Staff only, so
+                    this link is an authorised record view for exactly the inbox's
+                    recipients. */}
+                {notification.source_type === 'venue_cancellation' && (
+                  <a href="#venue-booking-decisions" className="text-blue-700 underline">
+                    View venue booking decisions
+                  </a>
+                )}
                 {notification.is_unread && (
                   <button
                     type="button"
