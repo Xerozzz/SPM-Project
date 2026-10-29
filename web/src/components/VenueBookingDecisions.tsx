@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { formatSingaporeTime } from '../api/venueCalendar'
 import {
@@ -16,6 +16,8 @@ import {
 } from '../api/venueBookingDecisions'
 import { useAuth } from '../auth/useAuth'
 
+type BookingTab = 'pending' | 'held' | 'decided'
+
 /** SCRUM-40: Venue Staff review pending booking requests and reject them.
  * SCRUM-75: they also see any clash and approve requests that have none.
  * SCRUM-110: approval creates a time-limited tentative hold, so it needs an expiry. */
@@ -25,6 +27,7 @@ export default function VenueBookingDecisions() {
   const [reasons, setReasons] = useState<Record<string, string>>({})
   const [holdUntil, setHoldUntil] = useState<Record<string, string>>({})
   const [outcome, setOutcome] = useState<string | null>(null)
+  const [selectedTab, setSelectedTab] = useState<BookingTab>('pending')
   const queryKey = ['venue-bookings', token]
   const requests = useQuery({
     queryKey,
@@ -77,96 +80,173 @@ export default function VenueBookingDecisions() {
     requests.data?.filter(
       (booking) => booking.status !== 'pending' && booking.status !== 'tentative',
     ) ?? []
+  const tabGroups = [
+    { id: 'pending' as const, label: 'Pending review', bookings: pending },
+    { id: 'held' as const, label: 'Tentative holds', bookings: held },
+    { id: 'decided' as const, label: 'Decided', bookings: decided },
+  ]
+  const populatedTabs = tabGroups.filter((group) => group.bookings.length > 0)
+
+  // Keep the current view useful after a decision moves its card to another status.
+  useEffect(() => {
+    if (populatedTabs.length && !populatedTabs.some((group) => group.id === selectedTab)) {
+      setSelectedTab(populatedTabs[0].id)
+    }
+  }, [populatedTabs, selectedTab])
 
   return (
-    <section id="venue-booking-decisions" className="mt-6 rounded-lg border border-slate-200 p-4">
-      <h2 className="font-medium">Venue booking requests</h2>
+    <section className="mt-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
+        <div>
+          <h2 className="font-medium">Venue booking requests</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Review each request, record a reason when needed, and set a hold before approval.
+          </p>
+        </div>
+        {pending.length > 0 && (
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-sm font-medium text-amber-800">
+            {pending.length} awaiting review
+          </span>
+        )}
+      </div>
       {requests.isPending && <p className="mt-2 text-sm">Loading…</p>}
       {requests.isError && (
         <p role="alert" className="mt-2 text-sm text-red-600">
           Could not load booking requests: {requests.error.message}
         </p>
       )}
-      {requests.isSuccess && pending.length === 0 && (
-        <p className="mt-2 text-sm text-slate-500">No booking requests are waiting.</p>
+      {requests.isSuccess && (
+        <div
+          role="tablist"
+          aria-label="Booking request status"
+          className="mt-5 flex gap-2 overflow-x-auto border-b border-slate-200 pb-3"
+        >
+          {tabGroups.map((group) => (
+            <button
+              key={group.id}
+              type="button"
+              role="tab"
+              aria-selected={selectedTab === group.id}
+              onClick={() => setSelectedTab(group.id)}
+              className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium ${
+                selectedTab === group.id
+                  ? 'bg-[#202124] text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {group.label} <span className="ml-1 opacity-70">{group.bookings.length}</span>
+            </button>
+          ))}
+        </div>
       )}
-      {pending.map((booking) => (
-        <article key={booking.id} className="mt-4 rounded border border-slate-200 p-3">
-          <BookingDetails booking={booking} />
-          {booking.conflict && (
-            <p className="mt-2 rounded bg-amber-50 p-2 text-sm text-amber-800">
-              {describeConflict(booking.conflict)} It cannot be approved.
-            </p>
-          )}
-          <label className="mt-3 block text-sm font-medium" htmlFor={`reason-${booking.id}`}>
-            Reason for the Coordinator (optional)
-          </label>
-          <textarea
-            id={`reason-${booking.id}`}
-            maxLength={MAX_REASON_LENGTH}
-            value={reasons[booking.id] ?? ''}
-            onChange={(event) => setReasons({ ...reasons, [booking.id]: event.target.value })}
-            className="mt-1 w-full rounded border border-slate-300 p-2 text-sm"
-          />
-          <div className="mt-2 flex gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                resetAll()
-                reject.mutate({ id: booking.id, reason: reasons[booking.id] ?? '' })
-              }}
-              disabled={busy}
-              className="rounded bg-red-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-            >
-              Reject
-            </button>
-          </div>
-          {reject.isError && reject.variables?.id === booking.id && (
-            <p role="alert" className="mt-2 text-sm text-red-600">
-              {reject.error.message}
-            </p>
-          )}
-          {/* Once the reloaded card shows its clash, that line explains the refusal in
+      {selectedTab === 'pending' && requests.isSuccess && pending.length === 0 && (
+        <p className="mt-5 text-sm text-slate-500">No booking requests are waiting.</p>
+      )}
+      {selectedTab === 'pending' &&
+        pending.map((booking) => (
+          <article
+            key={booking.id}
+            className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+          >
+            <div className="p-5">
+              <BookingDetails booking={booking} />
+              {booking.conflict && (
+                <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  {describeConflict(booking.conflict)} It cannot be approved.
+                </p>
+              )}
+              <div className="mt-5 grid gap-5 border-t border-slate-100 pt-5 lg:grid-cols-2">
+                <div>
+                  <label
+                    className="block text-sm font-medium text-slate-800"
+                    htmlFor={`reason-${booking.id}`}
+                  >
+                    Reason for the Coordinator (optional)
+                  </label>
+                  <textarea
+                    id={`reason-${booking.id}`}
+                    maxLength={MAX_REASON_LENGTH}
+                    value={reasons[booking.id] ?? ''}
+                    onChange={(event) =>
+                      setReasons({ ...reasons, [booking.id]: event.target.value })
+                    }
+                    className="mt-2 min-h-24 w-full rounded-lg border border-slate-300 p-2.5 text-sm shadow-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                  />
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetAll()
+                        reject.mutate({ id: booking.id, reason: reasons[booking.id] ?? '' })
+                      }}
+                      disabled={busy}
+                      className="rounded-lg border border-red-200 bg-white px-3.5 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-50"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                  {reject.isError && reject.variables?.id === booking.id && (
+                    <p role="alert" className="mt-2 text-sm text-red-600">
+                      {reject.error.message}
+                    </p>
+                  )}
+                </div>
+                {/* Once the reloaded card shows its clash, that line explains the refusal in
               Singapore time, so the raw API message (which only has an id) is not repeated. */}
-          {/* SCRUM-110: approval creates a time-limited tentative hold, so the expiry
+                {/* SCRUM-110: approval creates a time-limited tentative hold, so the expiry
               is required before the request can be approved. */}
-          <label className="mt-3 block text-sm font-medium" htmlFor={`hold-${booking.id}`}>
-            Hold until (Singapore time)
-          </label>
-          <div className="mt-1 flex gap-2">
-            <input
-              id={`hold-${booking.id}`}
-              type="datetime-local"
-              value={holdUntil[booking.id] ?? ''}
-              onChange={(event) => setHoldUntil({ ...holdUntil, [booking.id]: event.target.value })}
-              className="rounded border border-slate-300 p-1.5 text-sm"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                resetAll()
-                approve.mutate({ booking, until: holdUntil[booking.id] ?? '' })
-              }}
-              disabled={busy || booking.conflict !== null || !holdUntil[booking.id]}
-              className="rounded bg-green-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-            >
-              Approve
-            </button>
-          </div>
-          {approve.isError &&
-            approve.variables?.booking.id === booking.id &&
-            booking.conflict === null && (
-              <p role="alert" className="mt-2 text-sm text-red-600">
-                Could not approve: {approve.error.message}
-              </p>
-            )}
-        </article>
-      ))}
-      {held.length > 0 && (
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <label
+                    className="block text-sm font-medium text-slate-800"
+                    htmlFor={`hold-${booking.id}`}
+                  >
+                    Hold until (Singapore time)
+                  </label>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Approval creates a tentative venue hold.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <input
+                      id={`hold-${booking.id}`}
+                      type="datetime-local"
+                      value={holdUntil[booking.id] ?? ''}
+                      onChange={(event) =>
+                        setHoldUntil({ ...holdUntil, [booking.id]: event.target.value })
+                      }
+                      className="rounded-lg border border-slate-300 bg-white p-2 text-sm shadow-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetAll()
+                        approve.mutate({ booking, until: holdUntil[booking.id] ?? '' })
+                      }}
+                      disabled={busy || booking.conflict !== null || !holdUntil[booking.id]}
+                      className="cs-button disabled:opacity-50"
+                    >
+                      Approve
+                    </button>
+                  </div>
+                  {approve.isError &&
+                    approve.variables?.booking.id === booking.id &&
+                    booking.conflict === null && (
+                      <p role="alert" className="mt-2 text-sm text-red-600">
+                        Could not approve: {approve.error.message}
+                      </p>
+                    )}
+                </div>
+              </div>
+            </div>
+          </article>
+        ))}
+      {selectedTab === 'held' && held.length > 0 && (
         <>
-          <h3 className="mt-6 text-sm font-medium">Tentative holds</h3>
+          <h3 className="sr-only">Tentative holds</h3>
           {held.map((booking) => (
-            <article key={booking.id} className="mt-2 rounded border border-violet-200 p-3">
+            <article
+              key={booking.id}
+              className="mt-3 rounded-2xl border border-violet-200 bg-white p-5 shadow-sm"
+            >
               <BookingDetails booking={booking} />
               <p className="mt-1 text-sm text-violet-900">
                 {STATUS_LABELS.tentative}
@@ -196,7 +276,7 @@ export default function VenueBookingDecisions() {
                       onChange={(event) =>
                         setHoldUntil({ ...holdUntil, [booking.id]: event.target.value })
                       }
-                      className="rounded border border-slate-300 p-1.5 text-sm"
+                      className="rounded-lg border border-slate-300 p-2 text-sm shadow-sm"
                     />
                     <button
                       type="button"
@@ -205,7 +285,7 @@ export default function VenueBookingDecisions() {
                         updateExpiry.mutate({ booking, until: holdUntil[booking.id] ?? '' })
                       }}
                       disabled={busy || !holdUntil[booking.id]}
-                      className="rounded bg-violet-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+                      className="rounded-lg bg-violet-700 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-violet-800 disabled:opacity-50"
                     >
                       Update expiry
                     </button>
@@ -226,11 +306,17 @@ export default function VenueBookingDecisions() {
           {outcome}
         </p>
       )}
-      {decided.length > 0 && (
+      {selectedTab === 'held' && requests.isSuccess && held.length === 0 && (
+        <p className="mt-5 text-sm text-slate-500">There are no tentative holds.</p>
+      )}
+      {selectedTab === 'decided' && decided.length > 0 && (
         <>
-          <h3 className="mt-6 text-sm font-medium">Decided</h3>
+          <h3 className="sr-only">Decided</h3>
           {decided.map((booking) => (
-            <article key={booking.id} className="mt-2 rounded border border-slate-100 p-3">
+            <article
+              key={booking.id}
+              className="mt-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+            >
               <BookingDetails booking={booking} />
               <p className="mt-1 text-sm">
                 {STATUS_LABELS[booking.status]}
@@ -243,6 +329,9 @@ export default function VenueBookingDecisions() {
             </article>
           ))}
         </>
+      )}
+      {selectedTab === 'decided' && requests.isSuccess && decided.length === 0 && (
+        <p className="mt-5 text-sm text-slate-500">There are no decided booking requests.</p>
       )}
     </section>
   )
@@ -280,17 +369,30 @@ function BookingDetails({ booking }: { booking: VenueBookingDecision }) {
     ],
     ['Layout', booking.layout_requirement],
   ]
+  const fullWidthLabels = new Set(['When', 'Venue held', 'Equipment'])
   return (
-    <>
-      <h3 className="font-medium">{booking.event_name ?? 'Untitled event'}</h3>
-      <dl className="mt-2 text-sm text-slate-600">
+    <div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Event</p>
+          <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">
+            {booking.event_name ?? 'Untitled event'}
+          </h3>
+        </div>
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
+          {booking.session_label}
+        </span>
+      </div>
+      <dl className="mt-5 grid gap-x-8 gap-y-4 text-sm sm:grid-cols-2">
         {rows.map(([label, value]) => (
-          <div key={label}>
-            <dt className="inline font-medium">{label}: </dt>
-            <dd className="inline">{value ?? 'Not given'}</dd>
+          <div key={label} className={fullWidthLabels.has(label) ? 'sm:col-span-2' : undefined}>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              {label}:
+            </dt>
+            <dd className="mt-1 font-medium text-slate-700">{value ?? 'Not given'}</dd>
           </div>
         ))}
       </dl>
-    </>
+    </div>
   )
 }

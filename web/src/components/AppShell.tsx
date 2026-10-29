@@ -29,6 +29,7 @@ export default function AppShell({
   const [mobileOpen, setMobileOpen] = useState(false)
   const active = items.find((item) => item.id === activeId) ?? items[0]
   const groups = [...new Set(items.map((item) => item.group))]
+  const roleSummary = roles.map(formatRole).join(', ')
 
   function navigate(id: string) {
     onNavigate(id)
@@ -116,17 +117,10 @@ export default function AppShell({
                 {active.description}
               </p>
             </div>
-            <div className="hidden flex-wrap justify-end gap-1 sm:flex">
-              {roles.map((role) => (
-                <span
-                  key={role}
-                  className="px-1 py-1 text-xs font-medium text-slate-500"
-                >
-                  {role.replace('_', ' ')}
-                </span>
-              ))}
-            </div>
-            <p className="sr-only">Signed in as: {roles.join(', ')}</p>
+            <p className="hidden text-sm font-medium text-slate-500 sm:block">
+              You are logged in as: {roleSummary}
+            </p>
+            <p className="sr-only">You are logged in as: {roleSummary}</p>
             <button type="button" onClick={onSignOut} className="cs-button-secondary shrink-0">
               Sign out
             </button>
@@ -136,4 +130,11 @@ export default function AppShell({
       </div>
     </div>
   )
+}
+
+function formatRole(role: string): string {
+  return role
+    .split('_')
+    .map((word) => `${word[0].toUpperCase()}${word.slice(1)}`)
+    .join(' ')
 }
