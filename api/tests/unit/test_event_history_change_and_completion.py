@@ -284,7 +284,8 @@ def test_change_and_completion_actions_are_appended_without_moving_any_earlier_o
     order = list(HistoryAction)
 
     assert order.index(HistoryAction.EVENT_CANCELLED) == 23
-    assert order[24:] == [
+    # Later SCRUM-120 actions append after these, so they are pinned as a slice.
+    assert order[24:28] == [
         HistoryAction.CHANGE_REQUESTED,
         HistoryAction.CHANGE_DECIDED,
         HistoryAction.EVENT_COMPLETED,

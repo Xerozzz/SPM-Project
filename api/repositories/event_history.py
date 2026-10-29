@@ -18,6 +18,7 @@ from domain.event_history import (
     ChangeItemRecord,
     ChangeRequestRecord,
     ClarificationRecord,
+    ClosureImpactRecord,
     ClosureNoteRecord,
     HistoryAction,
     Person,
@@ -26,8 +27,10 @@ from domain.event_history import (
     RequestRecord,
     RequirementChangeRecord,
     ReservationRecord,
+    SafetyDecisionRecord,
 )
 from domain.event_replanning import ReplanCause
+from domain.safety_review import SafetyDecision
 from models.equipment_requirement_change import EquipmentRequirementChange
 from models.equipment_reservation import EquipmentReservation
 from models.event_change_request import EventChangeItem, EventChangeRequest
@@ -282,13 +285,10 @@ def replan_records(db: Session, event_request_id: uuid.UUID) -> list[ReplanRecor
     ]
 
 
-def replan_cause_records(
-    db: Session, event_request_id: uuid.UUID, booking_ids: list[uuid.UUID]
-) -> list[ReplanCauseRecord]:
-    """The other actions that send an event back to planning, with who and when: approved
-    change requests (SCRUM-47) and closures that hit one of these bookings (SCRUM-132).
-    Venue changes are read from the bookings themselves. A decision links to its own
-    entry (ADR-0068); a closure has none yet, so it links nothing (ADR-0067)."""
+def replan_cause_records(db: Session, event_request_id: uuid.UUID) -> list[ReplanCauseRecord]:
+    """Approved change requests (SCRUM-47), as actions that send an event back to planning,
+    with who and when. Each links to its decision entry (ADR-0068). Venue changes and
+    closures are read from the bookings and closure impacts the history already has."""
     decider = aliased(User)
     changes = (
         select(EventChangeRequest, decider.email)
@@ -298,7 +298,7 @@ def replan_cause_records(
             EventChangeRequest.status == ChangeRequestStatus.APPROVED,
         )
     )
-    causes = [
+    return [
         ReplanCauseRecord(
             ReplanCause.CHANGE_REQUEST,
             Person(change.decided_by_id, email),
@@ -307,23 +307,6 @@ def replan_cause_records(
         )
         for change, email in db.execute(changes).tuples()
         if change.decided_by_id is not None and change.decided_at is not None
-    ]
-    if not booking_ids:
-        return causes
-    recorder = aliased(User)
-    closures = (
-        select(VenueClosureImpact, recorder.email)
-        .outerjoin(recorder, VenueClosureImpact.recorded_by_id == recorder.id)
-        .where(VenueClosureImpact.affected_booking_ids.overlap(booking_ids))
-    )
-    return causes + [
-        ReplanCauseRecord(
-            ReplanCause.VENUE_CLOSURE,
-            Person(impact.recorded_by_id, email),
-            impact.recorded_at,
-            None,
-        )
-        for impact, email in db.execute(closures).tuples()
     ]
 
 
@@ -404,4 +387,54 @@ def closure_note_records(db: Session, event_request_id: uuid.UUID) -> list[Closu
             recorded_at=note.recorded_at,
         )
         for note, email in db.execute(statement).tuples()
+    ]
+
+
+def safety_decision_records(db: Session, event_request_id: uuid.UUID) -> list[SafetyDecisionRecord]:
+    """SCRUM-79's decisions on the event, invalidated ones included, with the Officer's
+    email. Whether the viewer may see them is the history's filter, not this read's."""
+    officer = aliased(User)
+    statement = (
+        select(SafetyReview, officer.email)
+        .outerjoin(officer, SafetyReview.decided_by_id == officer.id)
+        .where(SafetyReview.event_request_id == event_request_id)
+    )
+    return [
+        SafetyDecisionRecord(
+            id=review.id,
+            decision=SafetyDecision(review.decision),
+            comment=review.comment,
+            decided_by=Person(review.decided_by_id, email),
+            decided_at=review.decided_at,
+        )
+        for review, email in db.execute(statement).tuples()
+    ]
+
+
+def closure_impact_records(db: Session, booking_ids: list[uuid.UUID]) -> list[ClosureImpactRecord]:
+    """SCRUM-81's closure snapshots that affected any of these bookings, each with only
+    the affected ids among them, as the buffer-change read does (ADR-0064). A closure that
+    affected none of them has no link to the event, so it is not read."""
+    if not booking_ids:
+        return []
+    recorder = aliased(User)
+    statement = (
+        select(VenueClosureImpact, Venue.name, recorder.email)
+        .join(Venue, VenueClosureImpact.venue_id == Venue.id)
+        .outerjoin(recorder, VenueClosureImpact.recorded_by_id == recorder.id)
+        .where(VenueClosureImpact.affected_booking_ids.overlap(booking_ids))
+    )
+    ours = set(booking_ids)
+    return [
+        ClosureImpactRecord(
+            id=impact.id,
+            venue_name=venue_name,
+            recorded_by=Person(impact.recorded_by_id, email),
+            recorded_at=impact.recorded_at,
+            starts_at=impact.starts_at,
+            ends_at=impact.ends_at,
+            reason=impact.reason,
+            affected_booking_ids=tuple(b for b in impact.affected_booking_ids if b in ours),
+        )
+        for impact, venue_name, email in db.execute(statement).tuples()
     ]

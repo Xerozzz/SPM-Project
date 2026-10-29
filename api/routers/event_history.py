@@ -8,7 +8,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from core.database import get_db
-from core.dependencies import EventAccess, clarification_visibility, require_event_access
+from core.dependencies import (
+    EventAccess,
+    clarification_visibility,
+    require_event_access,
+    safety_review_visibility,
+)
 from models.event_request import EventRequest
 from schemas.event_history import EventHistoryEntryRead
 from services import event_history as service
@@ -21,14 +26,23 @@ HistoryReadableEvent = Annotated[
 ClarificationVisibility = Annotated[
     Callable[[EventRequest], bool], Depends(clarification_visibility)
 ]
+SafetyReviewVisibility = Annotated[
+    Callable[[EventRequest], bool], Depends(safety_review_visibility)
+]
 Db = Annotated[Session, Depends(get_db)]
 
 
 @router.get("/{request_id}/history", response_model=list[EventHistoryEntryRead])
 def read_history(
-    event: HistoryReadableEvent, may_read_clarifications: ClarificationVisibility, db: Db
+    event: HistoryReadableEvent,
+    may_read_clarifications: ClarificationVisibility,
+    may_read_safety_reviews: SafetyReviewVisibility,
+    db: Db,
 ) -> list[EventHistoryEntryRead]:
     """AC1-AC3: the event's recorded actions, oldest first, for the owner, the current
-    assigned Coordinator or any Lead (ADR-0062). Internal notes only for the assignee."""
-    entries = service.history_of(db, event, may_read_clarifications(event))
+    assigned Coordinator or any Lead (ADR-0062). Internal notes only for the assignee;
+    safety decisions only for those who read them elsewhere (SCRUM-120, ADR-0069)."""
+    entries = service.history_of(
+        db, event, may_read_clarifications(event), may_read_safety_reviews(event)
+    )
     return [EventHistoryEntryRead.from_entry(entry) for entry in entries]

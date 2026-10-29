@@ -341,12 +341,7 @@ def require_event_access(permission: EventAccess) -> Callable[..., EventRequest]
         # blocked"), which SCRUM-106 already decided is staff-side rather than something
         # the Organiser reads. No status pin — a decision stays readable afterwards.
         if permission is EventAccess.READ_SAFETY_REVIEWS:
-            is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
-            if (
-                Role.SAFETY_OFFICER.value in roles
-                or Role.COORDINATOR_LEAD.value in roles
-                or is_assigned
-            ):
+            if may_read_safety_reviews(request, roles, viewer_id):
                 return request
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
@@ -393,6 +388,27 @@ def clarification_visibility(
     the route has already loaded and authorised, so the request is not loaded twice."""
     roles, viewer_id = _granted_roles(user), _user_id(user)
     return lambda request: may_read_clarifications(request, roles, viewer_id)
+
+
+def may_read_safety_reviews(request: EventRequest, roles: set[str], viewer_id: uuid.UUID) -> bool:
+    """SCRUM-79 AC9: the Safety Officer, any Lead, and the event's current assigned
+    Coordinator read its safety decisions; the owning Organiser does not.
+
+    The one statement of that rule. READ_SAFETY_REVIEWS asks it to guard the decisions
+    route, and the event history (SCRUM-120, ADR-0069) asks it whether to include decision
+    entries, so the history can never show more or fewer decisions than that route allows.
+    """
+    is_assigned = Role.COORDINATOR.value in roles and request.coordinator_id == viewer_id
+    return Role.SAFETY_OFFICER.value in roles or Role.COORDINATOR_LEAD.value in roles or is_assigned
+
+
+def safety_review_visibility(
+    user: Annotated[dict[str, object], Depends(get_current_user)],
+) -> Callable[[EventRequest], bool]:
+    """SCRUM-120: `may_read_safety_reviews` for the signed-in caller, to apply to an event
+    the route has already loaded and authorised, as `clarification_visibility` does."""
+    roles, viewer_id = _granted_roles(user), _user_id(user)
+    return lambda request: may_read_safety_reviews(request, roles, viewer_id)
 
 
 def _granted_roles(user: dict[str, object]) -> set[str]:
