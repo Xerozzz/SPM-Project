@@ -35,7 +35,23 @@ test('valid sign-in enters the app and shows roles', async () => {
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       )
     }
+    if (
+      url.endsWith('/equipment-types') ||
+      url.endsWith('/venue-names') ||
+      url.endsWith('/organisation-calendar')
+    ) {
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
     if (url.endsWith('/api/event-requests')) {
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+    if (url.endsWith('/api/venues') || url.endsWith('/api/equipment')) {
       return new Response(JSON.stringify([]), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -53,7 +69,7 @@ test('valid sign-in enters the app and shows roles', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
   await waitFor(() => {
-    expect(screen.getByText(/signed in as: organiser/i)).toBeInTheDocument()
+    expect(screen.getByText(/you are logged in as: organiser/i)).toBeInTheDocument()
   })
 })
 

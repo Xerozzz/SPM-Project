@@ -79,7 +79,7 @@ export default function VenueUnavailabilityManager({ venues }: { venues: Venue[]
     <section className="mt-6 border-t border-slate-200 pt-4">
       <h2 className="font-medium">Venue unavailability</h2>
       <p className="mt-1 text-sm text-slate-500">
-        Record maintenance and closures. Calendar display will be added with SCRUM-54.
+        Record maintenance and closures.
       </p>
       <label className="mt-3 block text-sm font-medium">
         Venue

@@ -372,16 +372,11 @@ function BookingDetails({ booking }: { booking: VenueBookingDecision }) {
   const fullWidthLabels = new Set(['When', 'Venue held', 'Equipment'])
   return (
     <div>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Event</p>
-          <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">
-            {booking.event_name ?? 'Untitled event'}
-          </h3>
-        </div>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
-          {booking.session_label}
-        </span>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Event</p>
+        <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">
+          {booking.event_name ?? 'Untitled event'}
+        </h3>
       </div>
       <dl className="mt-5 grid gap-x-8 gap-y-4 text-sm sm:grid-cols-2">
         {rows.map(([label, value]) => (

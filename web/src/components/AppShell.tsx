@@ -27,7 +27,6 @@ export default function AppShell({
   children,
 }: Props) {
   const [mobileOpen, setMobileOpen] = useState(false)
-  const active = items.find((item) => item.id === activeId) ?? items[0]
   const groups = [...new Set(items.map((item) => item.group))]
   const roleSummary = roles.map(formatRole).join(', ')
 
@@ -40,7 +39,7 @@ export default function AppShell({
     <div className="min-h-screen bg-[#f5f5f5] p-0 text-slate-900 lg:h-screen lg:overflow-hidden lg:p-6">
       <aside
         aria-label="Primary navigation"
-        className={`${mobileOpen ? 'fixed inset-y-0 left-0 z-40 w-72 shadow-2xl' : 'hidden'} border-r border-slate-100 bg-white text-slate-700 lg:fixed lg:inset-y-6 lg:left-6 lg:z-30 lg:block lg:w-64 lg:rounded-l-[28px] lg:shadow-sm`}
+        className={`${mobileOpen ? 'fixed inset-y-0 left-0 z-40 flex w-72 flex-col shadow-2xl' : 'hidden'} border-r border-slate-100 bg-white text-slate-700 lg:fixed lg:inset-y-6 lg:left-6 lg:z-30 lg:flex lg:w-64 lg:flex-col lg:rounded-l-[28px] lg:shadow-sm`}
       >
         <div className="flex h-16 items-center justify-between border-b border-slate-100 px-5">
           <div className="flex items-center gap-3">
@@ -55,7 +54,7 @@ export default function AppShell({
             ×
           </button>
         </div>
-        <nav className="space-y-6 p-3">
+        <nav className="flex-1 space-y-6 overflow-y-auto p-3">
           {groups.map((group) => (
             <div key={group}>
               <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
@@ -86,6 +85,14 @@ export default function AppShell({
             </div>
           ))}
         </nav>
+        <div className="border-t border-slate-100 p-4">
+          <p className="text-sm font-medium text-slate-500">
+            You are logged in as: {roleSummary}
+          </p>
+          <button type="button" onClick={onSignOut} className="cs-button-secondary mt-4 w-full">
+            Sign out
+          </button>
+        </div>
       </aside>
 
       {mobileOpen && (
@@ -99,34 +106,17 @@ export default function AppShell({
 
       <div className="lg:h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pl-64 lg:pr-6">
         <div className="min-h-screen bg-white lg:min-h-full lg:rounded-r-[28px]">
-          <header className="sticky top-0 z-20 border-b border-slate-100 bg-white/95 backdrop-blur">
-            <div className="flex min-h-16 items-center gap-3 px-4 sm:px-6">
-              <button
-                type="button"
-                aria-label="Open navigation"
-                onClick={() => setMobileOpen(true)}
-                className="rounded-lg border border-slate-200 p-2 text-slate-700 hover:bg-slate-50 lg:hidden"
-              >
-                ☰
-              </button>
-              <div className="min-w-0 flex-1">
-                <h1 className="truncate text-lg font-semibold tracking-tight text-slate-950">
-                  {active.label}
-                </h1>
-                <p className="hidden truncate text-sm text-slate-500 sm:block">
-                  {active.description}
-                </p>
-              </div>
-              <p className="hidden text-sm font-medium text-slate-500 sm:block">
-                You are logged in as: {roleSummary}
-              </p>
-              <p className="sr-only">You are logged in as: {roleSummary}</p>
-              <button type="button" onClick={onSignOut} className="cs-button-secondary shrink-0">
-                Sign out
-              </button>
-            </div>
-          </header>
-          <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">{children}</main>
+          <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
+            <button
+              type="button"
+              aria-label="Open navigation"
+              onClick={() => setMobileOpen(true)}
+              className="mb-4 rounded-lg border border-slate-200 p-2 text-slate-700 hover:bg-slate-50 lg:hidden"
+            >
+              ☰
+            </button>
+            {children}
+          </main>
         </div>
       </div>
     </div>
