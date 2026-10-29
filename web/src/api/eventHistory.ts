@@ -35,6 +35,8 @@ export type HistoryAction =
   | 'change_decided'
   | 'event_completed'
   | 'closure_corrected'
+  | 'safety_decided'
+  | 'venue_closed'
 
 export type HistorySource =
   | 'event_request'
@@ -47,6 +49,7 @@ export type HistorySource =
   | 'safety_review'
   | 'event_change_request'
   | 'event_closure_note'
+  | 'venue_closure_impact'
 
 /** SCRUM-120: why an event went back to planning. */
 export type ReplanCause = 'change_request' | 'venue_closure' | 'venue_cancellation'
@@ -73,7 +76,8 @@ export interface EventHistoryEntry {
   actor_email: string | null
   source_type: HistorySource
   source_id: string
-  outcome: 'approved' | 'rejected' | null
+  /** SCRUM-120: 'changes_requested' only on a safety decision. */
+  outcome: 'approved' | 'rejected' | 'changes_requested' | null
   reason: string | null
   previous_coordinator_email: string | null
   new_coordinator_email: string | null
@@ -98,6 +102,9 @@ export interface EventHistoryEntry {
   replan_cause: ReplanCause | null
   /** SCRUM-120: the `id`s of the entries this one links to rather than repeats. */
   related_entry_ids: string[]
+  /** SCRUM-120: a venue closure's period (UTC). */
+  period_start_at: string | null
+  period_end_at: string | null
 }
 
 /** The caller may not read this event's history (AC6). */

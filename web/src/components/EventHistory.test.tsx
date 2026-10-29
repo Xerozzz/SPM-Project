@@ -46,6 +46,8 @@ function entry(overrides: Partial<EventHistoryEntry>): EventHistoryEntry {
     actor_recorded: true,
     replan_cause: null,
     related_entry_ids: [],
+    period_start_at: null,
+    period_end_at: null,
     ...overrides,
   }
 }
@@ -696,5 +698,62 @@ describe('SCRUM-120 change request and completion entries (frontend unit)', () =
     expect(corrected).toHaveTextContent('Closure record corrected')
     expect(corrected).toHaveTextContent('Actual attendance: 40 → 42')
     expect(corrected).toHaveTextContent('Record: closure record cn-2')
+  })
+})
+
+describe('SCRUM-120 safety decision and venue closure entries (frontend unit)', () => {
+  test('a safety decision names the Officer, a readable outcome and the comment', async () => {
+    renderWith(
+      ok([
+        entry({
+          id: 'safety_decided:sr-1',
+          action: 'safety_decided',
+          source_type: 'safety_review',
+          source_id: 'sr-1',
+          actor_id: 'u-officer',
+          actor_email: 'officer@example.com',
+          outcome: 'changes_requested',
+          reason: 'Add a second exit sign',
+        }),
+      ]),
+      history,
+    )
+    const row = await screen.findByRole('listitem')
+
+    expect(row).toHaveTextContent('Safety decision: changes requested by officer@example.com')
+    expect(row).toHaveTextContent('Reason: Add a second exit sign')
+    expect(row).not.toHaveTextContent('changes_requested')
+  })
+
+  test('a closure shows its venue, period in Singapore time, reason and arrangements', async () => {
+    const period = { start: '2030-01-10T02:00:00Z', end: '2030-01-10T06:00:00Z' }
+    renderWith(
+      ok([
+        entry({
+          id: 'venue_closed:ci-1',
+          action: 'venue_closed',
+          source_type: 'venue_closure_impact',
+          source_id: 'ci-1',
+          actor_id: 'u-staff',
+          actor_email: 'staff@example.com',
+          venue_name: 'Hall A',
+          reason: 'Burst pipe',
+          affected_booking_ids: ['bk-1'],
+          period_start_at: period.start,
+          period_end_at: period.end,
+        }),
+      ]),
+      history,
+    )
+    const row = await screen.findByRole('listitem')
+
+    expect(row).toHaveTextContent('Venue closure by staff@example.com')
+    expect(row).toHaveTextContent('Hall A')
+    expect(row).toHaveTextContent(
+      `Closed ${formatSingaporeTime(period.start)} to ${formatSingaporeTime(period.end)}`,
+    )
+    expect(row).toHaveTextContent('Reason: Burst pipe')
+    expect(row).toHaveTextContent('Affected arrangements: bk-1')
+    expect(row).toHaveTextContent('Record: venue closure ci-1')
   })
 })

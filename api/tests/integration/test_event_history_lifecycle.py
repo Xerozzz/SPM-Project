@@ -231,7 +231,11 @@ async def test_owner_assignee_and_lead_see_the_same_lifecycle_entries(
 
     new = {"event_confirmed", "returned_to_planning", "event_cancelled"}
     assert {e["action"] for e in bodies[0]} >= new
-    assert all(body == bodies[0] for body in bodies)
+    # SCRUM-120 PR 3: the owner does not see safety decisions (ADR-0069); all else is equal.
+    owner, assignee, lead = bodies
+    assert of(owner, "safety_decided") == []
+    assert assignee == lead
+    assert owner == [e for e in assignee if e["action"] != "safety_decided"]
 
 
 @pytest.mark.story("SCRUM-120")

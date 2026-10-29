@@ -23,6 +23,7 @@ from itertools import pairwise
 from domain.event_change import ChangeRequestStatus
 from domain.event_clarification import ClarificationKind
 from domain.event_replanning import ReplanCause
+from domain.safety_review import SafetyDecision
 from domain.venue_booking import BookingStatus
 
 
@@ -70,6 +71,9 @@ class HistoryAction(StrEnum):
     CHANGE_DECIDED = "change_decided"
     EVENT_COMPLETED = "event_completed"
     CLOSURE_CORRECTED = "closure_corrected"
+    # SCRUM-120 safety decisions and venue closures, appended likewise (ADR-0069).
+    SAFETY_DECIDED = "safety_decided"
+    VENUE_CLOSED = "venue_closed"
 
 
 class HistorySource(StrEnum):
@@ -86,6 +90,7 @@ class HistorySource(StrEnum):
     SAFETY_REVIEW = "safety_review"
     EVENT_CHANGE_REQUEST = "event_change_request"
     EVENT_CLOSURE_NOTE = "event_closure_note"
+    VENUE_CLOSURE_IMPACT = "venue_closure_impact"
 
 
 class HistoryOutcome(StrEnum):
@@ -93,6 +98,8 @@ class HistoryOutcome(StrEnum):
 
     APPROVED = "approved"
     REJECTED = "rejected"
+    # SCRUM-79: the Safety Officer sent the plan back as nearly there, not unsafe.
+    CHANGES_REQUESTED = "changes_requested"
 
 
 @dataclass(frozen=True)
@@ -286,6 +293,32 @@ class ClosureNoteRecord:
 
 
 @dataclass(frozen=True)
+class SafetyDecisionRecord:
+    """One `safety_reviews` row (SCRUM-79): a decision and the comment it was given with."""
+
+    id: uuid.UUID
+    decision: SafetyDecision
+    comment: str
+    decided_by: Person
+    decided_at: datetime
+
+
+@dataclass(frozen=True)
+class ClosureImpactRecord:
+    """One `venue_closure_impacts` row (SCRUM-81): a closure as it was saved, with only the
+    affected arrangements that are this event's. Never changed after it is written."""
+
+    id: uuid.UUID
+    venue_name: str
+    recorded_by: Person
+    recorded_at: datetime
+    starts_at: datetime
+    ends_at: datetime
+    reason: str
+    affected_booking_ids: tuple[uuid.UUID, ...]
+
+
+@dataclass(frozen=True)
 class ReplanRecord:
     """One `safety_reviews` approval that stopped counting because the event went back to
     planning (SCRUM-130). The return writes no row of its own; this marker is its only
@@ -340,6 +373,9 @@ class HistoryEntry:
     replan_cause: ReplanCause | None = None
     # The `key`s of other entries this one is about, so nothing is shown twice.
     related_entry_ids: tuple[str, ...] = ()
+    # SCRUM-120: a closure's period, which is not a session's.
+    period_start_at: datetime | None = None
+    period_end_at: datetime | None = None
 
     @property
     def key(self) -> str:
@@ -822,6 +858,60 @@ def completion_entries(
     return entries
 
 
+_SAFETY_OUTCOMES = {
+    SafetyDecision.APPROVE: HistoryOutcome.APPROVED,
+    SafetyDecision.REJECT: HistoryOutcome.REJECTED,
+    SafetyDecision.REQUEST_CHANGES: HistoryOutcome.CHANGES_REQUESTED,
+}
+
+
+def safety_decision_entry(record: SafetyDecisionRecord) -> HistoryEntry:
+    """SCRUM-79: a Safety Officer's decision with its comment. Every decision is its own
+    row and never edited, so each is shown. Who may see it is `visible`'s question: the
+    owner may not (ADR-0069). That an approval later stopped counting is the return to
+    planning's entry, not this one's."""
+    return HistoryEntry(
+        HistoryAction.SAFETY_DECIDED,
+        record.decided_at,
+        record.decided_by,
+        HistorySource.SAFETY_REVIEW,
+        record.id,
+        outcome=_SAFETY_OUTCOMES[record.decision],
+        reason=record.comment,
+    )
+
+
+def closure_impact_entry(record: ClosureImpactRecord) -> HistoryEntry:
+    """SCRUM-81: a venue closure saved over this event's arrangements, by Venue Staff, with
+    the period and reason as they were then. Each save that hit one is its own row."""
+    return HistoryEntry(
+        HistoryAction.VENUE_CLOSED,
+        record.recorded_at,
+        record.recorded_by,
+        HistorySource.VENUE_CLOSURE_IMPACT,
+        record.id,
+        venue_name=record.venue_name,
+        reason=record.reason,
+        affected_booking_ids=record.affected_booking_ids,
+        period_start_at=record.starts_at,
+        period_end_at=record.ends_at,
+    )
+
+
+def _closure_causes(impacts: Iterable[ClosureImpactRecord]) -> list[ReplanCauseRecord]:
+    """SCRUM-132: a closure saved in the same transaction as a return to planning caused
+    it; its entry is linked (ADR-0069)."""
+    return [
+        ReplanCauseRecord(
+            ReplanCause.VENUE_CLOSURE,
+            i.recorded_by,
+            i.recorded_at,
+            f"{HistoryAction.VENUE_CLOSED}:{i.id}",
+        )
+        for i in impacts
+    ]
+
+
 def _booking_causes(bookings: Iterable[BookingRecord]) -> list[ReplanCauseRecord]:
     """SCRUM-118: every cancelled arrangement could be a venue change; only one cancelled
     in the same transaction as a return to planning will match it."""
@@ -837,13 +927,21 @@ def _booking_causes(bookings: Iterable[BookingRecord]) -> list[ReplanCauseRecord
     ]
 
 
-def visible(entries: Iterable[HistoryEntry], may_read_clarifications: bool) -> list[HistoryEntry]:
+def visible(
+    entries: Iterable[HistoryEntry],
+    may_read_clarifications: bool,
+    may_read_safety_reviews: bool = False,
+) -> list[HistoryEntry]:
     """SCRUM-106: note entries only for a viewer who may read the notes. Anyone else gets
-    no trace of them, not even an entry without its text (ADR-0036)."""
+    no trace of them, not even an entry without its text (ADR-0036).
+
+    SCRUM-120: safety decision entries likewise, only for a viewer who may read safety
+    decisions (ADR-0069). A return to planning is not a decision and stays."""
     return [
         entry
         for entry in entries
-        if may_read_clarifications or entry.source_type is not HistorySource.CLARIFICATION
+        if (may_read_clarifications or entry.source_type is not HistorySource.CLARIFICATION)
+        and (may_read_safety_reviews or entry.action is not HistoryAction.SAFETY_DECIDED)
     ]
 
 
@@ -869,11 +967,15 @@ def timeline(
     replan_causes: Iterable[ReplanCauseRecord] = (),
     change_requests: Iterable[ChangeRequestRecord] = (),
     closure_notes: Iterable[ClosureNoteRecord] = (),
+    safety_decisions: Iterable[SafetyDecisionRecord] = (),
+    closure_impacts: Iterable[ClosureImpactRecord] = (),
+    *,
+    may_read_safety_reviews: bool = False,
 ) -> list[HistoryEntry]:
     """Every reader's entries for one event, filtered for the viewer, oldest first.
 
-    `replan_causes` are the change-request decisions and closures; the venue changes
-    among the causes are read from `bookings`, which are already here."""
+    `replan_causes` are the change-request decisions; venue changes and closures among the
+    causes are read from `bookings` and `closure_impacts`, which are already here."""
     bookings = list(bookings)
     reservations = list(reservations)
     # The other side of each adoption, read from the replacement's own link.
@@ -893,7 +995,8 @@ def timeline(
     entries += [requirement_change_entry(c) for c in requirement_changes]
     for reservation in reservations:
         entries += reservation_entries(reservation)
-    causes = _booking_causes(bookings) + list(replan_causes)
+    closure_impacts = list(closure_impacts)
+    causes = _booking_causes(bookings) + _closure_causes(closure_impacts) + list(replan_causes)
     entries += [replan_entry(r, causes) for r in replans]
     entries += [
         e
@@ -906,4 +1009,6 @@ def timeline(
     for change in change_requests:
         entries += change_request_entries(change)
     entries += completion_entries(request, closure_notes)
-    return ordered(visible(entries, may_read_clarifications))
+    entries += [safety_decision_entry(d) for d in safety_decisions]
+    entries += [closure_impact_entry(i) for i in closure_impacts]
+    return ordered(visible(entries, may_read_clarifications, may_read_safety_reviews))

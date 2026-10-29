@@ -43,7 +43,8 @@ class EventHistoryEntryRead(BaseModel):
     SCRUM-120: `actor_recorded` is False when a person acted but the record keeps no
     actor ("actor not recorded", not the system); `replan_cause` says why an event went
     back to planning; `related_entry_ids` are the `id`s of the entries an event-level
-    entry links to, which are not repeated in it (ADR-0067).
+    entry links to, which are not repeated in it (ADR-0067). `period_start_at` and
+    `period_end_at` are a venue closure's period (ADR-0069).
     """
 
     id: str
@@ -71,6 +72,8 @@ class EventHistoryEntryRead(BaseModel):
     actor_recorded: bool
     replan_cause: ReplanCause | None
     related_entry_ids: list[str]
+    period_start_at: datetime | None
+    period_end_at: datetime | None
 
     @classmethod
     def from_entry(cls, entry: HistoryEntry) -> Self:
@@ -103,4 +106,6 @@ class EventHistoryEntryRead(BaseModel):
             actor_recorded=entry.actor_recorded,
             replan_cause=entry.replan_cause,
             related_entry_ids=list(entry.related_entry_ids),
+            period_start_at=entry.period_start_at,
+            period_end_at=entry.period_end_at,
         )

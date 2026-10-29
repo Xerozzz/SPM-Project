@@ -164,6 +164,13 @@ function HistoryRow({
           {changeValue(change.new, change.kind)}
         </p>
       ))}
+      {entry.period_start_at !== null && entry.period_end_at !== null && (
+        <p>
+          Closed{' '}
+          <time dateTime={entry.period_start_at}>{formatSingaporeTime(entry.period_start_at)}</time>{' '}
+          to <time dateTime={entry.period_end_at}>{formatSingaporeTime(entry.period_end_at)}</time>
+        </p>
+      )}
       {entry.hold_expires_at !== null && (
         <p>
           Held until{' '}
@@ -218,6 +225,8 @@ const ACTION_LABELS: Record<HistoryAction, string> = {
   change_decided: 'Change request decision',
   event_completed: 'Event completed',
   closure_corrected: 'Closure record corrected',
+  safety_decided: 'Safety decision',
+  venue_closed: 'Venue closure',
 }
 
 const CAUSE_LABELS: Record<ReplanCause, string> = {
@@ -237,6 +246,7 @@ const SOURCE_LABELS: Record<HistorySource, string> = {
   safety_review: 'safety approval',
   event_change_request: 'change request',
   event_closure_note: 'closure record',
+  venue_closure_impact: 'venue closure',
 }
 
 /** SCRUM-120: a missing value is "—"; a datetime is shown in Singapore time (ADR-0068). */
@@ -263,7 +273,13 @@ function relatedLabel(entry: EventHistoryEntry): string {
 /** A decision's outcome is part of what happened, so it is named with the action. */
 function actionLabel(entry: EventHistoryEntry): string {
   const label = ACTION_LABELS[entry.action]
-  return entry.outcome === null ? label : `${label}: ${entry.outcome}`
+  return entry.outcome === null ? label : `${label}: ${OUTCOME_LABELS[entry.outcome]}`
+}
+
+const OUTCOME_LABELS: Record<NonNullable<EventHistoryEntry['outcome']>, string> = {
+  approved: 'approved',
+  rejected: 'rejected',
+  changes_requested: 'changes requested',
 }
 
 /** No actor id is the system; an id without an email is a missing user (ADR-0047). */
