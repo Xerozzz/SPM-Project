@@ -428,8 +428,27 @@ def cancel_arrangement(
     reason: str | None,
     now: datetime,
 ) -> VenueBooking:
-    """SCRUM-109 AC1: the Coordinator's single cancellation, staged and committed."""
+    """SCRUM-109 AC1: the Coordinator's single cancellation, staged and committed.
+
+    SCRUM-123: every active Venue Staff member is alerted in the same transaction,
+    so the cancellation and its notifications land or roll back together (ADR-0060).
+    The (venue_cancellation, booking id) source pair makes a retry collide instead
+    of duplicating (ADR-0022). With no active Venue Staff the loop stages nothing
+    and the cancellation still commits (AC1). Replacements (SCRUM-116), venue
+    changes (SCRUM-118) and whole-event cancellations (SCRUM-115) cancel through
+    their own paths and stay silent here.
+    """
     booking = stage_cancellation(db, event_id, booking_id, cancelled_by_id, reason, now)
+    for staff in users_repo.list_active_venue_staff(db):
+        notifications_repo.stage(
+            db,
+            recipient_id=staff.id,
+            event_request_id=booking.event_request_id,
+            type=NotificationType.VENUE_ARRANGEMENT_CANCELLED,
+            source_type=NotificationSource.VENUE_CANCELLATION,
+            source_id=str(booking.id),
+            occurred_at=now,
+        )
     return booking_repo.save_booking(db, booking)
 
 

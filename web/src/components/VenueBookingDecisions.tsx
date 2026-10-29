@@ -79,7 +79,7 @@ export default function VenueBookingDecisions() {
     ) ?? []
 
   return (
-    <section className="mt-6 rounded-lg border border-slate-200 p-4">
+    <section id="venue-booking-decisions" className="mt-6 rounded-lg border border-slate-200 p-4">
       <h2 className="font-medium">Venue booking requests</h2>
       {requests.isPending && <p className="mt-2 text-sm">Loading…</p>}
       {requests.isError && (

@@ -78,6 +78,11 @@ class NotificationType(StrEnum):
     CANCELLATION_REQUESTED = "cancellation_requested"
     CANCELLATION_DECLINED = "cancellation_declined"
     EVENT_CANCELLED = "event_cancelled"
+    # SCRUM-123 AC1/AC2: the Coordinator cancelled one venue arrangement, releasing
+    # the space. The type names the cancellation action, so Venue Staff can tell it
+    # apart from a new request (SCRUM-49) or a whole-event cancellation (SCRUM-115)
+    # without opening the event.
+    VENUE_ARRANGEMENT_CANCELLED = "venue_arrangement_cancelled"
     # SCRUM-85 AC5: arrangements for one of your events are still incomplete with the
     # event approaching. Which of them is read live from the event (ADR-0022 keeps
     # presentation out of the row), so a reminder can never name stale work.
@@ -166,3 +171,10 @@ class NotificationSource(StrEnum):
     CANCELLATION_REQUEST = "cancellation_request"
     CANCELLATION_DECISION = "cancellation_decision"
     EVENT_CANCELLATION = "event_cancellation"
+    # SCRUM-123: one single-arrangement cancellation. The booking row's id is the
+    # source_id, so retrying the same cancellation collides per recipient (idempotent)
+    # while cancelling a different arrangement of the same event stays distinct.
+    # Whole-event cancellations (SCRUM-115) use EVENT_CANCELLATION instead and stay
+    # silent here; replacements (SCRUM-116) and venue changes (SCRUM-118) cancel
+    # through their own flows and do not notify as a Coordinator cancellation.
+    VENUE_CANCELLATION = "venue_cancellation"
