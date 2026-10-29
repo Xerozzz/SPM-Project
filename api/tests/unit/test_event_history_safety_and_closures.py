@@ -169,4 +169,4 @@ def test_safety_and_closure_actions_are_appended_without_moving_any_earlier_one(
     order = list(HistoryAction)
 
     assert order.index(HistoryAction.CLOSURE_CORRECTED) == 27
-    assert order[28:] == [HistoryAction.SAFETY_DECIDED, HistoryAction.VENUE_CLOSED]
+    assert order[28:30] == [HistoryAction.SAFETY_DECIDED, HistoryAction.VENUE_CLOSED]

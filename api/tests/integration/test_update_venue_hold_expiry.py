@@ -1,6 +1,7 @@
 """SCRUM-121: Venue Staff revise an active Tentative hold's current expiry."""
 
 import threading
+import uuid
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -9,11 +10,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from core.database import SessionLocal
+from core.security import hash_password
 from domain.venue_booking import BookingStatus
 from domain.venue_hold import InactiveHoldError
 from models.notification import Notification
 from models.user import User
 from models.venue_booking import VenueBooking
+from models.venue_hold_expiry_change import VenueHoldExpiryChange
 from repositories import venue_availability
 from services import venue_bookings
 from services.venue_hold_expiry import expire_due_holds
@@ -146,10 +149,11 @@ def test_a_failed_save_rolls_back_the_expiry_change(
     db: Session, make_user: MakeUser, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     held = _request(db, make_user("coordinator"), make_venue(db))
+    staff = make_user("venue_staff")
     venue_bookings.hold(
         db,
         held.id,
-        make_user("venue_staff").id,
+        staff.id,
         datetime.now(UTC) + timedelta(days=2),
         datetime.now(UTC),
     )
@@ -162,7 +166,7 @@ def test_a_failed_save_rolls_back_the_expiry_change(
     monkeypatch.setattr(venue_availability, "save_booking", fail_after_flush)
     with pytest.raises(RuntimeError, match="forced failure"):
         venue_bookings.update_hold_expiry(
-            db, held.id, _START - timedelta(days=2), datetime.now(UTC)
+            db, held.id, _START - timedelta(days=2), datetime.now(UTC), staff.id
         )
 
     db.refresh(held)
@@ -180,13 +184,23 @@ def test_an_edit_racing_expiry_has_one_valid_serial_outcome() -> None:
 
     with SessionLocal() as setup:
         venue_bookings.approve(setup, booking_id, committed.user_id, datetime.now(UTC), old_expiry)
+        # SCRUM-136: the update needs a committed Venue Staff actor for its change row.
+        staff = User(
+            email=f"{uuid.uuid4()}@example.com",
+            password_hash=hash_password("password123"),
+            roles=["venue_staff"],
+            organisation_id=committed.organisation_id,
+        )
+        setup.add(staff)
+        setup.commit()
+        staff_id = staff.id
 
     def update() -> None:
         with SessionLocal() as session:
             start_together.wait()
             try:
                 venue_bookings.update_hold_expiry(
-                    session, booking_id, new_expiry, old_expiry - timedelta(seconds=1)
+                    session, booking_id, new_expiry, old_expiry - timedelta(seconds=1), staff_id
                 )
                 outcomes.append("updated")
             except InactiveHoldError:
@@ -218,5 +232,11 @@ def test_an_edit_racing_expiry_has_one_valid_serial_outcome() -> None:
             cleanup.query(Notification).filter(
                 Notification.event_request_id.in_(committed.event_ids)
             ).delete(synchronize_session=False)
+            # SCRUM-136: the change row, if the update won, then its actor, before the
+            # booking and organisation go.
+            cleanup.query(VenueHoldExpiryChange).filter(
+                VenueHoldExpiryChange.booking_id == booking_id
+            ).delete(synchronize_session=False)
+            cleanup.query(User).filter(User.id == staff_id).delete(synchronize_session=False)
             cleanup.commit()
         _delete_committed(committed)

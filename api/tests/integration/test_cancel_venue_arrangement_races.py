@@ -355,7 +355,7 @@ def test_when_the_cancel_holds_the_row_an_expiry_update_is_refused(
         )
         thread, outcome = _in_thread(
             lambda session: venue_bookings.update_hold_expiry(
-                session, booking_id, original + timedelta(hours=6), now
+                session, booking_id, original + timedelta(hours=6), now, made.staff_id
             )
         )
         _wait_until_a_session_waits_for_a_lock()

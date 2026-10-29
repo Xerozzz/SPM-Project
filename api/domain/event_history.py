@@ -74,6 +74,8 @@ class HistoryAction(StrEnum):
     # SCRUM-120 safety decisions and venue closures, appended likewise (ADR-0069).
     SAFETY_DECIDED = "safety_decided"
     VENUE_CLOSED = "venue_closed"
+    # SCRUM-136: Venue Staff moved a tentative hold's expiry. Appended likewise (ADR-0070).
+    HOLD_EXPIRY_CHANGED = "hold_expiry_changed"
 
 
 class HistorySource(StrEnum):
@@ -91,6 +93,7 @@ class HistorySource(StrEnum):
     EVENT_CHANGE_REQUEST = "event_change_request"
     EVENT_CLOSURE_NOTE = "event_closure_note"
     VENUE_CLOSURE_IMPACT = "venue_closure_impact"
+    VENUE_HOLD_EXPIRY_CHANGE = "venue_hold_expiry_change"
 
 
 class HistoryOutcome(StrEnum):
@@ -301,6 +304,21 @@ class SafetyDecisionRecord:
     comment: str
     decided_by: Person
     decided_at: datetime
+
+
+@dataclass(frozen=True)
+class HoldExpiryChangeRecord:
+    """One `venue_hold_expiry_changes` row (SCRUM-136), with its hold's venue and session."""
+
+    id: uuid.UUID
+    venue_name: str
+    session_label: str
+    session_start_at: datetime
+    session_end_at: datetime
+    old_expires_at: datetime
+    new_expires_at: datetime
+    changed_by: Person
+    changed_at: datetime
 
 
 @dataclass(frozen=True)
@@ -898,6 +916,35 @@ def closure_impact_entry(record: ClosureImpactRecord) -> HistoryEntry:
     )
 
 
+def hold_expiry_change_entry(record: HoldExpiryChangeRecord) -> HistoryEntry:
+    """SCRUM-136: Venue Staff extended or shortened a tentative hold.
+
+    Emits exactly the expiry, both sides, as UTC instants the UI shows in local time
+    (ADR-0068). Changes made before SCRUM-136 were not recorded and have no entry; the
+    hold's own entry still shows its latest expiry (ADR-0070).
+    """
+    return HistoryEntry(
+        HistoryAction.HOLD_EXPIRY_CHANGED,
+        record.changed_at,
+        record.changed_by,
+        HistorySource.VENUE_HOLD_EXPIRY_CHANGE,
+        record.id,
+        venue_name=record.venue_name,
+        session_label=record.session_label,
+        session_start_at=record.session_start_at,
+        session_end_at=record.session_end_at,
+        changes=(
+            FieldChange(
+                "expires_at",
+                "Held until",
+                record.old_expires_at.isoformat(),
+                record.new_expires_at.isoformat(),
+                FieldKind.DATETIME,
+            ),
+        ),
+    )
+
+
 def _closure_causes(impacts: Iterable[ClosureImpactRecord]) -> list[ReplanCauseRecord]:
     """SCRUM-132: a closure saved in the same transaction as a return to planning caused
     it; its entry is linked (ADR-0069)."""
@@ -969,6 +1016,7 @@ def timeline(
     closure_notes: Iterable[ClosureNoteRecord] = (),
     safety_decisions: Iterable[SafetyDecisionRecord] = (),
     closure_impacts: Iterable[ClosureImpactRecord] = (),
+    hold_expiry_changes: Iterable[HoldExpiryChangeRecord] = (),
     *,
     may_read_safety_reviews: bool = False,
 ) -> list[HistoryEntry]:
@@ -1011,4 +1059,5 @@ def timeline(
     entries += completion_entries(request, closure_notes)
     entries += [safety_decision_entry(d) for d in safety_decisions]
     entries += [closure_impact_entry(i) for i in closure_impacts]
+    entries += [hold_expiry_change_entry(c) for c in hold_expiry_changes]
     return ordered(visible(entries, may_read_clarifications, may_read_safety_reviews))

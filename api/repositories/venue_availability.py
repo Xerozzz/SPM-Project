@@ -14,6 +14,7 @@ from domain.venue_search import BLOCKING_STATUSES
 from models.event_request import EventRequest
 from models.venue import Venue
 from models.venue_booking import VenueBooking
+from models.venue_hold_expiry_change import VenueHoldExpiryChange
 from models.venue_unavailability import VenueUnavailability
 
 
@@ -238,6 +239,27 @@ def unavailabilities_overlapping(db: Session, booking: VenueBooking) -> list[Ven
         .order_by(VenueUnavailability.starts_at, VenueUnavailability.id)
     )
     return list(db.scalars(statement))
+
+
+def stage_expiry_change(
+    db: Session,
+    booking: VenueBooking,
+    new_expires_at: datetime,
+    changed_by_id: uuid.UUID,
+    changed_at: datetime,
+) -> None:
+    """SCRUM-136: record a hold's expiry change in the caller's transaction, before the
+    booking is changed. Committed or rolled back with the update itself (ADR-0070)."""
+    assert booking.expires_at is not None  # an active hold always has an expiry.
+    db.add(
+        VenueHoldExpiryChange(
+            booking_id=booking.id,
+            old_expires_at=booking.expires_at,
+            new_expires_at=new_expires_at,
+            changed_by_id=changed_by_id,
+            changed_at=changed_at,
+        )
+    )
 
 
 def save_booking(db: Session, booking: VenueBooking) -> VenueBooking:

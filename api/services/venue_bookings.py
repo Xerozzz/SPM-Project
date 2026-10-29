@@ -318,7 +318,11 @@ def hold(
 
 
 def update_hold_expiry(
-    db: Session, booking_id: uuid.UUID, expires_at: datetime, now: datetime
+    db: Session,
+    booking_id: uuid.UUID,
+    expires_at: datetime,
+    now: datetime,
+    changed_by_id: uuid.UUID,
 ) -> VenueBooking:
     """SCRUM-121: replace the current expiry of one active Tentative hold.
 
@@ -326,6 +330,10 @@ def update_hold_expiry(
     the old and new expiry are checked against the same supplied UTC action time. The
     occupied interval and status do not change, so the existing exclusion constraint
     continues to protect buffered overlaps without another conflict check.
+
+    SCRUM-136: a real change is recorded with the old and new expiry, `changed_by_id` and
+    `now`, staged after every check and committed with the update, so a refused or
+    rolled-back update records nothing (ADR-0070).
     """
     booking = booking_repo.get_booking_for_update(db, booking_id)
     if booking is None:
@@ -338,6 +346,8 @@ def update_hold_expiry(
     # autoflushes the pending UPDATE outside the save below.
     event = event_repo.get(db, booking.event_request_id)
     assert event is not None
+    if expires_at != booking.expires_at:
+        booking_repo.stage_expiry_change(db, booking, expires_at, changed_by_id, now)
     booking.expires_at = expires_at
     # SCRUM-122 AC1/AC2: the current Coordinator hears of each expiry edit. Staged
     # before the commit so the edit and its notification land or roll back together.

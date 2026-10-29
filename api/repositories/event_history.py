@@ -21,6 +21,7 @@ from domain.event_history import (
     ClosureImpactRecord,
     ClosureNoteRecord,
     HistoryAction,
+    HoldExpiryChangeRecord,
     Person,
     ReplanCauseRecord,
     ReplanRecord,
@@ -44,6 +45,7 @@ from models.venue import Venue
 from models.venue_booking import VenueBooking
 from models.venue_buffer_change import VenueBufferChange
 from models.venue_closure_impact import VenueClosureImpact
+from models.venue_hold_expiry_change import VenueHoldExpiryChange
 from repositories import coordinator_assignments
 
 
@@ -437,4 +439,35 @@ def closure_impact_records(db: Session, booking_ids: list[uuid.UUID]) -> list[Cl
             affected_booking_ids=tuple(b for b in impact.affected_booking_ids if b in ours),
         )
         for impact, venue_name, email in db.execute(statement).tuples()
+    ]
+
+
+def hold_expiry_change_records(
+    db: Session, booking_ids: list[uuid.UUID]
+) -> list[HoldExpiryChangeRecord]:
+    """SCRUM-136's expiry changes to these bookings, with each hold's venue and session and
+    the Venue Staff member's email."""
+    if not booking_ids:
+        return []
+    changer = aliased(User)
+    statement = (
+        select(VenueHoldExpiryChange, VenueBooking, Venue.name, changer.email)
+        .join(VenueBooking, VenueHoldExpiryChange.booking_id == VenueBooking.id)
+        .join(Venue, VenueBooking.venue_id == Venue.id)
+        .outerjoin(changer, VenueHoldExpiryChange.changed_by_id == changer.id)
+        .where(VenueHoldExpiryChange.booking_id.in_(booking_ids))
+    )
+    return [
+        HoldExpiryChangeRecord(
+            id=change.id,
+            venue_name=venue_name,
+            session_label=booking.session_label,
+            session_start_at=booking.start_at,
+            session_end_at=booking.end_at,
+            old_expires_at=change.old_expires_at,
+            new_expires_at=change.new_expires_at,
+            changed_by=Person(change.changed_by_id, email),
+            changed_at=change.changed_at,
+        )
+        for change, booking, venue_name, email in db.execute(statement).tuples()
     ]

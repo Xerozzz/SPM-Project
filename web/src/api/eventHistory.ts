@@ -37,6 +37,7 @@ export type HistoryAction =
   | 'closure_corrected'
   | 'safety_decided'
   | 'venue_closed'
+  | 'hold_expiry_changed'
 
 export type HistorySource =
   | 'event_request'
@@ -50,6 +51,7 @@ export type HistorySource =
   | 'event_change_request'
   | 'event_closure_note'
   | 'venue_closure_impact'
+  | 'venue_hold_expiry_change'
 
 /** SCRUM-120: why an event went back to planning. */
 export type ReplanCause = 'change_request' | 'venue_closure' | 'venue_cancellation'

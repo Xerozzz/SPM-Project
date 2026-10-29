@@ -40,4 +40,5 @@ from models.venue import Venue as Venue
 from models.venue_booking import VenueBooking as VenueBooking
 from models.venue_buffer_change import VenueBufferChange as VenueBufferChange
 from models.venue_closure_impact import VenueClosureImpact as VenueClosureImpact
+from models.venue_hold_expiry_change import VenueHoldExpiryChange as VenueHoldExpiryChange
 from models.venue_unavailability import VenueUnavailability as VenueUnavailability

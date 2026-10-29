@@ -79,6 +79,7 @@ someone else made two weeks ago.
 | [0067](0067-lifecycle-entries-linked-by-their-transaction-time.md) | Lifecycle entries in the event history, linked by their shared transaction time | Proposed |
 | [0068](0068-change-request-and-completion-entries-with-typed-field-values.md) | Change request and completion entries, with a kind on each field change | Proposed |
 | [0069](0069-safety-decisions-hidden-by-a-shared-rule-and-closure-entries.md) | Safety decision entries hidden by a shared rule, and venue closure entries | Proposed |
+| [0070](0070-hold-expiry-changes-recorded-in-the-update-transaction.md) | Hold expiry changes recorded in the update's transaction | Proposed |
 
 
 ## When to write one
