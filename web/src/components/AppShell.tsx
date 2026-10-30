@@ -103,7 +103,8 @@ export default function AppShell({
         />
       )}
 
-      <div className="bg-white lg:h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pl-64 lg:pr-6 lg:rounded-r-[28px]">
+      {/* Contain positioned field labels here so they cannot extend the outer page. */}
+      <div className="relative bg-white lg:h-[calc(100vh-3rem)] lg:overflow-y-auto lg:overscroll-y-none lg:pl-64 lg:pr-6 lg:rounded-r-[28px]">
         <div className="min-h-screen bg-white lg:min-h-[calc(100vh-3rem)]">
           <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:px-8 lg:pb-8 lg:pt-6">
             <button
