@@ -13,7 +13,8 @@ async function signIn(page: Page, email: string) {
 
 test('a signed-in user sees their private notification inbox', async ({ page }) => {
   await signIn(page, 'organiser@example.com')
-  const inbox = page.getByLabel('Notifications')
+  await page.getByRole('button', { name: /^Notifications/ }).click()
+  const inbox = page.getByRole('region', { name: 'Notifications', exact: true })
   await expect(inbox).toBeVisible()
-  await expect(inbox.getByRole('heading', { name: 'Notifications' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Notifications', level: 1 })).toBeVisible()
 })

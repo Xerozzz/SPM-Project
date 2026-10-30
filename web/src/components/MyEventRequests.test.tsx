@@ -354,3 +354,22 @@ test('status filtering survives opening details and returning to the list', asyn
   expect(screen.getByText('Orientation Day')).toBeInTheDocument()
   expect(screen.getAllByText('Date to be confirmed')).toHaveLength(2)
 })
+
+// SCRUM-46: searching changes the visible summaries without extra API reads.
+test('searches event names and restores the list when cleared', async () => {
+  renderSignedIn({ 'GET /api/event-requests': () => json([draft, submitted]) })
+  await screen.findByText('Orientation Day')
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search my events' }), {
+    target: { value: 'orientation' },
+  })
+  expect(screen.getByText('Orientation Day')).toBeInTheDocument()
+  expect(screen.queryByText('Open Day')).toBeNull()
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search my events' }), {
+    target: { value: 'missing' },
+  })
+  expect(screen.getByText('No events match your search or status filter.')).toBeInTheDocument()
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search my events' }), {
+    target: { value: '' },
+  })
+  expect(screen.getByText('Open Day')).toBeInTheDocument()
+})

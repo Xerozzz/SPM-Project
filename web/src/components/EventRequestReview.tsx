@@ -9,8 +9,9 @@ import {
   listRequestsForReview,
   rejectEventRequest,
 } from '../api/eventRequests'
-import { formatSingaporeTime } from '../api/venueCalendar'
+import { formatDisplayTime } from '../presentation/dates'
 import { useAuth } from '../auth/useAuth'
+import { useEventSelection } from '../hooks/useEventSelection'
 import { hasReviewNote } from '../validation/eventRequestReview'
 import { acceptsOrdinaryUpdate } from '../validation/planningInfo'
 import { AssignmentHistoryToggle } from './AssignmentHistory'
@@ -34,13 +35,14 @@ import VenueBookingRequest from './VenueBookingRequest'
  * is no read-only state for someone else's event. `status_permits` still decides which
  * buttons the status allows; assignment is settled before the response arrives.
  */
-export default function EventRequestReview() {
+export default function EventRequestReview({
+  targetEventId = null,
+}: { targetEventId?: string | null } = {}) {
   const { token } = useAuth()
   const client = useQueryClient()
   const [reason, setReason] = useState<Record<string, string>>({})
   const [outcome, setOutcome] = useState<string | null>(null)
   const [selectedStatus, setSelectedStatus] = useState<EventRequest['status'] | 'all'>('all')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
   const openedFrom = useRef<string | null>(null)
   const detailsHeading = useRef<HTMLHeadingElement>(null)
   const queryKey = ['event-requests', 'coordinator', token]
@@ -58,6 +60,7 @@ export default function EventRequestReview() {
     enabled: token !== null,
   })
   const refresh = () => void client.invalidateQueries({ queryKey })
+  const [selectedId, setSelectedId] = useEventSelection(targetEventId, requests.data)
   const groupedRequests = ['submitted', 'approved', 'confirmed']
     .map((status) => ({
       status: status as EventRequest['status'],
@@ -156,7 +159,7 @@ export default function EventRequestReview() {
                     <dt className="text-xs text-slate-500">Schedule · Singapore time</dt>
                     <dd className="mt-1">
                       {request.start_at
-                        ? formatSingaporeTime(request.start_at)
+                        ? formatDisplayTime(request.start_at)
                         : 'Date to be confirmed'}
                     </dd>
                   </div>

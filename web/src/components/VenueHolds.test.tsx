@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
+import { formatDisplayTime } from '../presentation/dates'
 import type { CalendarEntry, CalendarEntryDetails } from '../api/venueCalendar'
 import {
   describeConflict,
@@ -251,7 +252,7 @@ test('SCRUM-83 AC2: the calendar labels a hold Tentative and says until when', a
   })
 
   const entry = await screen.findByRole('button', { name: /Tentative hold/ })
-  expect(entry).toHaveTextContent(`Held until ${sgt('2030-03-01T09:00:00Z')}`)
+  expect(entry).toHaveTextContent(`Held until ${formatDisplayTime('2030-03-01T09:00:00Z')}`)
   expect(screen.getByRole('button', { name: /Confirmed booking/ })).not.toHaveTextContent(
     'Held until',
   )

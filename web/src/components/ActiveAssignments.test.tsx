@@ -97,12 +97,12 @@ test('shows assigned and unassigned rows with every required field', async () =>
     '2026-12-01T05:00:00Z',
     'coordinator@example.com',
   ]) {
-    expect(screen.getByText(value)).toBeDefined()
+    expect(screen.getAllByText(value).length).toBeGreaterThan(0)
   }
   fireEvent.click(screen.getByRole('button', { name: '← Back to Active Assignments' }))
   await openDetails('Open Day')
   for (const value of ['req-2', 'approved', 'organiser2@example.com', 'Open Day', 'Unassigned']) {
-    expect(screen.getByText(value)).toBeDefined()
+    expect(screen.getAllByText(value).length).toBeGreaterThan(0)
   }
   expect(screen.getByLabelText('Active requests')).toBeDefined()
 })

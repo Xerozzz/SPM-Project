@@ -13,7 +13,19 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from domain.notifications import NotificationSource, NotificationType
+from models.event_request import EventRequest
 from models.notification import Notification
+
+
+def event_names_for_recipient(db: Session, recipient_id: uuid.UUID) -> dict[uuid.UUID, str | None]:
+    """Live event titles from this recipient's notifications only (SCRUM-99)."""
+    statement = (
+        select(EventRequest.id, EventRequest.name)
+        .join(Notification, Notification.event_request_id == EventRequest.id)
+        .where(Notification.recipient_id == recipient_id)
+        .distinct()
+    )
+    return dict(db.execute(statement).tuples().all())
 
 
 def list_for_recipient(db: Session, recipient_id: uuid.UUID) -> list[Notification]:

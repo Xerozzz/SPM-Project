@@ -504,3 +504,43 @@ test('SCRUM-43: an event needing nothing says so rather than looking unanswered'
   expect(screen.getByText('None recorded')).toBeInTheDocument()
   expect(screen.queryByText('Not given')).toBeNull()
 })
+
+// SCRUM-40: name, venue and Singapore-day filters operate on the permitted list.
+test('combines booking filters and clears them without changing status tabs', async () => {
+  renderPanel(async () =>
+    json([
+      PENDING,
+      {
+        ...PENDING,
+        id: 'b-2',
+        event_name: 'Evening Talk',
+        venue_id: 'v-2',
+        venue_name: 'Hall B',
+        start_at: '2030-01-01T16:00:00Z',
+        end_at: '2030-01-01T18:00:00Z',
+        effective_start_at: '2030-01-01T16:00:00Z',
+        effective_end_at: '2030-01-01T18:00:00Z',
+      },
+    ]),
+  )
+  await screen.findByText('Evening Talk')
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search bookings' }), {
+    target: { value: 'talk' },
+  })
+  fireEvent.change(screen.getByLabelText('Venue'), { target: { value: 'v-2' } })
+  fireEvent.change(screen.getByLabelText('Session date (Singapore)'), {
+    target: { value: '2030-01-01' },
+  })
+  expect(screen.getByText('No bookings match your filters.')).toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText('Session date (Singapore)'), {
+    target: { value: '2030-01-02' },
+  })
+  expect(screen.getByText('Evening Talk')).toBeInTheDocument()
+  expect(screen.queryByText('Orientation Day')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+  expect(screen.getByText('Orientation Day')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Pending review 2' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+})

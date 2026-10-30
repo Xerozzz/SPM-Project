@@ -116,7 +116,7 @@ test('links registration-status notifications to the attendee registration view'
     json([{ ...newer, type: 'registration_accepted', source_type: 'registration_status' }]),
   )
   const link = await screen.findByRole('link', { name: 'View my registration status' })
-  expect(link.getAttribute('href')).toBe('#event-registration-req-1')
+  expect(link.getAttribute('href')).toBe('?view=registrations&event=req-1')
 })
 
 // TC-124-04: an equipment-review item identifies the requirement (source id),
@@ -139,7 +139,7 @@ test('links equipment-review notifications to the authorised review queue', asyn
   expect(item.textContent).toContain('change-1')
   expect(item.textContent).toContain('2026-04-01T10:00:00Z')
   const link = screen.getByRole('link', { name: 'Review equipment requirements' })
-  expect(link.getAttribute('href')).toBe('#equipment-review-queue')
+  expect(link.getAttribute('href')).toBe('?view=equipment-review&event=req-1')
 })
 
 // TC-125-05: a review-outcome and a reservation item each identify the requirement
@@ -154,15 +154,13 @@ test.each([
   ['equipment_reserved_partial', 'equipment_reservation'],
 ])('links %s notifications to the authorised coordinator view', async (type, source) => {
   signIn()
-  renderInbox(async () =>
-    json([{ ...newer, type, source_type: source, source_id: 'outcome-1' }]),
-  )
+  renderInbox(async () => json([{ ...newer, type, source_type: source, source_id: 'outcome-1' }]))
   const item = await screen.findByRole('listitem')
   expect(item.textContent).toContain(type)
   expect(item.textContent).toContain('outcome-1')
   expect(item.textContent).toContain('2026-04-01T10:00:00Z')
   const link = screen.getByRole('link', { name: 'View equipment outcome' })
-  expect(link.getAttribute('href')).toBe('#coordinator-events')
+  expect(link.getAttribute('href')).toBe('?view=review-queue&event=req-1')
 })
 
 // TC-122-05: a venue decision and a hold-expiry edit each identify the arrangement
@@ -175,15 +173,13 @@ test.each([
   ['venue_hold_expiry_updated', 'venue_decision'],
 ])('links %s notifications to the authorised coordinator view', async (type, source) => {
   signIn()
-  renderInbox(async () =>
-    json([{ ...newer, type, source_type: source, source_id: 'decision-1' }]),
-  )
+  renderInbox(async () => json([{ ...newer, type, source_type: source, source_id: 'decision-1' }]))
   const item = await screen.findByRole('listitem')
   expect(item.textContent).toContain(type)
   expect(item.textContent).toContain('decision-1')
   expect(item.textContent).toContain('2026-04-01T10:00:00Z')
   const link = screen.getByRole('link', { name: 'View venue decision' })
-  expect(link.getAttribute('href')).toBe('#coordinator-events')
+  expect(link.getAttribute('href')).toBe('?view=review-queue&event=req-1')
 })
 
 // TC-123-05 (frontend part): a cancelled arrangement identifies the booking
@@ -206,7 +202,7 @@ test('links venue-cancellation notifications to the authorised staff view', asyn
   expect(item.textContent).toContain('booking-1')
   expect(item.textContent).toContain('2026-04-01T10:00:00Z')
   const link = screen.getByRole('link', { name: 'View venue booking decisions' })
-  expect(link.getAttribute('href')).toBe('#venue-booking-decisions')
+  expect(link.getAttribute('href')).toBe('?view=booking-decisions&event=req-1')
 })
 
 // TC-127-04 (frontend part): a revised request identifies the replacement booking
@@ -229,7 +225,7 @@ test('links venue-revision notifications to the authorised staff view', async ()
   expect(item.textContent).toContain('revision-1')
   expect(item.textContent).toContain('2026-04-01T10:00:00Z')
   const link = screen.getByRole('link', { name: 'Review revised venue request' })
-  expect(link.getAttribute('href')).toBe('#venue-booking-decisions')
+  expect(link.getAttribute('href')).toBe('?view=booking-decisions&event=req-1')
 })
 
 test('shows an error state when the inbox fails to load', async () => {
@@ -238,4 +234,18 @@ test('shows an error state when the inbox fails to load', async () => {
     throw new Error('boom')
   })
   await waitFor(() => expect(screen.getByRole('alert')).toBeDefined())
+})
+
+test('SCRUM-99: shows the event title and readable action while technical details stay collapsed', async () => {
+  signIn()
+  renderInbox(async () =>
+    json([{ ...newer, event_name: 'Welcome Fair', type: 'request_approved' }]),
+  )
+  expect(await screen.findByRole('heading', { name: 'Event request approved' })).toBeVisible()
+  expect(screen.getByText('Welcome Fair')).toBeVisible()
+  expect(screen.getByText('Record details').closest('details')).not.toHaveAttribute('open')
+  expect(screen.getByRole('link', { name: 'View event' })).toHaveAttribute(
+    'href',
+    '?view=my-events&event=req-1',
+  )
 })

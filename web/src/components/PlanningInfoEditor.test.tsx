@@ -70,6 +70,9 @@ function renderPanel(request: unknown, update: () => Response = () => json(reque
 }
 
 async function openEditor() {
+  if (!screen.queryByRole('button', { name: /Back to Review Queue/ })) {
+    fireEvent.click(await screen.findByRole('button', { name: 'View details for Orientation Day' }))
+  }
   fireEvent.click(await screen.findByRole('button', { name: 'Edit planning information' }))
   return screen.getByRole('form', { name: 'Edit planning information' })
 }
@@ -199,6 +202,7 @@ test('SCRUM-36 AC5: a Confirmed event does not offer ordinary edits', async () =
 test('SCRUM-36 AC1: an Approved event still offers ordinary edits', async () => {
   renderPanel({ ...submitted, status: 'approved', status_permits: [] })
 
+  fireEvent.click(await screen.findByRole('button', { name: 'View details for Orientation Day' }))
   expect(
     await screen.findByRole('button', { name: 'Edit planning information' }),
   ).toBeInTheDocument()

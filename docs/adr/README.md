@@ -88,6 +88,7 @@ someone else made two weeks ago.
 | [0076](0076-venue-booking-summary-and-details.md) | Separate venue booking hold and decision summaries from details | Proposed |
 | [0077](0077-responsive-sign-in-with-existing-illustration.md) | Present sign-in beside the existing team illustration | Proposed |
 | [0078](0078-venue-booking-summary-and-details-views.md) | Review venue bookings through summaries and a details view | Proposed |
+| [0079](0079-workspace-navigation-and-usability-conventions.md) | Use URL navigation and readable workspace presentation | Proposed |
 
 ## When to write one
 

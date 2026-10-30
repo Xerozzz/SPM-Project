@@ -15,20 +15,27 @@ import {
   updateVenueHoldExpiry,
 } from '../api/venueBookingDecisions'
 import { useAuth } from '../auth/useAuth'
+import { formatDateRange, formatDisplayTime, sessionOnDay } from '../presentation/dates'
+import { matchesSearch } from '../presentation/search'
+import { useEventSelection } from '../hooks/useEventSelection'
 
 type BookingTab = 'pending' | 'held' | 'decided'
 
 /** SCRUM-40: Venue Staff review pending booking requests and reject them.
  * SCRUM-75: they also see any clash and approve requests that have none.
  * SCRUM-110: approval creates a time-limited tentative hold, so it needs an expiry. */
-export default function VenueBookingDecisions() {
+export default function VenueBookingDecisions({
+  targetEventId = null,
+}: { targetEventId?: string | null } = {}) {
   const { token } = useAuth()
   const client = useQueryClient()
   const [reasons, setReasons] = useState<Record<string, string>>({})
   const [holdUntil, setHoldUntil] = useState<Record<string, string>>({})
   const [outcome, setOutcome] = useState<string | null>(null)
   const [selectedTab, setSelectedTab] = useState<BookingTab>('pending')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [venueId, setVenueId] = useState('')
+  const [sessionDay, setSessionDay] = useState('')
   const panel = useRef<HTMLElement>(null)
   const openedFrom = useRef<string | null>(null)
   const queryKey = ['venue-bookings', token]
@@ -78,6 +85,7 @@ export default function VenueBookingDecisions() {
     approve.reset()
     updateExpiry.reset()
   }
+  const [selectedId, setSelectedId] = useEventSelection(targetEventId, requests.data)
   const pending = requests.data?.filter((booking) => booking.status === 'pending') ?? []
   const held = requests.data?.filter((booking) => booking.status === 'tentative') ?? []
   const decided =
@@ -88,6 +96,18 @@ export default function VenueBookingDecisions() {
     { id: 'pending' as const, label: 'Pending review', bookings: pending },
     { id: 'held' as const, label: 'Tentative holds', bookings: held },
     { id: 'decided' as const, label: 'Decided', bookings: decided },
+  ]
+  const visibleBookings = (
+    tabGroups.find((group) => group.id === selectedTab)?.bookings ?? []
+  ).filter(
+    (booking) =>
+      matchesSearch(search, booking.event_name, booking.venue_name, booking.session_label) &&
+      (!venueId || booking.venue_id === venueId) &&
+      (!sessionDay || sessionOnDay(booking.start_at, booking.end_at, sessionDay)),
+  )
+  const filtered = Boolean(search || venueId || sessionDay)
+  const venues = [
+    ...new Map(requests.data?.map((booking) => [booking.venue_id, booking.venue_name])).entries(),
   ]
   const pendingDetails = pending.filter((booking) => booking.id === selectedId)
   const heldDetails = held.filter((booking) => booking.id === selectedId)
@@ -136,6 +156,57 @@ export default function VenueBookingDecisions() {
           Could not load booking requests: {requests.error.message}
         </p>
       )}
+      {!selectedId && (
+        <div className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
+          <label>
+            Search bookings
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Event, venue or session"
+              className="cs-field"
+            />
+          </label>
+          <label>
+            Venue
+            <select
+              value={venueId}
+              onChange={(event) => setVenueId(event.target.value)}
+              className="cs-field"
+            >
+              <option value="">All venues</option>
+              {venues.map(([id, name]) => (
+                <option key={id} value={id}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Session date (Singapore)
+            <input
+              type="date"
+              value={sessionDay}
+              onChange={(event) => setSessionDay(event.target.value)}
+              className="cs-field"
+            />
+          </label>
+        </div>
+      )}
+      {filtered && !selectedId && (
+        <button
+          type="button"
+          className="mt-3 text-sm text-sky-800 underline"
+          onClick={() => {
+            setSearch('')
+            setVenueId('')
+            setSessionDay('')
+          }}
+        >
+          Clear filters
+        </button>
+      )}
       {requests.isSuccess && !selectedId && (
         <div
           role="group"
@@ -160,26 +231,31 @@ export default function VenueBookingDecisions() {
           ))}
         </div>
       )}
-      {!selectedId && selectedTab === 'pending' && requests.isSuccess && pending.length === 0 && (
-        <p className="mt-5 text-sm text-slate-500">No booking requests are waiting.</p>
-      )}
+      {!selectedId &&
+        !filtered &&
+        selectedTab === 'pending' &&
+        requests.isSuccess &&
+        pending.length === 0 && (
+          <p className="mt-5 text-sm text-slate-500">No booking requests are waiting.</p>
+        )}
       {!selectedId && (
         <div className="mt-5 grid gap-4 xl:grid-cols-2">
-          {tabGroups
-            .find((group) => group.id === selectedTab)
-            ?.bookings.map((booking) => (
-              <BookingSummary
-                key={booking.id}
-                booking={booking}
-                onOpen={() => {
-                  openedFrom.current = `view-booking-${booking.id}`
-                  resetAll()
-                  setOutcome(null)
-                  setSelectedId(booking.id)
-                }}
-              />
-            ))}
+          {visibleBookings.map((booking) => (
+            <BookingSummary
+              key={booking.id}
+              booking={booking}
+              onOpen={() => {
+                openedFrom.current = `view-booking-${booking.id}`
+                resetAll()
+                setOutcome(null)
+                setSelectedId(booking.id)
+              }}
+            />
+          ))}
         </div>
+      )}
+      {!selectedId && filtered && requests.isSuccess && visibleBookings.length === 0 && (
+        <p className="mt-5 text-sm text-slate-500">No bookings match your filters.</p>
       )}
       {selectedId &&
         pendingDetails.map((booking) => (
@@ -301,9 +377,13 @@ export default function VenueBookingDecisions() {
           ))}
         </>
       )}
-      {!selectedId && selectedTab === 'held' && requests.isSuccess && held.length === 0 && (
-        <p className="mt-5 text-sm text-slate-500">There are no tentative holds.</p>
-      )}
+      {!selectedId &&
+        !filtered &&
+        selectedTab === 'held' &&
+        requests.isSuccess &&
+        held.length === 0 && (
+          <p className="mt-5 text-sm text-slate-500">There are no tentative holds.</p>
+        )}
       {selectedId && decidedDetails.length > 0 && (
         <>
           <h3 className="sr-only">Decided</h3>
@@ -312,9 +392,13 @@ export default function VenueBookingDecisions() {
           ))}
         </>
       )}
-      {!selectedId && selectedTab === 'decided' && requests.isSuccess && decided.length === 0 && (
-        <p className="mt-5 text-sm text-slate-500">There are no decided booking requests.</p>
-      )}
+      {!selectedId &&
+        !filtered &&
+        selectedTab === 'decided' &&
+        requests.isSuccess &&
+        decided.length === 0 && (
+          <p className="mt-5 text-sm text-slate-500">There are no decided booking requests.</p>
+        )}
     </section>
   )
 }
@@ -355,20 +439,18 @@ function BookingSummary({
       <dl className="mt-4 flex-1 space-y-3 text-sm">
         <div>
           <dt className="text-xs text-slate-500">Session · Singapore time</dt>
-          <dd className="mt-1">
-            {formatSingaporeTime(booking.start_at)} to {formatSingaporeTime(booking.end_at)}
-          </dd>
+          <dd className="mt-1">{formatDateRange(booking.start_at, booking.end_at)}</dd>
         </div>
         {booking.status === 'tentative' && booking.expires_at && (
           <div>
             <dt className="text-xs text-slate-500">Hold expires</dt>
-            <dd className="mt-1">{formatSingaporeTime(booking.expires_at)}</dd>
+            <dd className="mt-1">{formatDisplayTime(booking.expires_at)}</dd>
           </div>
         )}
         {booking.status !== 'pending' && booking.status !== 'tentative' && (
           <div>
             <dt className="text-xs text-slate-500">Decision made</dt>
-            <dd className="mt-1 break-words">{decisionOf(booking)}</dd>
+            <dd className="mt-1 break-words">{decisionOf(booking, true)}</dd>
           </div>
         )}
       </dl>
@@ -458,8 +540,9 @@ function DecidedDetails({ booking }: { booking: VenueBookingDecision }) {
   )
 }
 
-function decisionOf(booking: VenueBookingDecision) {
-  return `${STATUS_LABELS[booking.status]}${booking.status === 'expired' && booking.expires_at ? ` at ${formatSingaporeTime(booking.expires_at)}` : ''}${booking.decided_at ? ` on ${formatSingaporeTime(booking.decided_at)}` : ''}${booking.decision_reason ? `: ${booking.decision_reason}` : ''}`
+function decisionOf(booking: VenueBookingDecision, compact = false) {
+  const formatTime = compact ? formatDisplayTime : formatSingaporeTime
+  return `${STATUS_LABELS[booking.status]}${booking.status === 'expired' && booking.expires_at ? ` at ${formatTime(booking.expires_at)}` : ''}${booking.decided_at ? ` on ${formatTime(booking.decided_at)}` : ''}${booking.decision_reason ? `: ${booking.decision_reason}` : ''}`
 }
 
 function BookingDetails({ booking }: { booking: VenueBookingDecision }) {

@@ -16,15 +16,15 @@ async function signOut(page: Page) {
 }
 
 function ownRow(page: Page, name: string) {
-  const ownRequests = page
-    .getByRole('heading', { name: 'My event requests' })
-    .locator('xpath=../following-sibling::ul[1]')
-  return ownRequests.getByRole('listitem').filter({ hasText: name })
+  return page
+    .locator('main')
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name, exact: true }) })
 }
 
 function inboxEntries(page: Page, type: string, eventId: string) {
   return page
-    .getByLabel('Notifications')
+    .getByRole('region', { name: 'Notifications', exact: true })
     .getByRole('listitem')
     .filter({ hasText: type })
     .filter({ hasText: eventId })
@@ -47,7 +47,8 @@ test('an approved request notifies the owning organiser inbox', async ({ page })
   // Every inbox assertion below is scoped to this run's event ID, so parallel
   // specs deciding other requests cannot shift the counts.
   await signIn(page, 'organiser@example.com')
-  await expect(page.getByRole('heading', { name: 'My event requests' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'My Events', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: /Create event$/ }).click()
 
   await page.getByLabel('Name *').fill(name)
   await page.getByLabel('Purpose *').fill('Welcome new students')
@@ -86,8 +87,11 @@ test('an approved request notifies the owning organiser inbox', async ({ page })
 
   // The assigned coordinator approves the request.
   await signIn(page, 'coordinator@example.com')
-  const review = page.getByRole('heading', { name: 'Coordinator events' }).locator('..')
-  const card = review.getByRole('article').filter({ hasText: name })
+  await page.getByRole('button', { name: `View details for ${name}` }).click()
+  const card = page
+    .locator('main')
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name, exact: true }) })
   await expect(card).toBeVisible()
   await card.getByRole('button', { name: 'Approve' }).click()
   await expect(page.getByRole('status').filter({ hasText: 'has been approved' })).toContainText(
@@ -97,12 +101,23 @@ test('an approved request notifies the owning organiser inbox', async ({ page })
 
   // The owning organiser gains exactly one unread approval notification.
   await signIn(page, 'organiser@example.com')
+  await page.getByRole('button', { name: /^Notifications/ }).click()
   const entries = inboxEntries(page, 'request_approved', eventId)
   await expect(entries).toHaveCount(1)
   await expect(entries.first()).toContainText('Unread')
+  await expect(
+    entries.first().getByRole('heading', { name: 'Event request approved' }),
+  ).toBeVisible()
+  await expect(entries.first()).toContainText(name)
+  await entries.first().getByRole('link', { name: 'View event' }).click()
+  await expect(page.getByRole('heading', { name, exact: true })).toBeVisible()
+  await expect(page).toHaveURL(new RegExp(`view=my-events&event=${eventId}`))
+  await page.reload()
+  await expect(page.getByRole('heading', { name, exact: true })).toBeVisible()
   await signOut(page)
 
   // An unrelated user gains no decision notification.
   await signIn(page, 'attendee@example.com')
+  await page.getByRole('button', { name: /^Notifications/ }).click()
   await expect(inboxEntries(page, 'request_', eventId)).toHaveCount(0)
 })

@@ -14,6 +14,7 @@ type Props = {
   onNavigate: (id: string) => void
   onSignOut: () => void
   roles: string[]
+  unreadCount?: number
   children: React.ReactNode
 }
 
@@ -25,6 +26,7 @@ export default function AppShell({
   onSignOut,
   roles,
   children,
+  unreadCount = 0,
 }: Props) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const active = items.find((item) => item.id === activeId) ?? items[0]
@@ -80,6 +82,14 @@ export default function AppShell({
                         {item.icon}
                       </span>
                       {item.label}
+                      {item.id === 'notifications' && unreadCount > 0 && (
+                        <span
+                          aria-label={`${unreadCount} unread notifications`}
+                          className="ml-auto rounded-full bg-slate-900 px-2 py-0.5 text-xs text-white"
+                        >
+                          {unreadCount}
+                        </span>
+                      )}
                     </button>
                   ))}
               </div>

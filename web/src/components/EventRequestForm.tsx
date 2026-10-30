@@ -15,6 +15,7 @@ import {
   updateDraft,
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
+import { useUnsavedChanges } from '../hooks/useUnsavedChanges'
 import {
   type EventRequestFieldErrors,
   type EventRequestFieldName,
@@ -62,11 +63,13 @@ const textFields: Array<{
 export default function EventRequestForm({
   editing = null,
   onDone = () => {},
+  onDirtyChange,
 }: {
   /** A draft the organiser chose to edit. Null means a new request. */
   editing?: EventRequest | null
   /** Return to My Events, with a confirmation after a successful save or submission. */
   onDone?: (message?: string) => void
+  onDirtyChange?: (dirty: boolean) => void
 } = {}) {
   const { token } = useAuth()
   const queryClient = useQueryClient()
@@ -99,6 +102,12 @@ export default function EventRequestForm({
     // the scroll only helps people who can see it.
     section.current?.querySelector<HTMLInputElement>('#name')?.focus({ preventScroll: true })
   }, [editingId])
+
+  const savedValues = editing ? formValuesOf(editing) : initialValues
+  const dirty = (Object.keys(initialValues) as FieldName[]).some(
+    (name) => values[name] !== savedValues[name],
+  )
+  useUnsavedChanges(dirty, onDirtyChange)
 
   const equipmentTypes = useQuery({
     queryKey: ['equipment-types', token],
@@ -231,6 +240,28 @@ export default function EventRequestForm({
     saveDraft.mutate(draftBody())
   }
 
+  function renderTextField({ name, multiline }: (typeof textFields)[number]) {
+    return (
+      <Field key={name} name={name} error={errors[name]}>
+        {multiline ? (
+          <textarea
+            id={name}
+            value={values[name]}
+            onChange={(event) => change(name, event.target.value)}
+            className="cs-field min-h-24 resize-y"
+          />
+        ) : (
+          <input
+            id={name}
+            value={values[name]}
+            onChange={(event) => change(name, event.target.value)}
+            className="cs-field"
+          />
+        )}
+      </Field>
+    )
+  }
+
   return (
     <section ref={section} className="cs-panel mt-6">
       <div className="border-b border-slate-100 pb-4">
@@ -242,77 +273,75 @@ export default function EventRequestForm({
         </p>
       </div>
       <form className="mt-4 space-y-4" noValidate onSubmit={create}>
-        {textFields.map(({ name, multiline }) => (
-          <Field key={name} name={name} error={errors[name]}>
-            {multiline ? (
-              <textarea
-                id={name}
-                value={values[name]}
-                onChange={(event) => change(name, event.target.value)}
-                className="cs-field min-h-24 resize-y"
-              />
-            ) : (
+        <fieldset className="space-y-4 border-b border-slate-100 pb-6">
+          <legend className="mb-4 text-lg font-semibold">Event details</legend>
+          {textFields
+            .filter((field) => ['name', 'purpose', 'description'].includes(field.name))
+            .map(renderTextField)}
+        </fieldset>
+        <fieldset className="space-y-4 border-b border-slate-100 pb-6">
+          <legend className="mb-4 text-lg font-semibold">Schedule and attendance</legend>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field name="start_at" error={errors.start_at}>
               <input
-                id={name}
-                value={values[name]}
-                onChange={(event) => change(name, event.target.value)}
+                id="start_at"
+                type="datetime-local"
+                value={values.start_at}
+                onChange={(event) => change('start_at', event.target.value)}
                 className="cs-field"
               />
-            )}
-          </Field>
-        ))}
-        <CatalogueRequirementField
-          name="venue_requirement"
-          options={venueNames.data ?? []}
-          placeholder="Select a venue"
-          value={values.venue_requirement}
-          error={errors.venue_requirement}
-          onChange={(value) => change('venue_requirement', value)}
-        />
-        <CatalogueRequirementField
-          name="equipment_requirement"
-          options={equipmentTypes.data ?? []}
-          placeholder="Select equipment"
-          value={values.equipment_requirement}
-          error={errors.equipment_requirement}
-          onChange={(value) => change('equipment_requirement', value)}
-        />
-        {(equipmentTypes.isError || venueNames.isError) && (
-          <p role="alert" className="text-sm text-red-600">
-            {equipmentTypes.error?.message ?? venueNames.error?.message}
-          </p>
-        )}
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field name="start_at" error={errors.start_at}>
+            </Field>
+            <Field name="end_at" error={errors.end_at}>
+              <input
+                id="end_at"
+                type="datetime-local"
+                value={values.end_at}
+                onChange={(event) => change('end_at', event.target.value)}
+                className="cs-field"
+              />
+            </Field>
+          </div>
+          <Field name="expected_attendance" error={errors.expected_attendance}>
             <input
-              id="start_at"
-              type="datetime-local"
-              value={values.start_at}
-              onChange={(event) => change('start_at', event.target.value)}
+              id="expected_attendance"
+              type="number"
+              min="1"
+              step="1"
+              value={values.expected_attendance}
+              onChange={(event) => change('expected_attendance', event.target.value)}
               className="cs-field"
             />
           </Field>
-          <Field name="end_at" error={errors.end_at}>
-            <input
-              id="end_at"
-              type="datetime-local"
-              value={values.end_at}
-              onChange={(event) => change('end_at', event.target.value)}
-              className="cs-field"
-            />
-          </Field>
-        </div>
-        <Field name="expected_attendance" error={errors.expected_attendance}>
-          <input
-            id="expected_attendance"
-            type="number"
-            min="1"
-            step="1"
-            value={values.expected_attendance}
-            onChange={(event) => change('expected_attendance', event.target.value)}
-            className="cs-field"
+        </fieldset>
+        <fieldset className="space-y-4 pb-4">
+          <legend className="mb-4 text-lg font-semibold">
+            Venue, equipment and additional needs
+          </legend>
+          <CatalogueRequirementField
+            name="venue_requirement"
+            options={venueNames.data ?? []}
+            placeholder="Select a venue"
+            value={values.venue_requirement}
+            error={errors.venue_requirement}
+            onChange={(value) => change('venue_requirement', value)}
           />
-        </Field>
+          <CatalogueRequirementField
+            name="equipment_requirement"
+            options={equipmentTypes.data ?? []}
+            placeholder="Select equipment"
+            value={values.equipment_requirement}
+            error={errors.equipment_requirement}
+            onChange={(value) => change('equipment_requirement', value)}
+          />
+          {(equipmentTypes.isError || venueNames.isError) && (
+            <p role="alert" className="text-sm text-red-600">
+              {equipmentTypes.error?.message ?? venueNames.error?.message}
+            </p>
+          )}
+          {textFields
+            .filter((field) => !['name', 'purpose', 'description'].includes(field.name))
+            .map(renderTextField)}
+        </fieldset>
         {/* Both buttons, not just the first: a Save draft that the API refuses used to
             fail silently, because `createDraft` throws a plain error that the field-level
             handler has nothing to do with. */}

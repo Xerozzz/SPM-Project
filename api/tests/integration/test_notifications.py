@@ -77,6 +77,7 @@ async def test_inbox_shows_event_action_time_newest_first(
     rows = response.json()
     assert [row["source_id"] for row in rows] == ["newer", "older"]
     assert all(row["event_request_id"] == str(request.id) for row in rows)
+    assert all(row["event_name"] == request.name for row in rows)
     assert all(row["type"] == "general" for row in rows)
     assert all(row["is_unread"] is True for row in rows)
     assert rows[0]["occurred_at"] > rows[1]["occurred_at"]
@@ -128,6 +129,7 @@ async def test_mark_viewed_persists_without_removing(
 
     assert marked.status_code == 200
     assert marked.json()["viewed_at"] is not None
+    assert marked.json()["event_name"] == request.name
     assert relisted.status_code == 200
     assert len(relisted.json()) == 1
     assert relisted.json()[0]["id"] == notification_id
@@ -158,6 +160,24 @@ async def test_users_cannot_see_each_others_notifications(
     assert listed.json() == []
     assert forged.status_code == 404
     assert forged.json() == {"detail": "Notification not found"}
+
+
+@pytest.mark.story("SCRUM-99")
+async def test_inbox_uses_the_current_event_name_and_accepts_unnamed_events(
+    db: Session, make_user: MakeUser, make_client: MakeClient
+) -> None:
+    organiser = make_user("organiser")
+    request = make_draft(db, organiser)
+    _stage(db, organiser.id, request.id, "title", datetime(2026, 4, 1, 9, 0, tzinfo=UTC))
+    request.name = "Renamed event"
+    db.commit()
+    async with make_client(organiser) as client:
+        named = await client.get("/api/notifications")
+        assert named.json()[0]["event_name"] == "Renamed event"
+        request.name = None
+        db.commit()
+        unnamed = await client.get("/api/notifications")
+        assert unnamed.json()[0]["event_name"] is None
 
 
 # ------------------------------------------------------------------ TC-99-06

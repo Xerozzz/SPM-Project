@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
 
 import { listCompletedEvents } from '../api/eventCompletion'
-import { formatSingaporeTime } from '../api/venueCalendar'
+import { formatDisplayTime } from '../presentation/dates'
 import { useAuth } from '../auth/useAuth'
+import { useEventSelection } from '../hooks/useEventSelection'
 import ClosureRecord from './ClosureRecord'
 import { EventHistoryToggle } from './EventHistory'
 
@@ -11,14 +11,16 @@ import { EventHistoryToggle } from './EventHistory'
  * SCRUM-86: the Coordinator's completed events, each with its correctable closure record.
  * A completed event leaves the active list, so it is shown here instead.
  */
-export default function CompletedEvents() {
+export default function CompletedEvents({
+  targetEventId = null,
+}: { targetEventId?: string | null } = {}) {
   const { token } = useAuth()
-  const [selectedId, setSelectedId] = useState<string | null>(null)
   const events = useQuery({
     queryKey: ['event-requests', 'completed', token],
     queryFn: () => listCompletedEvents(token ?? ''),
     enabled: token !== null,
   })
+  const [selectedId, setSelectedId] = useEventSelection(targetEventId, events.data)
   if (!events.data || events.data.length === 0) return null
   const selectedEvent = events.data.find((event) => event.id === selectedId)
   return (
@@ -48,7 +50,7 @@ export default function CompletedEvents() {
                 <div>
                   <dt className="text-xs text-slate-500">Schedule · Singapore time</dt>
                   <dd className="mt-1">
-                    {event.start_at ? formatSingaporeTime(event.start_at) : 'Date to be confirmed'}
+                    {event.start_at ? formatDisplayTime(event.start_at) : 'Date to be confirmed'}
                   </dd>
                 </div>
                 <div>
@@ -89,7 +91,7 @@ function CompletedEventDetails({
           label="Schedule"
           value={
             event.start_at && event.end_at
-              ? `${formatSingaporeTime(event.start_at)} – ${formatSingaporeTime(event.end_at)}`
+              ? `${formatDisplayTime(event.start_at)} – ${formatDisplayTime(event.end_at)}`
               : 'Date to be confirmed'
           }
         />

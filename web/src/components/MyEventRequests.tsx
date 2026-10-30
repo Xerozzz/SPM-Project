@@ -10,8 +10,10 @@ import {
   submitEventRequest,
   SubmissionRejectedError,
 } from '../api/eventRequests'
-import { formatSingaporeTime } from '../api/venueCalendar'
+import { formatDateRange, formatDisplayTime } from '../presentation/dates'
+import { matchesSearch } from '../presentation/search'
 import { useAuth } from '../auth/useAuth'
+import { useEventSelection } from '../hooks/useEventSelection'
 import { acceptsChangeRequest } from '../validation/eventChange'
 import { AssignmentHistoryToggle } from './AssignmentHistory'
 import CancellationRecord from './CancellationRecord'
@@ -40,17 +42,19 @@ import RequestCancellation from './RequestCancellation'
 export default function MyEventRequests({
   onEditDraft = () => {},
   onCreateEvent = () => {},
+  targetEventId = null,
 }: {
   /** Opens the existing form with the full saved draft. */
   onEditDraft?: (request: EventRequest) => void
   onCreateEvent?: () => void
+  targetEventId?: string | null
 } = {}) {
   const { token } = useAuth()
   const queryClient = useQueryClient()
   const [outcome, setOutcome] = useState<Outcome | null>(null)
   const [proposing, setProposing] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
   const [selectedStatus, setSelectedStatus] = useState<EventRequest['status'] | 'all'>('all')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
   const detailsHeading = useRef<HTMLHeadingElement>(null)
   const openedFrom = useRef<string | null>(null)
 
@@ -63,6 +67,7 @@ export default function MyEventRequests({
     queryFn: () => listMyEventRequests(token ?? ''),
     enabled: token !== null,
   })
+  const [selectedId, setSelectedId] = useEventSelection(targetEventId, requests.data)
   const groupedRequests = STATUS_ORDER.map((status) => ({
     status,
     requests: requests.data?.filter((request) => request.status === status) ?? [],
@@ -71,7 +76,8 @@ export default function MyEventRequests({
     requests.data?.filter((request) =>
       selectedId
         ? request.id === selectedId
-        : selectedStatus === 'all' || request.status === selectedStatus,
+        : (selectedStatus === 'all' || request.status === selectedStatus) &&
+          matchesSearch(search, request.name, request.venue_requirement),
     ) ?? []
   useEffect(() => {
     if (selectedId) detailsHeading.current?.focus()
@@ -122,6 +128,18 @@ export default function MyEventRequests({
           </button>
         </div>
       )}
+      {!selectedId && (
+        <label className="block max-w-md text-sm font-medium">
+          Search my events
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Event name or venue"
+            className="cs-field"
+          />
+        </label>
+      )}
       <div>
         {requests.isPending && <p className="mt-2 text-sm">Loading...</p>}
         {requests.isError && (
@@ -161,7 +179,7 @@ export default function MyEventRequests({
             )}
             {visibleRequests.length === 0 && (
               <p className="py-8 text-sm text-slate-500">
-                No events in this status. Choose All events to see the rest.
+                No events match your search or status filter.
               </p>
             )}
             <ul className={`mt-5 grid gap-4 ${selectedId ? '' : 'md:grid-cols-2 xl:grid-cols-3'}`}>
@@ -185,11 +203,10 @@ export default function MyEventRequests({
                       <dt className="text-xs text-slate-500">Schedule · Singapore time</dt>
                       <dd className="mt-1">
                         {request.start_at
-                          ? formatSingaporeTime(request.start_at)
+                          ? request.end_at
+                            ? formatDateRange(request.start_at, request.end_at)
+                            : formatDisplayTime(request.start_at)
                           : 'Date to be confirmed'}
-                        {selectedId &&
-                          request.end_at &&
-                          ` – ${formatSingaporeTime(request.end_at)}`}
                       </dd>
                     </div>
                     <div>

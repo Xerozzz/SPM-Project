@@ -2,6 +2,8 @@ import { useState } from 'react'
 
 import type { EventRequest } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
+import { useNotificationInbox } from '../hooks/useNotificationInbox'
+import { useWorkspaceNavigation } from '../hooks/useWorkspaceNavigation'
 import AppShell, { type NavigationItem } from '../components/AppShell'
 import ActiveAssignments from '../components/ActiveAssignments'
 import AttendeeRegistrations from '../components/AttendeeRegistrations'
@@ -128,6 +130,10 @@ export default function HomePage() {
   const [editingDraft, setEditingDraft] = useState<EventRequest | null>(null)
   const [showEventForm, setShowEventForm] = useState(false)
   const [eventNotice, setEventNotice] = useState<string | null>(null)
+  const [eventFormDirty, setEventFormDirty] = useState(false)
+  const [venueFormDirty, setVenueFormDirty] = useState(false)
+  const [venueVersion, setVenueVersion] = useState(0)
+  const inbox = useNotificationInbox()
   const items: NavigationItem[] = [
     ...(hasRole('organiser')
       ? [nav('my-events', 'Organise', '◫'), nav('event-calendar', 'Organise', '◷')]
@@ -157,16 +163,36 @@ export default function HomePage() {
     ...(hasRole('safety_officer') ? [nav('safety-review', 'Safety', '⌁')] : []),
     nav('notifications', 'Shared', '●'),
   ]
-  const [activeView, setActiveView] = useState<View>(
-    (items[0]?.id as View | undefined) ?? 'notifications',
+  function canLeave() {
+    if ((eventFormDirty || venueFormDirty) && !window.confirm('Discard your unsaved changes?'))
+      return false
+    if (eventFormDirty) {
+      setShowEventForm(false)
+      setEditingDraft(null)
+      setEventFormDirty(false)
+    }
+    if (venueFormDirty) {
+      setVenueVersion((version) => version + 1)
+      setVenueFormDirty(false)
+    }
+    return true
+  }
+  const navigation = useWorkspaceNavigation(
+    items.map((item) => item.id),
+    canLeave,
   )
+  const activeView = navigation.view as View
+  const unreadCount = inbox.data?.filter((notification) => notification.is_unread).length ?? 0
 
   return (
     <AppShell
       activeId={activeView}
       items={items}
-      onNavigate={(id) => setActiveView(id as View)}
-      onSignOut={signOut}
+      onNavigate={navigation.navigate}
+      onSignOut={() => {
+        if (canLeave()) signOut()
+      }}
+      unreadCount={unreadCount}
       roles={roles}
     >
       {hasRole('organiser') && (
@@ -178,6 +204,7 @@ export default function HomePage() {
           )}
           <div hidden={showEventForm}>
             <MyEventRequests
+              targetEventId={activeView === 'my-events' ? navigation.eventId : null}
               onCreateEvent={() => {
                 setEditingDraft(null)
                 setEventNotice(null)
@@ -195,13 +222,18 @@ export default function HomePage() {
               <button
                 type="button"
                 className="cs-button-secondary"
-                onClick={() => setShowEventForm(false)}
+                onClick={() => {
+                  if (canLeave()) setShowEventForm(false)
+                }}
               >
                 ← Back to My Events
               </button>
               <EventRequestForm
                 editing={editingDraft}
+                onDirtyChange={setEventFormDirty}
                 onDone={(message) => {
+                  if (!message && !canLeave()) return
+                  setEventFormDirty(false)
                   setEventNotice(message ?? null)
                   setEditingDraft(null)
                   setShowEventForm(false)
@@ -218,17 +250,23 @@ export default function HomePage() {
       )}
       {hasRole('attendee') && (
         <ViewPanel active={activeView === 'registrations'}>
-          <AttendeeRegistrations />
+          <AttendeeRegistrations
+            targetEventId={activeView === 'registrations' ? navigation.eventId : null}
+          />
         </ViewPanel>
       )}
       {hasRole('coordinator') && (
         <ViewPanel active={activeView === 'review-queue'}>
-          <EventRequestReview />
+          <EventRequestReview
+            targetEventId={activeView === 'review-queue' ? navigation.eventId : null}
+          />
         </ViewPanel>
       )}
       {hasRole('coordinator') && (
         <ViewPanel active={activeView === 'completed-events'}>
-          <CompletedEvents />
+          <CompletedEvents
+            targetEventId={activeView === 'completed-events' ? navigation.eventId : null}
+          />
         </ViewPanel>
       )}
       {hasRole('coordinator') && (
@@ -247,17 +285,21 @@ export default function HomePage() {
       )}
       {hasRole('coordinator_lead') && (
         <ViewPanel active={activeView === 'active-assignments'}>
-          <ActiveAssignments />
+          <ActiveAssignments
+            targetEventId={activeView === 'active-assignments' ? navigation.eventId : null}
+          />
         </ViewPanel>
       )}
       {hasRole('venue_staff') && (
         <ViewPanel active={activeView === 'venue-catalogue'}>
-          <VenueCatalogue />
+          <VenueCatalogue key={venueVersion} onDirtyChange={setVenueFormDirty} />
         </ViewPanel>
       )}
       {hasRole('venue_staff') && (
         <ViewPanel active={activeView === 'booking-decisions'}>
-          <VenueBookingDecisions />
+          <VenueBookingDecisions
+            targetEventId={activeView === 'booking-decisions' ? navigation.eventId : null}
+          />
         </ViewPanel>
       )}
       {hasRole('venue_staff') && (
@@ -286,7 +328,10 @@ export default function HomePage() {
         </ViewPanel>
       )}
       <ViewPanel active={activeView === 'notifications'}>
-        <NotificationInbox />
+        <NotificationInbox
+          allowedViews={items.map((item) => item.id)}
+          onNavigate={navigation.navigate}
+        />
       </ViewPanel>
     </AppShell>
   )

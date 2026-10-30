@@ -11,8 +11,9 @@ import {
   submitRegistration,
   withdrawRegistration,
 } from '../api/eventRegistrations'
-import { formatSingaporeTime } from '../api/venueCalendar'
+import { formatDisplayTime } from '../presentation/dates'
 import { useAuth } from '../auth/useAuth'
+import { useEventSelection } from '../hooks/useEventSelection'
 
 type RegistrationFilter = RegistrationStatus | 'available' | 'all'
 type RegistrationEntry = { event: AttendeeEvent; registration: EventRegistration | null }
@@ -36,11 +37,12 @@ const FILTER_TITLES: Record<RegistrationFilter, string> = {
 }
 
 /** Compact attendee-registration summaries; API rules remain authoritative. */
-export default function AttendeeRegistrations() {
+export default function AttendeeRegistrations({
+  targetEventId = null,
+}: { targetEventId?: string | null } = {}) {
   const { token } = useAuth()
   const client = useQueryClient()
   const [selectedFilter, setSelectedFilter] = useState<RegistrationFilter>('all')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
   const openedFrom = useRef<string | null>(null)
   const detailsHeading = useRef<HTMLHeadingElement>(null)
   const events = useQuery({
@@ -48,6 +50,7 @@ export default function AttendeeRegistrations() {
     queryFn: () => listOpenEvents(token ?? ''),
     enabled: token !== null,
   })
+  const [selectedId, setSelectedId] = useEventSelection(targetEventId, events.data)
   const registrations = useQueries({
     queries: (events.data ?? []).map((event) => ({
       queryKey: ['attendee-registration', event.id, token],
@@ -64,10 +67,10 @@ export default function AttendeeRegistrations() {
     filter,
     entries: entries.filter((entry) => entryFilter(entry) === filter),
   })).filter((group) => group.entries.length > 0)
-  const visibleEntries = entries.filter(
-    (entry) =>
-      (selectedId ? entry.event.id === selectedId : true) &&
-      (selectedFilter === 'all' || entryFilter(entry) === selectedFilter),
+  const visibleEntries = entries.filter((entry) =>
+    selectedId
+      ? entry.event.id === selectedId
+      : selectedFilter === 'all' || entryFilter(entry) === selectedFilter,
   )
 
   useEffect(() => {
@@ -158,7 +161,7 @@ export default function AttendeeRegistrations() {
                     <dt className="text-xs text-slate-500">Schedule · Singapore time</dt>
                     <dd className="mt-1">
                       {entry.event.start_at
-                        ? formatSingaporeTime(entry.event.start_at)
+                        ? formatDisplayTime(entry.event.start_at)
                         : 'Date to be confirmed'}
                     </dd>
                   </div>

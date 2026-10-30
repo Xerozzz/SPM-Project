@@ -6,8 +6,9 @@ import {
   listAssignableCoordinators,
   reassignEventRequest,
 } from '../api/eventRequests'
-import { formatSingaporeTime } from '../api/venueCalendar'
+import { formatDisplayTime } from '../presentation/dates'
 import { useAuth } from '../auth/useAuth'
+import { useEventSelection } from '../hooks/useEventSelection'
 import AssignmentHistory from './AssignmentHistory'
 import { EventHistoryToggle } from './EventHistory'
 
@@ -18,13 +19,14 @@ import { EventHistoryToggle } from './EventHistory'
  * SCRUM-97. SCRUM-97 adds a per-row history view below each request plus a
  * reassignment picker for assigned rows.
  */
-export default function ActiveAssignments() {
+export default function ActiveAssignments({
+  targetEventId = null,
+}: { targetEventId?: string | null } = {}) {
   const { token } = useAuth()
   const client = useQueryClient()
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [selected, setSelected] = useState<Record<string, string>>({})
   const [outcome, setOutcome] = useState<string | null>(null)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
   const openedFrom = useRef<string | null>(null)
   const detailsHeading = useRef<HTMLHeadingElement>(null)
   const overviewKey = ['event-requests', 'active-assignments', token]
@@ -33,6 +35,7 @@ export default function ActiveAssignments() {
     queryFn: () => listActiveAssignments(token ?? ''),
     enabled: token !== null,
   })
+  const [selectedId, setSelectedId] = useEventSelection(targetEventId, overview.data)
   const coordinators = useQuery({
     queryKey: ['event-requests', 'assignable-coordinators', token],
     queryFn: () => listAssignableCoordinators(token ?? ''),
@@ -102,15 +105,13 @@ export default function ActiveAssignments() {
                   <dt className="text-xs text-slate-500">Schedule · Singapore time</dt>
                   <dd className="mt-1">
                     {request.start_at
-                      ? formatSingaporeTime(request.start_at)
+                      ? formatDisplayTime(request.start_at)
                       : 'Date to be confirmed'}
                   </dd>
                 </div>
                 <div>
-                    <dt className="text-xs text-slate-500">Coordinator</dt>
-                    <dd className="mt-1 break-words">
-                      {request.coordinator_email ?? 'Unassigned'}
-                    </dd>
+                  <dt className="text-xs text-slate-500">Coordinator</dt>
+                  <dd className="mt-1 break-words">{request.coordinator_email ?? 'Unassigned'}</dd>
                 </div>
               </dl>
               {selectedId ? (
