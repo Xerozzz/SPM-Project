@@ -81,6 +81,7 @@ someone else made two weeks ago.
 | [0069](0069-safety-decisions-hidden-by-a-shared-rule-and-closure-entries.md) | Safety decision entries hidden by a shared rule, and venue closure entries | Proposed |
 | [0070](0070-hold-expiry-changes-recorded-in-the-update-transaction.md) | Hold expiry changes recorded in the update's transaction | Proposed |
 | [0071](0071-my-events-summary-and-details-views.md) | Separate My Events summaries, details and creation | Proposed |
+| [0072](0072-attendee-registration-summary-and-details.md) | Separate attendee registration summaries and details | Proposed |
 
 ## When to write one
 
