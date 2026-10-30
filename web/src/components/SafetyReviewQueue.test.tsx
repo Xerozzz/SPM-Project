@@ -116,6 +116,7 @@ test('the plan a decision is about is shown in full', async () => {
   expect(screen.getByText(/Projector/)).toBeInTheDocument()
   expect(screen.getByText('Available')).toBeInTheDocument()
   expect(screen.getByText('reserved')).toBeInTheDocument()
+  expect(screen.getByRole('article')).toHaveClass('rounded-2xl')
 })
 
 test('a hold that has run out is called out on the venue it belongs to', async () => {
@@ -132,6 +133,8 @@ test('a plan that cannot be reviewed yet says why, and offers no decision', asyn
       blockers: ['hold_expired', 'equipment_unreviewed'],
     },
   ])
+
+  fireEvent.click(await screen.findByRole('tab', { name: /Waiting on arrangements 1/ }))
 
   expect(await screen.findByText('This plan cannot be reviewed yet.')).toBeInTheDocument()
   expect(screen.getByText(/A venue hold has run out/)).toBeInTheDocument()
@@ -333,8 +336,8 @@ test('the worklist separates what can be reviewed from what is waiting on a Coor
     },
   ])
 
-  expect(await screen.findByText('Ready to review (1)')).toBeInTheDocument()
-  expect(screen.getByText('Waiting on arrangements (1)')).toBeInTheDocument()
+  expect(await screen.findByRole('tab', { name: /Ready to review 1/ })).toBeInTheDocument()
+  expect(screen.getByRole('tab', { name: /Waiting on arrangements 1/ })).toBeInTheDocument()
 })
 
 test('the answer appears on the card that was acted on, not at the foot of the list', async () => {

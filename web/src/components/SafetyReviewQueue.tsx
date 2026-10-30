@@ -184,7 +184,7 @@ export default function SafetyReviewQueue() {
                 Nothing is arranged enough to review yet.
               </p>
             ) : (
-              ready.map(card)
+              <div className="mt-5 space-y-4">{ready.map(card)}</div>
             ))}
           {selectedTab === 'waiting' &&
             (waiting.length === 0 ? (
@@ -192,7 +192,9 @@ export default function SafetyReviewQueue() {
                 Every event being planned is ready to review.
               </p>
             ) : (
-              waiting.map(card)
+              <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {waiting.map(card)}
+              </div>
             ))}
         </>
       )}
@@ -223,8 +225,8 @@ function PlanCard({
   onDecide: (decision: SafetyDecision) => void
 }) {
   return (
-    <article className="mt-4 rounded border border-slate-200 p-3 text-sm">
-      <h4 className="font-medium">{name(plan)}</h4>
+    <article className="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-5 text-sm">
+      <h4 className="text-lg font-semibold tracking-normal">{name(plan)}</h4>
       {plan.event_start_at && plan.event_end_at && (
         <p className="text-slate-500">
           {formatSingaporeTime(plan.event_start_at)} to {formatSingaporeTime(plan.event_end_at)}
