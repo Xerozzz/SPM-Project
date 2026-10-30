@@ -87,6 +87,8 @@ someone else made two weeks ago.
 | [0075](0075-active-assignment-summary-and-details.md) | Separate active-assignment summaries and details | Proposed |
 | [0076](0076-venue-booking-summary-and-details.md) | Separate venue booking hold and decision summaries from details | Proposed |
 
+| [0077](0077-responsive-sign-in-with-existing-illustration.md) | Present sign-in beside the existing team illustration | Proposed |
+
 ## When to write one
 
 Anything on this list, **before the PR merges**:

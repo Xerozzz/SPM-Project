@@ -23,7 +23,7 @@ function renderApp() {
 
 test('unauthenticated user is shown the sign-in page', () => {
   renderApp()
-  expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
 })
 
 test('valid sign-in enters the app and shows roles', async () => {
@@ -88,6 +88,45 @@ test('invalid credentials show a generic error', async () => {
   })
 })
 
+// SCRUM-27: visibility is a local display choice and must never submit the form.
+test('showing and hiding the password preserves the entered credentials without signing in', () => {
+  const fetch = vi.spyOn(globalThis, 'fetch')
+  renderApp()
+  const password = screen.getByLabelText('Password')
+  fireEvent.change(password, { target: { value: 'typed-password' } })
+
+  expect(password).toHaveAttribute('type', 'password')
+  fireEvent.click(screen.getByRole('button', { name: 'Show password' }))
+  expect(password).toHaveAttribute('type', 'text')
+  expect(password).toHaveValue('typed-password')
+  expect(screen.getByRole('button', { name: 'Hide password' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Hide password' }))
+  expect(password).toHaveAttribute('type', 'password')
+  expect(password).toHaveValue('typed-password')
+  expect(fetch).not.toHaveBeenCalled()
+})
+
+// SCRUM-27: a slow response keeps the credentials and prevents duplicate submissions.
+test('sign-in shows pending feedback and disables repeated submission', async () => {
+  const fetch = vi
+    .spyOn(globalThis, 'fetch')
+    .mockImplementation(() => new Promise<Response>(() => {}))
+  renderApp()
+  fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'organiser@example.com' } })
+  fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+  const pending = await screen.findByRole('button', { name: 'Signing in…' })
+  expect(pending).toBeDisabled()
+  expect(pending.closest('form')).toHaveAttribute('aria-busy', 'true')
+  fireEvent.click(pending)
+  expect(fetch).toHaveBeenCalledTimes(1)
+  expect(screen.getByLabelText('Password')).toHaveValue('password123')
+})
+
 test('sign-out returns to the sign-in page', async () => {
   localStorage.setItem(
     'connectsphere.token',
@@ -104,7 +143,7 @@ test('sign-out returns to the sign-in page', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }))
 
   await waitFor(() => {
-    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
   })
   expect(localStorage.getItem('connectsphere.token')).toBeNull()
 })
@@ -125,7 +164,7 @@ test('a session stored before user ids existed is treated as signed out', async 
   )
   renderApp()
 
-  expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
 })
 
 test('a stored session carrying a user id is kept', async () => {
