@@ -158,9 +158,15 @@ test('shows each decided request by its own status', async () => {
     ]),
   )
 
-  expect(await screen.findByText('Confirmed')).toBeInTheDocument()
-  expect(screen.getByText('Cancelled')).toBeInTheDocument()
+  expect((await screen.findAllByText('Confirmed')).length).toBeGreaterThan(0)
+  expect(screen.getAllByText('Cancelled').length).toBeGreaterThan(0)
+  expect(screen.getAllByText('When')).toHaveLength(2)
   expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull()
+
+  fireEvent.click(screen.getAllByRole('button', { name: /View details/ })[0])
+
+  expect(screen.queryByRole('tablist')).toBeNull()
+  expect(screen.getByRole('button', { name: /Back to booking requests/ })).toBeInTheDocument()
 })
 
 test('SCRUM-75 AC1: a clash is shown and Approve is disabled', async () => {

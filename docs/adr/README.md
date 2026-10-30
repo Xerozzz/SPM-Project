@@ -85,6 +85,7 @@ someone else made two weeks ago.
 | [0073](0073-coordinator-review-summary-and-details.md) | Separate coordinator review summaries and details | Proposed |
 | [0074](0074-completed-event-summary-and-record-correction.md) | Separate completed-event summaries and record correction | Proposed |
 | [0075](0075-active-assignment-summary-and-details.md) | Separate active-assignment summaries and details | Proposed |
+| [0076](0076-venue-booking-summary-and-details.md) | Separate venue booking hold and decision summaries from details | Proposed |
 
 ## When to write one
 

@@ -28,6 +28,7 @@ export default function VenueBookingDecisions() {
   const [holdUntil, setHoldUntil] = useState<Record<string, string>>({})
   const [outcome, setOutcome] = useState<string | null>(null)
   const [selectedTab, setSelectedTab] = useState<BookingTab>('pending')
+  const [detailId, setDetailId] = useState<string | null>(null)
   const queryKey = ['venue-bookings', token]
   const requests = useQuery({
     queryKey,
@@ -86,6 +87,7 @@ export default function VenueBookingDecisions() {
     { id: 'decided' as const, label: 'Decided', bookings: decided },
   ]
   const populatedTabs = tabGroups.filter((group) => group.bookings.length > 0)
+  const detailBooking = [...held, ...decided].find((booking) => booking.id === detailId)
 
   // Keep the current view useful after a decision moves its card to another status.
   useEffect(() => {
@@ -96,24 +98,22 @@ export default function VenueBookingDecisions() {
 
   return (
     <section className="mt-0">
-      <div className="flex flex-wrap justify-end gap-3">
-        {pending.length > 0 && (
-          <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-sm font-medium text-amber-800">
-            {pending.length} awaiting review
-          </span>
-        )}
-      </div>
+      {detailBooking && (
+        <button type="button" className="cs-button-secondary" onClick={() => setDetailId(null)}>
+          ← Back to booking requests
+        </button>
+      )}
       {requests.isPending && <p className="mt-2 text-sm">Loading…</p>}
       {requests.isError && (
         <p role="alert" className="mt-2 text-sm text-red-600">
           Could not load booking requests: {requests.error.message}
         </p>
       )}
-      {requests.isSuccess && (
+      {requests.isSuccess && !detailBooking && (
         <div
           role="tablist"
           aria-label="Booking request status"
-          className="mt-5 flex gap-2 overflow-x-auto border-b border-slate-200 pb-3"
+          className="mt-2 flex gap-2 overflow-x-auto border-b border-slate-200 pb-3"
         >
           {tabGroups.map((group) => (
             <button
@@ -133,10 +133,14 @@ export default function VenueBookingDecisions() {
           ))}
         </div>
       )}
-      {selectedTab === 'pending' && requests.isSuccess && pending.length === 0 && (
-        <p className="mt-5 text-sm text-slate-500">No booking requests are waiting.</p>
-      )}
-      {selectedTab === 'pending' &&
+      {!detailBooking &&
+        selectedTab === 'pending' &&
+        requests.isSuccess &&
+        pending.length === 0 && (
+          <p className="mt-5 text-sm text-slate-500">No booking requests are waiting.</p>
+        )}
+      {!detailBooking &&
+        selectedTab === 'pending' &&
         pending.map((booking) => (
           <article
             key={booking.id}
@@ -233,66 +237,22 @@ export default function VenueBookingDecisions() {
             </div>
           </article>
         ))}
-      {selectedTab === 'held' && held.length > 0 && (
+      {!detailBooking && selectedTab === 'held' && held.length > 0 && (
         <>
           <h3 className="sr-only">Tentative holds</h3>
-          {held.map((booking) => (
-            <article
-              key={booking.id}
-              className="mt-5 rounded-2xl border border-violet-200 bg-white p-5 shadow-sm"
-            >
-              <BookingDetails booking={booking} />
-              <p className="mt-1 text-sm text-violet-900">
-                {STATUS_LABELS.tentative}
-                {booking.expires_at && ` until ${formatSingaporeTime(booking.expires_at)}`}
-              </p>
-              {/* SCRUM-110: a hold is terminal until it expires or is confirmed by the
-                  SCRUM-80 flow, so there is no approval control here. */}
-              {holdHasExpired(booking, new Date()) ? (
-                <p className="mt-2 rounded bg-slate-100 p-2 text-sm text-slate-700">
-                  This hold has expired.
-                </p>
-              ) : (
-                <>
-                  {booking.conflict && (
-                    <p className="mt-2 rounded bg-amber-50 p-2 text-sm text-amber-800">
-                      {describeConflict(booking.conflict)}
-                    </p>
-                  )}
-                  <label className="mt-3 block text-sm font-medium" htmlFor={`hold-${booking.id}`}>
-                    New expiry (Singapore time)
-                  </label>
-                  <div className="mt-1 flex gap-2">
-                    <input
-                      id={`hold-${booking.id}`}
-                      type="datetime-local"
-                      value={holdUntil[booking.id] ?? ''}
-                      onChange={(event) =>
-                        setHoldUntil({ ...holdUntil, [booking.id]: event.target.value })
-                      }
-                      className="rounded-lg border border-slate-300 p-2 text-sm shadow-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        resetAll()
-                        updateExpiry.mutate({ booking, until: holdUntil[booking.id] ?? '' })
-                      }}
-                      disabled={busy || !holdUntil[booking.id]}
-                      className="rounded-lg bg-violet-700 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-violet-800 disabled:opacity-50"
-                    >
-                      Update expiry
-                    </button>
-                  </div>
-                  {updateExpiry.isError && updateExpiry.variables?.booking.id === booking.id && (
-                    <p role="alert" className="mt-2 text-sm text-red-600">
-                      Could not update expiry: {updateExpiry.error.message}
-                    </p>
-                  )}
-                </>
-              )}
-            </article>
-          ))}
+          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {held.map((booking) => (
+              <BookingSummary
+                key={booking.id}
+                booking={booking}
+                label="Tentative hold until"
+                value={
+                  booking.expires_at ? formatSingaporeTime(booking.expires_at) : 'Not recorded'
+                }
+                onView={() => setDetailId(booking.id)}
+              />
+            ))}
+          </div>
         </>
       )}
       {outcome && (
@@ -300,35 +260,180 @@ export default function VenueBookingDecisions() {
           {outcome}
         </p>
       )}
-      {selectedTab === 'held' && requests.isSuccess && held.length === 0 && (
+      {!detailBooking && selectedTab === 'held' && requests.isSuccess && held.length === 0 && (
         <p className="mt-5 text-sm text-slate-500">There are no tentative holds.</p>
       )}
-      {selectedTab === 'decided' && decided.length > 0 && (
+      {!detailBooking && selectedTab === 'decided' && decided.length > 0 && (
         <>
           <h3 className="sr-only">Decided</h3>
-          {decided.map((booking) => (
-            <article
-              key={booking.id}
-              className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-            >
-              <BookingDetails booking={booking} />
-              <p className="mt-1 text-sm">
-                {STATUS_LABELS[booking.status]}
-                {booking.status === 'expired' &&
-                  booking.expires_at &&
-                  ` at ${formatSingaporeTime(booking.expires_at)}`}
-                {booking.decided_at && ` on ${formatSingaporeTime(booking.decided_at)}`}
-                {booking.decision_reason && `: ${booking.decision_reason}`}
-              </p>
-            </article>
-          ))}
+          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {decided.map((booking) => (
+              <BookingSummary
+                key={booking.id}
+                booking={booking}
+                label="Decision made"
+                value={decisionOf(booking)}
+                onView={() => setDetailId(booking.id)}
+              />
+            ))}
+          </div>
         </>
       )}
-      {selectedTab === 'decided' && requests.isSuccess && decided.length === 0 && (
-        <p className="mt-5 text-sm text-slate-500">There are no decided booking requests.</p>
-      )}
+      {!detailBooking &&
+        selectedTab === 'decided' &&
+        requests.isSuccess &&
+        decided.length === 0 && (
+          <p className="mt-5 text-sm text-slate-500">There are no decided booking requests.</p>
+        )}
+      {detailBooking &&
+        (detailBooking.status === 'tentative' ? (
+          <HeldDetails
+            booking={detailBooking}
+            holdUntil={holdUntil[detailBooking.id] ?? ''}
+            setHoldUntil={(value) => setHoldUntil({ ...holdUntil, [detailBooking.id]: value })}
+            busy={busy}
+            onUpdate={() => {
+              resetAll()
+              updateExpiry.mutate({
+                booking: detailBooking,
+                until: holdUntil[detailBooking.id] ?? '',
+              })
+            }}
+            error={
+              updateExpiry.isError && updateExpiry.variables?.booking.id === detailBooking.id
+                ? updateExpiry.error.message
+                : null
+            }
+          />
+        ) : (
+          <DecidedDetails booking={detailBooking} />
+        ))}
     </section>
   )
+}
+
+function BookingSummary({
+  booking,
+  label,
+  value,
+  onView,
+}: {
+  booking: VenueBookingDecision
+  label: string
+  value: string
+  onView: () => void
+}) {
+  return (
+    <article className="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-5">
+      <span className="inline-flex self-start rounded-md bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-800">
+        {STATUS_LABELS[booking.status]}
+      </span>
+      <h3 className="mt-3 break-words text-lg font-semibold tracking-normal">
+        {booking.event_name ?? 'Untitled event'}
+      </h3>
+      <dl className="mt-4 flex-1 space-y-3 text-sm">
+        <div>
+          <dt className="text-xs text-slate-500">Venue</dt>
+          <dd className="mt-1 break-words">{booking.venue_name}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-slate-500">When</dt>
+          <dd className="mt-1 break-words">
+            {formatSingaporeTime(booking.start_at)} to {formatSingaporeTime(booking.end_at)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-slate-500">{label}</dt>
+          <dd className="mt-1 break-words">{value}</dd>
+        </div>
+      </dl>
+      <button
+        type="button"
+        className="cs-button-secondary mt-5 w-full"
+        aria-label={`View details for ${booking.event_name ?? 'Untitled event'}`}
+        onClick={onView}
+      >
+        View details →
+      </button>
+    </article>
+  )
+}
+
+function HeldDetails({
+  booking,
+  holdUntil,
+  setHoldUntil,
+  busy,
+  onUpdate,
+  error,
+}: {
+  booking: VenueBookingDecision
+  holdUntil: string
+  setHoldUntil: (value: string) => void
+  busy: boolean
+  onUpdate: () => void
+  error: string | null
+}) {
+  return (
+    <article className="mt-5 rounded-2xl border border-violet-200 bg-white p-5 shadow-sm">
+      <BookingDetails booking={booking} />
+      {holdHasExpired(booking, new Date()) ? (
+        <p className="mt-2 rounded bg-slate-100 p-2 text-sm text-slate-700">
+          This hold has expired.
+        </p>
+      ) : (
+        <>
+          <p className="mt-1 text-sm text-violet-900">
+            {STATUS_LABELS.tentative}
+            {booking.expires_at && ` until ${formatSingaporeTime(booking.expires_at)}`}
+          </p>
+          {booking.conflict && (
+            <p className="mt-2 rounded bg-amber-50 p-2 text-sm text-amber-800">
+              {describeConflict(booking.conflict)}
+            </p>
+          )}
+          <label className="mt-3 block text-sm font-medium" htmlFor={`hold-${booking.id}`}>
+            New expiry (Singapore time)
+          </label>
+          <div className="mt-1 flex gap-2">
+            <input
+              id={`hold-${booking.id}`}
+              type="datetime-local"
+              value={holdUntil}
+              onChange={(event) => setHoldUntil(event.target.value)}
+              className="rounded-lg border border-slate-300 p-2 text-sm shadow-sm"
+            />
+            <button
+              type="button"
+              onClick={onUpdate}
+              disabled={busy || !holdUntil}
+              className="rounded-lg bg-violet-700 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-violet-800 disabled:opacity-50"
+            >
+              Update expiry
+            </button>
+          </div>
+          {error && (
+            <p role="alert" className="mt-2 text-sm text-red-600">
+              Could not update expiry: {error}
+            </p>
+          )}
+        </>
+      )}
+    </article>
+  )
+}
+
+function DecidedDetails({ booking }: { booking: VenueBookingDecision }) {
+  return (
+    <article className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <BookingDetails booking={booking} />
+      <p className="mt-1 text-sm">{decisionOf(booking)}</p>
+    </article>
+  )
+}
+
+function decisionOf(booking: VenueBookingDecision) {
+  return `${STATUS_LABELS[booking.status]}${booking.status === 'expired' && booking.expires_at ? ` at ${formatSingaporeTime(booking.expires_at)}` : ''}${booking.decided_at ? ` on ${formatSingaporeTime(booking.decided_at)}` : ''}${booking.decision_reason ? `: ${booking.decision_reason}` : ''}`
 }
 
 function BookingDetails({ booking }: { booking: VenueBookingDecision }) {
