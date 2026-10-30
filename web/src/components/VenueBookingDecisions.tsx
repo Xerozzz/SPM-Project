@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { formatSingaporeTime } from '../api/venueCalendar'
 import {
@@ -28,7 +28,9 @@ export default function VenueBookingDecisions() {
   const [holdUntil, setHoldUntil] = useState<Record<string, string>>({})
   const [outcome, setOutcome] = useState<string | null>(null)
   const [selectedTab, setSelectedTab] = useState<BookingTab>('pending')
-  const [detailId, setDetailId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const panel = useRef<HTMLElement>(null)
+  const openedFrom = useRef<string | null>(null)
   const queryKey = ['venue-bookings', token]
   const requests = useQuery({
     queryKey,
@@ -49,6 +51,7 @@ export default function VenueBookingDecisions() {
     // The approve response has no venue name, so it is read off the card that was clicked.
     onSuccess: (_held, { booking }) => {
       setOutcome(`The request for ${booking.venue_name} is on a tentative hold.`)
+      setHoldUntil((values) => ({ ...values, [booking.id]: '' }))
       void client.invalidateQueries({ queryKey })
     },
     // A refusal usually means the list was out of date: a closure or another approval
@@ -86,41 +89,65 @@ export default function VenueBookingDecisions() {
     { id: 'held' as const, label: 'Tentative holds', bookings: held },
     { id: 'decided' as const, label: 'Decided', bookings: decided },
   ]
-  const populatedTabs = tabGroups.filter((group) => group.bookings.length > 0)
-  const detailBooking = [...held, ...decided].find((booking) => booking.id === detailId)
-
-  // Keep the current view useful after a decision moves its card to another status.
+  const pendingDetails = pending.filter((booking) => booking.id === selectedId)
+  const heldDetails = held.filter((booking) => booking.id === selectedId)
+  const decidedDetails = decided.filter((booking) => booking.id === selectedId)
   useEffect(() => {
-    if (populatedTabs.length && !populatedTabs.some((group) => group.id === selectedTab)) {
-      setSelectedTab(populatedTabs[0].id)
-    }
-  }, [populatedTabs, selectedTab])
+    if (selectedId) panel.current?.focus()
+    else
+      (
+        document.getElementById(openedFrom.current ?? '') ??
+        document.getElementById(`booking-tab-${selectedTab}`)
+      )?.focus()
+  }, [selectedId, selectedTab])
 
   return (
-    <section className="mt-0">
-      {detailBooking && (
-        <button type="button" className="cs-button-secondary" onClick={() => setDetailId(null)}>
-          ← Back to booking requests
+    <section
+      ref={panel}
+      tabIndex={selectedId ? -1 : undefined}
+      aria-label={selectedId ? 'Booking details' : 'Booking requests'}
+      className="mt-0"
+    >
+      {selectedId && (
+        <button
+          type="button"
+          className="cs-button-secondary mb-5"
+          disabled={busy}
+          onClick={() => setSelectedId(null)}
+        >
+          ← Back to bookings
         </button>
       )}
+      {outcome && (
+        <p role="status" className="mb-5 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
+          {outcome}
+        </p>
+      )}
+      <div className="flex flex-wrap justify-end gap-3">
+        {pending.length > 0 && (
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-sm font-medium text-amber-800">
+            {pending.length} awaiting review
+          </span>
+        )}
+      </div>
       {requests.isPending && <p className="mt-2 text-sm">Loading…</p>}
       {requests.isError && (
         <p role="alert" className="mt-2 text-sm text-red-600">
           Could not load booking requests: {requests.error.message}
         </p>
       )}
-      {requests.isSuccess && !detailBooking && (
+      {requests.isSuccess && !selectedId && (
         <div
-          role="tablist"
+          role="group"
           aria-label="Booking request status"
-          className="mt-2 flex gap-2 overflow-x-auto border-b border-slate-200 pb-3"
+          className="mt-5 flex gap-2 overflow-x-auto border-b border-slate-200 pb-3"
         >
           {tabGroups.map((group) => (
             <button
               key={group.id}
+              id={`booking-tab-${group.id}`}
               type="button"
-              role="tab"
-              aria-selected={selectedTab === group.id}
+              aria-pressed={selectedTab === group.id}
               onClick={() => setSelectedTab(group.id)}
               className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium ${
                 selectedTab === group.id
@@ -133,15 +160,29 @@ export default function VenueBookingDecisions() {
           ))}
         </div>
       )}
-      {!detailBooking &&
-        selectedTab === 'pending' &&
-        requests.isSuccess &&
-        pending.length === 0 && (
-          <p className="mt-5 text-sm text-slate-500">No booking requests are waiting.</p>
-        )}
-      {!detailBooking &&
-        selectedTab === 'pending' &&
-        pending.map((booking) => (
+      {!selectedId && selectedTab === 'pending' && requests.isSuccess && pending.length === 0 && (
+        <p className="mt-5 text-sm text-slate-500">No booking requests are waiting.</p>
+      )}
+      {!selectedId && (
+        <div className="mt-5 grid gap-4 xl:grid-cols-2">
+          {tabGroups
+            .find((group) => group.id === selectedTab)
+            ?.bookings.map((booking) => (
+              <BookingSummary
+                key={booking.id}
+                booking={booking}
+                onOpen={() => {
+                  openedFrom.current = `view-booking-${booking.id}`
+                  resetAll()
+                  setOutcome(null)
+                  setSelectedId(booking.id)
+                }}
+              />
+            ))}
+        </div>
+      )}
+      {selectedId &&
+        pendingDetails.map((booking) => (
           <article
             key={booking.id}
             className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
@@ -201,7 +242,7 @@ export default function VenueBookingDecisions() {
                     Hold until (Singapore time)
                   </label>
                   <p className="mt-1 text-sm text-slate-500">
-                    Approval creates a tentative venue hold.
+                    Reserve this session provisionally while the Coordinator finalises the event.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <input
@@ -222,7 +263,7 @@ export default function VenueBookingDecisions() {
                       disabled={busy || booking.conflict !== null || !holdUntil[booking.id]}
                       className="cs-button disabled:opacity-50"
                     >
-                      Approve
+                      Approve and place hold
                     </button>
                   </div>
                   {approve.isError &&
@@ -237,123 +278,108 @@ export default function VenueBookingDecisions() {
             </div>
           </article>
         ))}
-      {!detailBooking && selectedTab === 'held' && held.length > 0 && (
+      {selectedId && heldDetails.length > 0 && (
         <>
           <h3 className="sr-only">Tentative holds</h3>
-          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {held.map((booking) => (
-              <BookingSummary
-                key={booking.id}
-                booking={booking}
-                label="Tentative hold until"
-                value={
-                  booking.expires_at ? formatSingaporeTime(booking.expires_at) : 'Not recorded'
-                }
-                onView={() => setDetailId(booking.id)}
-              />
-            ))}
-          </div>
+          {heldDetails.map((booking) => (
+            <HeldDetails
+              key={booking.id}
+              booking={booking}
+              holdUntil={holdUntil[booking.id] ?? ''}
+              setHoldUntil={(value) => setHoldUntil({ ...holdUntil, [booking.id]: value })}
+              busy={busy}
+              onUpdate={() => {
+                resetAll()
+                updateExpiry.mutate({ booking, until: holdUntil[booking.id] ?? '' })
+              }}
+              error={
+                updateExpiry.isError && updateExpiry.variables?.booking.id === booking.id
+                  ? updateExpiry.error.message
+                  : null
+              }
+            />
+          ))}
         </>
       )}
-      {outcome && (
-        <p role="status" className="mt-4 rounded bg-green-50 p-3 text-sm text-green-800">
-          {outcome}
-        </p>
-      )}
-      {!detailBooking && selectedTab === 'held' && requests.isSuccess && held.length === 0 && (
+      {!selectedId && selectedTab === 'held' && requests.isSuccess && held.length === 0 && (
         <p className="mt-5 text-sm text-slate-500">There are no tentative holds.</p>
       )}
-      {!detailBooking && selectedTab === 'decided' && decided.length > 0 && (
+      {selectedId && decidedDetails.length > 0 && (
         <>
           <h3 className="sr-only">Decided</h3>
-          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {decided.map((booking) => (
-              <BookingSummary
-                key={booking.id}
-                booking={booking}
-                label="Decision made"
-                value={decisionOf(booking)}
-                onView={() => setDetailId(booking.id)}
-              />
-            ))}
-          </div>
+          {decidedDetails.map((booking) => (
+            <DecidedDetails key={booking.id} booking={booking} />
+          ))}
         </>
       )}
-      {!detailBooking &&
-        selectedTab === 'decided' &&
-        requests.isSuccess &&
-        decided.length === 0 && (
-          <p className="mt-5 text-sm text-slate-500">There are no decided booking requests.</p>
-        )}
-      {detailBooking &&
-        (detailBooking.status === 'tentative' ? (
-          <HeldDetails
-            booking={detailBooking}
-            holdUntil={holdUntil[detailBooking.id] ?? ''}
-            setHoldUntil={(value) => setHoldUntil({ ...holdUntil, [detailBooking.id]: value })}
-            busy={busy}
-            onUpdate={() => {
-              resetAll()
-              updateExpiry.mutate({
-                booking: detailBooking,
-                until: holdUntil[detailBooking.id] ?? '',
-              })
-            }}
-            error={
-              updateExpiry.isError && updateExpiry.variables?.booking.id === detailBooking.id
-                ? updateExpiry.error.message
-                : null
-            }
-          />
-        ) : (
-          <DecidedDetails booking={detailBooking} />
-        ))}
+      {!selectedId && selectedTab === 'decided' && requests.isSuccess && decided.length === 0 && (
+        <p className="mt-5 text-sm text-slate-500">There are no decided booking requests.</p>
+      )}
     </section>
   )
 }
 
 function BookingSummary({
   booking,
-  label,
-  value,
-  onView,
+  onOpen,
 }: {
   booking: VenueBookingDecision
-  label: string
-  value: string
-  onView: () => void
+  onOpen: () => void
 }) {
+  const styles: Record<VenueBookingDecision['status'], string> = {
+    pending: 'bg-amber-50 text-amber-800',
+    tentative: 'bg-violet-50 text-violet-800',
+    confirmed: 'bg-emerald-50 text-emerald-800',
+    rejected: 'bg-red-50 text-red-800',
+    cancelled: 'bg-slate-100 text-slate-700',
+    expired: 'bg-slate-100 text-slate-700',
+  }
   return (
     <article className="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-5">
-      <span className="inline-flex self-start rounded-md bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-800">
-        {STATUS_LABELS[booking.status]}
-      </span>
+      <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
+        <span className={`rounded-md px-2 py-1 ${styles[booking.status]}`}>
+          {STATUS_LABELS[booking.status]}
+        </span>
+        {booking.conflict && (
+          <span className="rounded-md bg-amber-50 px-2 py-1 text-amber-800">
+            Conflict needs attention
+          </span>
+        )}
+      </div>
       <h3 className="mt-3 break-words text-lg font-semibold tracking-normal">
         {booking.event_name ?? 'Untitled event'}
       </h3>
+      <p className="mt-1 text-sm text-slate-600">
+        {booking.venue_name} · {booking.session_label}
+      </p>
       <dl className="mt-4 flex-1 space-y-3 text-sm">
         <div>
-          <dt className="text-xs text-slate-500">Venue</dt>
-          <dd className="mt-1 break-words">{booking.venue_name}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-slate-500">When</dt>
-          <dd className="mt-1 break-words">
+          <dt className="text-xs text-slate-500">Session · Singapore time</dt>
+          <dd className="mt-1">
             {formatSingaporeTime(booking.start_at)} to {formatSingaporeTime(booking.end_at)}
           </dd>
         </div>
-        <div>
-          <dt className="text-xs text-slate-500">{label}</dt>
-          <dd className="mt-1 break-words">{value}</dd>
-        </div>
+        {booking.status === 'tentative' && booking.expires_at && (
+          <div>
+            <dt className="text-xs text-slate-500">Hold expires</dt>
+            <dd className="mt-1">{formatSingaporeTime(booking.expires_at)}</dd>
+          </div>
+        )}
+        {booking.status !== 'pending' && booking.status !== 'tentative' && (
+          <div>
+            <dt className="text-xs text-slate-500">Decision made</dt>
+            <dd className="mt-1 break-words">{decisionOf(booking)}</dd>
+          </div>
+        )}
       </dl>
       <button
         type="button"
+        id={`view-booking-${booking.id}`}
         className="cs-button-secondary mt-5 w-full"
-        aria-label={`View details for ${booking.event_name ?? 'Untitled event'}`}
-        onClick={onView}
+        aria-label={`View booking for ${booking.event_name ?? 'Untitled event'} at ${booking.venue_name}`}
+        onClick={onOpen}
       >
-        View details →
+        {booking.status === 'pending' ? 'Review request →' : 'View details →'}
       </button>
     </article>
   )
@@ -395,7 +421,7 @@ function HeldDetails({
           <label className="mt-3 block text-sm font-medium" htmlFor={`hold-${booking.id}`}>
             New expiry (Singapore time)
           </label>
-          <div className="mt-1 flex gap-2">
+          <div className="mt-1 flex flex-wrap gap-2">
             <input
               id={`hold-${booking.id}`}
               type="datetime-local"

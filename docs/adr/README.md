@@ -86,8 +86,8 @@ someone else made two weeks ago.
 | [0074](0074-completed-event-summary-and-record-correction.md) | Separate completed-event summaries and record correction | Proposed |
 | [0075](0075-active-assignment-summary-and-details.md) | Separate active-assignment summaries and details | Proposed |
 | [0076](0076-venue-booking-summary-and-details.md) | Separate venue booking hold and decision summaries from details | Proposed |
-
 | [0077](0077-responsive-sign-in-with-existing-illustration.md) | Present sign-in beside the existing team illustration | Proposed |
+| [0078](0078-venue-booking-summary-and-details-views.md) | Review venue bookings through summaries and a details view | Proposed |
 
 ## When to write one
 

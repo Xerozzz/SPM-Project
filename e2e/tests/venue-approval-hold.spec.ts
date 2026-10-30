@@ -65,9 +65,11 @@ test('SCRUM-110 and SCRUM-121: approval and an expiry update survive reload', as
 
   // Venue Staff approve the Pending request with a hold expiry.
   await signIn(page, 'venue-staff@example.com')
-  const section = page.locator('main section', {
-    has: page.getByRole('heading', { name: 'Venue booking requests' }),
-  })
+  await expect(page.getByRole('heading', { name: 'Booking Decisions', exact: true })).toBeVisible()
+  await page
+    .getByRole('button', { name: `View booking for ${event.name} at ${VENUE_NAME}` })
+    .click()
+  const section = page.getByRole('region', { name: 'Booking details' })
   const card = section
     .getByRole('article')
     .filter({ hasText: event.name })
@@ -76,7 +78,7 @@ test('SCRUM-110 and SCRUM-121: approval and an expiry update survive reload', as
   await expect(card).toBeVisible()
   // Both expiries sit before the event starts, as the API requires, wherever its day is.
   await card.getByLabel('Hold until (Singapore time)').fill(singaporeInputBefore(event.start_at, 2))
-  await card.getByRole('button', { name: 'Approve' }).click()
+  await card.getByRole('button', { name: 'Approve and place hold' }).click()
   // The request left Pending for the Tentative holds section — it was never confirmed,
   // so its card offers no approval control anymore. The hold text itself is the proof
   // the approval committed (the outcome line renders alongside it).
@@ -86,7 +88,7 @@ test('SCRUM-110 and SCRUM-121: approval and an expiry update survive reload', as
     .filter({ hasText: VENUE_NAME })
     .first()
   await expect(heldCard).toContainText(/Tentative hold until/)
-  await expect(heldCard.getByRole('button', { name: 'Approve' })).toHaveCount(0)
+  await expect(heldCard.getByRole('button', { name: 'Approve and place hold' })).toHaveCount(0)
   await expect(section.getByRole('status')).toContainText('is on a tentative hold')
 
   // Venue Staff revise the active hold through SCRUM-121's control. The new current
@@ -100,9 +102,11 @@ test('SCRUM-110 and SCRUM-121: approval and an expiry update survive reload', as
 
   // A reload keeps both the Tentative status and the revised current expiry.
   await page.reload()
-  const reloaded = page.locator('main section', {
-    has: page.getByRole('heading', { name: 'Venue booking requests' }),
-  })
+  await page.getByRole('button', { name: /^Tentative holds / }).click()
+  await page
+    .getByRole('button', { name: `View booking for ${event.name} at ${VENUE_NAME}` })
+    .click()
+  const reloaded = page.getByRole('region', { name: 'Booking details' })
   const reloadedHold = reloaded
     .getByRole('article')
     .filter({ hasText: event.name })

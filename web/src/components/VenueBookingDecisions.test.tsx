@@ -70,8 +70,15 @@ function renderPanel(fetcher: typeof fetch) {
   return spy
 }
 
+// SCRUM-40: open one request before using its decision controls.
+async function openBooking(name = 'Orientation Day', tab = 'Pending review') {
+  fireEvent.click(await screen.findByRole('button', { name: new RegExp(`^${tab} `) }))
+  fireEvent.click(await screen.findByRole('button', { name: `View booking for ${name} at Hall A` }))
+}
+
 // SCRUM-110: approval needs a hold expiry, so every test that clicks Approve enters one first.
 async function enterExpiry(scope: Pick<typeof screen, 'findByLabelText'>) {
+  if (!screen.queryByRole('region', { name: 'Booking details' })) await openBooking()
   fireEvent.change(await scope.findByLabelText('Hold until (Singapore time)'), {
     target: { value: '2029-12-31T10:00' },
   })
@@ -81,10 +88,19 @@ test('shows a pending request with its venue, event and requirements', async () 
   renderPanel(async () => json([PENDING]))
 
   expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull()
+  expect(screen.queryByText('Theatre style')).toBeNull()
+  await openBooking()
+  expect(screen.getByRole('region', { name: 'Booking details' })).toHaveFocus()
+  expect(screen.getByText('Orientation Day')).toBeInTheDocument()
   expect(screen.getByText('Hall A, Level 2')).toBeInTheDocument()
   expect(screen.getByText('150')).toBeInTheDocument()
   expect(screen.getByText('Theatre style')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: /Back to bookings/ }))
+  expect(
+    screen.getByRole('button', { name: 'View booking for Orientation Day at Hall A' }),
+  ).toHaveFocus()
 })
 
 test('shows an empty state when nothing is waiting', async () => {
@@ -110,7 +126,8 @@ test('rejecting sends the reason and shows the decision without a reload', async
     return json([decided ? rejected : PENDING])
   })
 
-  fireEvent.change(await screen.findByLabelText(/Reason for the Coordinator/), {
+  await openBooking()
+  fireEvent.change(screen.getByLabelText(/Reason for the Coordinator/), {
     target: { value: 'Hall closed for works' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
@@ -121,6 +138,26 @@ test('rejecting sends the reason and shows the decision without a reload', async
   const post = spy.mock.calls.find(([, init]) => init?.method === 'POST')
   expect(post?.[0]).toBe('/api/venue-bookings/booking-1/reject')
   expect(JSON.parse(String(post?.[1]?.body))).toEqual({ reason: 'Hall closed for works' })
+  fireEvent.click(screen.getByRole('button', { name: /Back to bookings/ }))
+  expect(await screen.findByText('No booking requests are waiting.')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Pending review 0' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  expect(screen.getByRole('button', { name: 'Pending review 0' })).toHaveFocus()
+  expect(screen.getByRole('status')).toHaveTextContent('Hall A has been rejected')
+  fireEvent.click(screen.getByRole('button', { name: 'Decided 1' }))
+  expect(
+    screen.getByRole('button', { name: 'View booking for Orientation Day at Hall A' }),
+  ).toBeInTheDocument()
+})
+
+test('SCRUM-40: a refused list request shows the API error and exposes no booking controls', async () => {
+  renderPanel(async () => json({ detail: 'Forbidden' }, 403))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Forbidden')
+  expect(screen.queryByRole('article')).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Approve and place hold' })).toBeNull()
 })
 
 test('a refused decision shows the API message', async () => {
@@ -130,7 +167,8 @@ test('a refused decision shows the API message', async () => {
       : json([PENDING]),
   )
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Reject' }))
+  await openBooking()
+  fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
 
   expect(await screen.findByRole('alert')).toHaveTextContent('already rejected')
 })
@@ -143,11 +181,13 @@ test('a refused decision shows its message on the request it belongs to', async 
       : json([PENDING, other]),
   )
 
-  const cards = await screen.findAllByRole('article')
-  fireEvent.click(within(cards[1]).getByRole('button', { name: 'Reject' }))
-
-  expect(await within(cards[1]).findByRole('alert')).toHaveTextContent('already rejected')
-  expect(within(cards[0]).queryByRole('alert')).toBeNull()
+  await openBooking('Careers Fair')
+  const card = screen.getByRole('article')
+  fireEvent.click(within(card).getByRole('button', { name: 'Reject' }))
+  expect(await within(card).findByRole('alert')).toHaveTextContent('already rejected')
+  fireEvent.click(screen.getByRole('button', { name: /Back to bookings/ }))
+  await openBooking()
+  expect(screen.queryByRole('alert')).toBeNull()
 })
 
 test('shows each decided request by its own status', async () => {
@@ -158,15 +198,16 @@ test('shows each decided request by its own status', async () => {
     ]),
   )
 
+  fireEvent.click(await screen.findByRole('button', { name: /^Decided / }))
   expect((await screen.findAllByText('Confirmed')).length).toBeGreaterThan(0)
   expect(screen.getAllByText('Cancelled').length).toBeGreaterThan(0)
-  expect(screen.getAllByText('When')).toHaveLength(2)
+  expect(screen.getAllByText('Session · Singapore time')).toHaveLength(2)
   expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull()
-
-  fireEvent.click(screen.getAllByRole('button', { name: /View details/ })[0])
-
-  expect(screen.queryByRole('tablist')).toBeNull()
-  expect(screen.getByRole('button', { name: /Back to booking requests/ })).toBeInTheDocument()
+  fireEvent.click(
+    screen.getByRole('button', { name: 'View booking for Orientation Day at Hall B' }),
+  )
+  expect(screen.queryByRole('group', { name: 'Booking request status' })).toBeNull()
+  expect(screen.getByRole('button', { name: /Back to bookings/ })).toBeInTheDocument()
 })
 
 test('SCRUM-75 AC1: a clash is shown and Approve is disabled', async () => {
@@ -188,6 +229,7 @@ test('SCRUM-75 AC1: a clash is shown and Approve is disabled', async () => {
     ]),
   )
 
+  await openBooking()
   // The clash period must be in Singapore time whatever zone the browser is in.
   const sgt = (value: string) =>
     new Date(value).toLocaleString('en-SG', { timeZone: 'Asia/Singapore' })
@@ -196,20 +238,21 @@ test('SCRUM-75 AC1: a clash is shown and Approve is disabled', async () => {
       `The venue is closed from ${sgt('2030-01-01T00:00:00Z')} to ${sgt('2030-01-01T08:00:00Z')}. It cannot be approved.`,
     ),
   ).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Approve and place hold' })).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Reject' })).toBeEnabled()
 })
 
 test('SCRUM-110: Approve stays disabled until a hold expiry is entered', async () => {
   renderPanel(async () => json([PENDING]))
 
-  const approve = await screen.findByRole('button', { name: 'Approve' })
+  await openBooking()
+  const approve = screen.getByRole('button', { name: 'Approve and place hold' })
   expect(approve).toBeDisabled()
 
   fireEvent.change(screen.getByLabelText('Hold until (Singapore time)'), {
     target: { value: '2029-12-31T10:00' },
   })
-  expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Approve and place hold' })).toBeEnabled()
 })
 
 test('SCRUM-110: approving posts the expiry to the approve route and shows the hold', async () => {
@@ -223,16 +266,17 @@ test('SCRUM-110: approving posts the expiry to the approve route and shows the h
     return json([approved ? { ...PENDING, status: 'tentative' } : PENDING])
   })
 
-  fireEvent.change(await screen.findByLabelText('Hold until (Singapore time)'), {
+  await openBooking()
+  fireEvent.change(screen.getByLabelText('Hold until (Singapore time)'), {
     target: { value: '2029-12-31T10:00' },
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Approve and place hold' }))
 
   expect(await screen.findByRole('status')).toHaveTextContent(
     'The request for Hall A is on a tentative hold.',
   )
   expect(await screen.findByText('Tentative hold')).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Approve and place hold' })).toBeNull()
   const post = spy.mock.calls.find(([, init]) => init?.method === 'POST')
   expect(post?.[0]).toBe('/api/venue-bookings/booking-1/approve')
 })
@@ -244,10 +288,11 @@ test('SCRUM-110: an invalid expiry shows the reason', async () => {
       : json([PENDING]),
   )
 
-  fireEvent.change(await screen.findByLabelText('Hold until (Singapore time)'), {
+  await openBooking()
+  fireEvent.change(screen.getByLabelText('Hold until (Singapore time)'), {
     target: { value: '2029-12-31T10:00' },
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Approve and place hold' }))
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Could not approve: Expiry must be in the future',
@@ -262,7 +307,7 @@ test('SCRUM-75 AC3: a refused approval shows why', async () => {
   )
 
   await enterExpiry(screen)
-  fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Approve and place hold' }))
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Could not approve: conflicts with confirmed booking b-9',
@@ -296,12 +341,12 @@ test('SCRUM-75: a refusal from a stale list reloads it and shows the named clash
   })
 
   await enterExpiry(screen)
-  fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Approve and place hold' }))
 
   expect(
     await screen.findByText(/The venue is closed from .* It cannot be approved\./),
   ).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Approve and place hold' })).toBeDisabled()
   expect(screen.queryByText(/closure-1/)).toBeNull()
 })
 
@@ -318,7 +363,7 @@ test('SCRUM-75: an old refusal goes away when the next decision is tried', async
   })
 
   await enterExpiry(screen)
-  fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Approve and place hold' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('Could not approve')
   fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
 
@@ -333,12 +378,14 @@ test('SCRUM-75: a refused approval shows its message on the request it belongs t
       : json([PENDING, other]),
   )
 
-  const cards = await screen.findAllByRole('article')
-  await enterExpiry(within(cards[1]))
-  fireEvent.click(within(cards[1]).getByRole('button', { name: 'Approve' }))
-
-  expect(await within(cards[1]).findByRole('alert')).toHaveTextContent('Could not approve')
-  expect(within(cards[0]).queryByRole('alert')).toBeNull()
+  await openBooking('Careers Fair')
+  const card = screen.getByRole('article')
+  await enterExpiry(screen)
+  fireEvent.click(within(card).getByRole('button', { name: 'Approve and place hold' }))
+  expect(await within(card).findByRole('alert')).toHaveTextContent('Could not approve')
+  fireEvent.click(screen.getByRole('button', { name: /Back to bookings/ }))
+  await openBooking()
+  expect(screen.queryByRole('alert')).toBeNull()
 })
 
 test('SCRUM-75: an old rejection error goes away when Approve is tried', async () => {
@@ -350,10 +397,11 @@ test('SCRUM-75: an old rejection error goes away when Approve is tried', async (
     return json([PENDING])
   })
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Reject' }))
+  await openBooking()
+  fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('already rejected')
   await enterExpiry(screen)
-  fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Approve and place hold' }))
 
   await waitFor(() => expect(screen.queryByText(/already rejected/)).toBeNull())
 })
@@ -412,7 +460,7 @@ test('SCRUM-82 AC3: the request card says how long the venue is held for', async
   }
   renderPanel(async () => json([buffered]))
 
-  await screen.findByText('Orientation Day')
+  await openBooking()
   expect(screen.getByText('Venue held:')).toBeInTheDocument()
   expect(
     screen.getByText(
@@ -426,7 +474,7 @@ test('SCRUM-82 AC3: the request card says how long the venue is held for', async
 test('SCRUM-82 AC7: a venue with no buffers has no held line to show', async () => {
   renderPanel(async () => json([PENDING]))
 
-  await screen.findByText('Orientation Day')
+  await openBooking()
   // Absent, not shown empty: the row renders "Not given" for a null value.
   expect(screen.queryByText('Venue held:')).toBeNull()
 })
@@ -443,7 +491,7 @@ test('SCRUM-43: the queue lists every requirement the event currently has', asyn
     json([{ ...PENDING, equipment_requirements: ['Projector x2', 'Microphone x3'] }]),
   )
 
-  await screen.findByText('Orientation Day')
+  await openBooking()
   expect(screen.getByText('Projector x2, Microphone x3')).toBeInTheDocument()
 })
 
@@ -452,7 +500,7 @@ test('SCRUM-43: an event needing nothing says so rather than looking unanswered'
   // Coordinator recording nothing is an answer, not a gap.
   renderPanel(async () => json([{ ...PENDING, equipment_requirements: [] }]))
 
-  await screen.findByText('Orientation Day')
+  await openBooking()
   expect(screen.getByText('None recorded')).toBeInTheDocument()
   expect(screen.queryByText('Not given')).toBeNull()
 })

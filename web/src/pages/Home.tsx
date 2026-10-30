@@ -145,8 +145,8 @@ export default function HomePage() {
       : []),
     ...(hasRole('venue_staff')
       ? [
-          nav('venue-catalogue', 'Venues', '⌂'),
           nav('booking-decisions', 'Venues', '□'),
+          nav('venue-catalogue', 'Venues', '⌂'),
           nav('booking-problems', 'Venues', '!'),
           nav('venue-calendar', 'Venues', '◷'),
         ]
