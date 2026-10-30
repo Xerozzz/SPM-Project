@@ -306,7 +306,7 @@ function VenueForm({
 
   return (
     <form className="mt-4 space-y-3 border-t border-slate-200 pt-4" noValidate onSubmit={submit}>
-      <h3 className="text-sm font-medium">{editing ? `Edit “${editing.name}”` : 'Add a venue'}</h3>
+      <h2 className="text-3xl font-medium">{editing ? `Edit “${editing.name}”` : 'Add a venue'}</h2>
 
       <Field label="Name" error={reasonFor('name')}>
         <input
