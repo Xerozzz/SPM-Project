@@ -59,21 +59,23 @@ export default function UnassignedQueue() {
       {queue.data && queue.data.length > 0 && (
         <ul className="mt-2 space-y-3">
           {queue.data.map((request) => (
-            <li key={request.id} className="rounded border border-slate-200 p-3 text-sm">
-              <p className="font-medium">{request.name ?? 'Untitled request'}</p>
-              <dl className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1 text-slate-600">
-                <dt className="font-medium text-slate-500">Event ID</dt>
-                <dd>{request.id}</dd>
-                <dt className="font-medium text-slate-500">Organiser</dt>
-                <dd>{request.organiser_email}</dd>
-                <dt className="font-medium text-slate-500">Start</dt>
-                <dd>{request.start_at ?? '—'}</dd>
-                <dt className="font-medium text-slate-500">End</dt>
-                <dd>{request.end_at ?? '—'}</dd>
-                <dt className="font-medium text-slate-500">Expected attendance</dt>
-                <dd>{request.expected_attendance ?? '—'}</dd>
-                <dt className="font-medium text-slate-500">Submitted</dt>
-                <dd>{request.submitted_at ?? '—'}</dd>
+            <li key={request.id} className="rounded-2xl border border-slate-200 p-3 text-sm">
+              <p className="text-lg font-semibold tracking-normal text-slate-900">
+                {request.name ?? 'Untitled request'}
+              </p>
+              <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
+                <dt className="text-xs text-slate-500">Event ID</dt>
+                <dd className="break-all font-medium text-slate-700">{request.id}</dd>
+                <dt className="text-xs text-slate-500">Organiser</dt>
+                <dd className="break-words font-medium text-slate-700">{request.organiser_email}</dd>
+                <dt className="text-xs text-slate-500">Start</dt>
+                <dd className="font-medium text-slate-700">{request.start_at ?? '—'}</dd>
+                <dt className="text-xs text-slate-500">End</dt>
+                <dd className="font-medium text-slate-700">{request.end_at ?? '—'}</dd>
+                <dt className="text-xs text-slate-500">Expected attendance</dt>
+                <dd className="font-medium text-slate-700">{request.expected_attendance ?? '—'}</dd>
+                <dt className="text-xs text-slate-500">Submitted</dt>
+                <dd className="font-medium text-slate-700">{request.submitted_at ?? '—'}</dd>
               </dl>
               <div className="mt-2 flex items-center gap-2">
                 <label className="text-slate-500">

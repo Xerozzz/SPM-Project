@@ -84,6 +84,7 @@ someone else made two weeks ago.
 | [0072](0072-attendee-registration-summary-and-details.md) | Separate attendee registration summaries and details | Proposed |
 | [0073](0073-coordinator-review-summary-and-details.md) | Separate coordinator review summaries and details | Proposed |
 | [0074](0074-completed-event-summary-and-record-correction.md) | Separate completed-event summaries and record correction | Proposed |
+| [0075](0075-active-assignment-summary-and-details.md) | Separate active-assignment summaries and details | Proposed |
 
 ## When to write one
 
