@@ -11,12 +11,16 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+const calendarDate = new Date()
+const eventStart = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), 15, 9, 0, 0)
+const eventEnd = new Date(eventStart.getTime() + 2 * 60 * 60 * 1000)
+
 const shared: EventCalendarEntry = {
   id: 'colleague-event',
   name: 'Shared workshop',
   status: 'draft',
-  start_at: '2026-11-01T09:00:00Z',
-  end_at: '2026-11-01T11:00:00Z',
+  start_at: eventStart.toISOString(),
+  end_at: eventEnd.toISOString(),
 }
 
 function renderCalendar({
@@ -57,21 +61,27 @@ function renderCalendar({
 describe('SCRUM-87 organisation calendar (frontend unit)', () => {
   test('renders event name, formatted start/end and current status', async () => {
     renderCalendar({ entries: [shared] })
-    expect(await screen.findByText(shared.name!)).toBeInTheDocument()
-    expect(screen.getByText(new Date(shared.start_at).toLocaleString())).toBeInTheDocument()
-    expect(screen.getByText(new Date(shared.end_at).toLocaleString())).toBeInTheDocument()
-    expect(screen.getByText('draft')).toBeInTheDocument()
+    const event = await screen.findByRole('button', { name: 'View Shared workshop details' })
+    expect(event).toHaveTextContent('Shared workshop')
+    expect(event).toHaveTextContent('draft')
+
+    fireEvent.click(event)
+    const details = screen.getByRole('article', { name: 'Event calendar details' })
+    expect(
+      within(details).getByText(new Date(shared.start_at).toLocaleString()),
+    ).toBeInTheDocument()
+    expect(within(details).getByText(new Date(shared.end_at).toLocaleString())).toBeInTheDocument()
   })
 
   test('renders multiple organisation events as separate entries', async () => {
     renderCalendar({
       entries: [shared, { ...shared, id: 'own-event', name: 'Own event', status: 'submitted' }],
     })
-    const entries = await screen.findAllByRole('listitem')
-    expect(entries).toHaveLength(2)
-    expect(within(entries[0]).getByText('Shared workshop')).toBeInTheDocument()
-    expect(within(entries[1]).getByText('Own event')).toBeInTheDocument()
-    expect(within(entries[1]).getByText('submitted')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', { name: 'View Shared workshop details' }),
+    ).toBeInTheDocument()
+    const ownEvent = screen.getByRole('button', { name: 'View Own event details' })
+    expect(ownEvent).toHaveTextContent('submitted')
   })
 
   test('shows the no-event state', async () => {
