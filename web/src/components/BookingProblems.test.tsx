@@ -122,7 +122,7 @@ test('SCRUM-89: a failed load is reported rather than shown as nothing wrong', a
   // The dangerous failure for this screen: silently looking like all is well.
   renderPanel(async () => json({ detail: 'nope' }, 500))
 
-  expect(await screen.findByRole('alert')).toHaveTextContent('Could not load booking problems')
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not load booking conflicts')
   expect(screen.queryByText(/Nothing needs attention/)).toBeNull()
 })
 

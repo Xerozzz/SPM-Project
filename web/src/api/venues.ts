@@ -348,6 +348,6 @@ export async function listBookingProblems(token: string): Promise<VenueProblems[
   const response = await fetch('/api/venues/booking-problems', {
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (!response.ok) throw new Error(`Could not load booking problems (status ${response.status})`)
+  if (!response.ok) throw new Error(`Could not load booking conflicts (status ${response.status})`)
   return (await response.json()) as VenueProblems[]
 }

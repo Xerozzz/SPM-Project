@@ -92,8 +92,8 @@ const VIEW_DETAILS: Record<View, Omit<NavigationItem, 'group' | 'icon'>> = {
   },
   'booking-problems': {
     id: 'booking-problems',
-    label: 'Booking Problems',
-    description: 'Identify confirmed arrangements affected by venue changes.',
+    label: 'Booking Conflicts',
+    description: 'Review bookings and tentative holds affected by venue changes.',
   },
   'venue-calendar': {
     id: 'venue-calendar',
