@@ -108,6 +108,7 @@ test('the plan a decision is about is shown in full', async () => {
   renderQueue()
 
   expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
+  expect(screen.getAllByText(/01\/01\/2030, 10:00:00 am to 2:00:00 pm/)).toHaveLength(2)
   expect(screen.getByText('200 expected')).toBeInTheDocument()
   expect(screen.getByText(/Step-free access/)).toBeInTheDocument()
   expect(screen.getByText(/Theatre/)).toBeInTheDocument()

@@ -143,13 +143,6 @@ export default function VenueBookingDecisions({
           {outcome}
         </p>
       )}
-      <div className="flex flex-wrap justify-end gap-3">
-        {pending.length > 0 && (
-          <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-sm font-medium text-amber-800">
-            {pending.length} awaiting review
-          </span>
-        )}
-      </div>
       {requests.isPending && <p className="mt-2 text-sm">Loading…</p>}
       {requests.isError && (
         <p role="alert" className="mt-2 text-sm text-red-600">

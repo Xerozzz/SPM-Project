@@ -121,24 +121,21 @@ export default function MyEventRequests({
           ← Back to My Events
         </button>
       ) : (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-slate-500">Your events, from first draft to final wrap-up.</p>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <label className="block max-w-md flex-1 text-sm font-medium">
+            Search my events
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Event name or venue"
+              className="cs-field"
+            />
+          </label>
           <button type="button" className="cs-button" onClick={onCreateEvent}>
             + Create event
           </button>
         </div>
-      )}
-      {!selectedId && (
-        <label className="block max-w-md text-sm font-medium">
-          Search my events
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Event name or venue"
-            className="cs-field"
-          />
-        </label>
       )}
       <div>
         {requests.isPending && <p className="mt-2 text-sm">Loading...</p>}

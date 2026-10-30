@@ -116,6 +116,9 @@ export default function VenueCatalogue({
                 setShowForm(true)
               }}
             >
+              <span aria-hidden="true" className="mr-1">
+                +
+              </span>
               Add venue
             </button>
           )}

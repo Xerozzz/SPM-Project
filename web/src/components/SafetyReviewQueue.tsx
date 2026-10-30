@@ -22,6 +22,27 @@ function name(plan: EventPlan): string {
   return plan.event_name ?? 'Untitled event'
 }
 
+/** Keep a same-day plan readable without repeating its date in the Singapore-time display. */
+function formatSingaporeRange(startAt: string, endAt: string): string {
+  const start = formatSingaporeParts(startAt)
+  const end = formatSingaporeParts(endAt)
+  return start.date === end.date
+    ? `${start.date}, ${start.time} to ${end.time}`
+    : `${start.formatted} to ${end.formatted}`
+}
+
+function formatSingaporeParts(value: string) {
+  const formatted = formatSingaporeTime(value)
+  const separator = formatted.indexOf(', ')
+  return separator === -1
+    ? { date: formatted, time: formatted, formatted }
+    : {
+        date: formatted.slice(0, separator),
+        time: formatted.slice(separator + 2),
+        formatted,
+      }
+}
+
 /** SCRUM-53's states, said plainly. The Officer cares how much is actually secured. */
 const RESERVATION_LABELS: Record<string, string> = {
   not_reserved: 'nothing reserved',
@@ -229,7 +250,7 @@ function PlanCard({
       <h4 className="text-lg font-semibold tracking-normal">{name(plan)}</h4>
       {plan.event_start_at && plan.event_end_at && (
         <p className="text-slate-500">
-          {formatSingaporeTime(plan.event_start_at)} to {formatSingaporeTime(plan.event_end_at)}
+          {formatSingaporeRange(plan.event_start_at, plan.event_end_at)}
         </p>
       )}
       <p className="text-slate-500">
@@ -252,7 +273,7 @@ function PlanCard({
           {plan.venues.map((venue) => (
             <li key={venue.booking_id}>
               <span className="font-medium">{venue.session_label}</span>{' '}
-              {formatSingaporeTime(venue.start_at)} to {formatSingaporeTime(venue.end_at)}{' '}
+              {formatSingaporeRange(venue.start_at, venue.end_at)}{' '}
               <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">
                 {STATUS_LABELS[venue.status]}
               </span>

@@ -28,8 +28,8 @@ export default function SignInPage() {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-[#f5f5f5] p-4 sm:p-6 lg:p-8">
-      <div className="grid w-full max-w-6xl overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm lg:min-h-[680px] lg:grid-cols-[1.1fr_1fr]">
+    <main className="min-h-screen bg-white">
+      <div className="grid min-h-screen w-full lg:grid-cols-[1.1fr_1fr]">
         <aside
           aria-label="About ConnectSphere"
           className="hidden overflow-hidden bg-[#eaf7f4] p-10 lg:flex lg:flex-col xl:p-12"
@@ -43,7 +43,7 @@ export default function SignInPage() {
               Bring every event together.
             </p>
             <p className="mt-5 max-w-sm text-base leading-7 text-slate-600">
-              Plan events, coordinate your team, and keep every detail in one place.
+              Discover, organise, and take part in events.
             </p>
           </div>
           <div className="relative mt-8 min-h-64 flex-1" aria-hidden="true">
@@ -69,7 +69,6 @@ export default function SignInPage() {
             >
               Welcome back
             </h1>
-            <p className="mt-3 text-sm leading-6 text-slate-500">Sign in to manage your events.</p>
 
             <form
               onSubmit={onSubmit}

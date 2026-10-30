@@ -45,6 +45,7 @@ test('technical support can add equipment and sees it in the catalogue', async (
   })
 
   expect(await screen.findByText('No equipment in the catalogue yet.')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Add equipment' }))
   fireEvent.change(screen.getByLabelText(/^Equipment type/), { target: { value: 'Projector' } })
   fireEvent.change(screen.getByLabelText(/^Total quantity/), { target: { value: '4' } })
   fireEvent.change(screen.getByLabelText(/^Location/), { target: { value: 'Media Store' } })
@@ -57,9 +58,9 @@ test('technical support can add equipment and sees it in the catalogue', async (
   expect(posted.description).toBeNull()
   expect(await screen.findByRole('status')).toHaveTextContent('“Projector” has been added')
   const entry = await screen.findByRole('listitem')
-  expect(entry).toHaveTextContent('Equipment type: Projector')
+  expect(entry).toHaveTextContent('Projector')
   expect(entry).toHaveTextContent('Description: Not provided')
-  expect(entry).toHaveTextContent('Total quantity: 4')
+  expect(entry).toHaveTextContent('Available: 4')
   expect(entry).toHaveTextContent('Location: Media Store')
   expect(entry).toHaveTextContent('Operational status: Operational')
 })
@@ -71,6 +72,7 @@ test('validation feedback names the equipment field to correct', async () => {
   })
 
   await screen.findByText('No equipment in the catalogue yet.')
+  fireEvent.click(screen.getByRole('button', { name: 'Add equipment' }))
   fireEvent.click(screen.getByRole('button', { name: 'Add equipment' }))
 
   expect(await screen.findByText('Total quantity must be zero or more')).toBeInTheDocument()
@@ -97,7 +99,7 @@ test('technical support can edit an equipment entry and sees the saved values', 
     return json(saved)
   })
 
-  await screen.findByText('Equipment type:')
+  await screen.findByText('Projector')
   fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
   expect(screen.getByRole('heading', { name: 'Edit equipment' })).toBeInTheDocument()
   expect(screen.getByLabelText(/^Equipment type/)).toHaveValue('Projector')
@@ -109,7 +111,7 @@ test('technical support can edit an equipment entry and sees the saved values', 
   expect(request.url).toBe('/api/equipment/equipment-1')
   expect(request.body).toMatchObject({ total_quantity: 2, operational_status: 'Damaged' })
   expect(await screen.findByRole('status')).toHaveTextContent('“Projector” has been updated')
-  expect(screen.getByRole('listitem')).toHaveTextContent('Total quantity: 2')
+  expect(screen.getByRole('listitem')).toHaveTextContent('Available: 2')
   expect(screen.getByRole('listitem')).toHaveTextContent('Operational status: Damaged')
 })
 
@@ -174,6 +176,6 @@ test('editing the second catalogue entry sends only its identifier', async () =>
   fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
   await waitFor(() => expect(updatedUrl).toBe('/api/equipment/equipment-2'))
-  expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('Total quantity: 1')
-  expect(screen.getAllByRole('listitem')[1]).toHaveTextContent('Total quantity: 3')
+  expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('Available: 1')
+  expect(screen.getAllByRole('listitem')[1]).toHaveTextContent('Available: 3')
 })
