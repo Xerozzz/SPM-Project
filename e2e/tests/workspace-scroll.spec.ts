@@ -9,9 +9,12 @@ async function openReviewQueue(page: Page) {
   await page.getByLabel('Password', { exact: true }).fill('password123')
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Review Queue', exact: true })).toBeVisible()
-  await expect(
-    page.locator('main > section:not([hidden]) > section > article').first(),
-  ).toBeAttached()
+  await page.getByRole('button', { name: /^Approved / }).click()
+  await page
+    .getByRole('button', { name: /^View details for / })
+    .first()
+    .click()
+  await expect(page.getByRole('button', { name: /Back to Review Queue/ })).toBeVisible()
   await page.waitForLoadState('networkidle')
 }
 
@@ -26,9 +29,10 @@ test('desktop scrolling stops at the last review card without moving the outer p
     element.scrollTop = element.scrollHeight
   })
   await expect(
-    page.locator('main > section:not([hidden]) > section > article').last(),
+    page.locator('main > section:not([hidden]) > section > div > ul > li').last(),
   ).toBeInViewport()
   const bottom = await workspace.evaluate((element) => element.scrollTop)
+  expect(bottom).toBeGreaterThan(0)
 
   await page.mouse.move(1000, 700)
   await page.mouse.wheel(0, 2000)
@@ -42,7 +46,7 @@ test('mobile review content remains scrollable to its last card', async ({ page 
   await openReviewQueue(page)
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
   await expect(
-    page.locator('main > section:not([hidden]) > section > article').last(),
+    page.locator('main > section:not([hidden]) > section > div > ul > li').last(),
   ).toBeInViewport()
   expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
 })
