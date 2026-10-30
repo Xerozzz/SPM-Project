@@ -16,16 +16,16 @@ async function signOut(page: Page) {
 }
 
 function ownRow(page: Page, name: string) {
-  const ownRequests = page
-    .getByRole('heading', { name: 'My event requests' })
-    .locator('xpath=../following-sibling::ul[1]')
-  return ownRequests.getByRole('listitem').filter({ hasText: name })
+  return page
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name, exact: true }) })
 }
 
 test('an organiser submission appears in the Lead unassigned queue', async ({ page }) => {
   const name = `E2E unassigned ${Date.now()}`
   await signIn(page, 'organiser@example.com')
-  await expect(page.getByRole('heading', { name: 'My event requests' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'My Events', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: /Create event$/ }).click()
 
   await page.getByLabel('Name *').fill(name)
   await page.getByLabel('Purpose *').fill('Welcome new students')
@@ -61,7 +61,8 @@ test('an organiser submission appears in the Lead unassigned queue', async ({ pa
 test('a Lead assigns an unassigned request to an eligible coordinator', async ({ page }) => {
   const name = `E2E assign ${Date.now()}`
   await signIn(page, 'organiser@example.com')
-  await expect(page.getByRole('heading', { name: 'My event requests' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'My Events', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: /Create event$/ }).click()
 
   await page.getByLabel('Name *').fill(name)
   await page.getByLabel('Purpose *').fill('Welcome new students')
@@ -105,7 +106,8 @@ test('a Lead assigns an unassigned request to an eligible coordinator', async ({
 test('a Lead reassigns an assigned request and views its history', async ({ page }) => {
   const name = `E2E reassign ${Date.now()}`
   await signIn(page, 'organiser@example.com')
-  await expect(page.getByRole('heading', { name: 'My event requests' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'My Events', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: /Create event$/ }).click()
 
   await page.getByLabel('Name *').fill(name)
   await page.getByLabel('Purpose *').fill('Welcome new students')
@@ -166,7 +168,8 @@ test('a reassigned request moves coordinator access and keeps Lead visibility', 
 }) => {
   const name = `E2E assigned access ${Date.now()}`
   await signIn(page, 'organiser@example.com')
-  await expect(page.getByRole('heading', { name: 'My event requests' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'My Events', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: /Create event$/ }).click()
 
   await page.getByLabel('Name *').fill(name)
   await page.getByLabel('Purpose *').fill('Welcome new students')

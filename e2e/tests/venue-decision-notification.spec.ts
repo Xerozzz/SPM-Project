@@ -42,7 +42,7 @@ async function call(
 
 function decisionEntries(page: Page, eventId: string) {
   return page
-    .getByLabel('Notifications')
+    .getByLabel('Notifications', { exact: true })
     .getByRole('listitem')
     .filter({ hasText: /venue_booking_approved|venue_hold_expiry_updated/ })
     .filter({ hasText: eventId })
@@ -83,6 +83,7 @@ test('an approval and an expiry edit each tell the Coordinator, with a link', as
 
   // The assigned Coordinator sees both alerts in their inbox, with the view link.
   await signIn(page, VENUE_SPEC_ACCOUNT)
+  await page.getByRole('button', { name: /^Notifications/ }).click()
   const entries = decisionEntries(page, event.id)
   await expect(entries).toHaveCount(2)
   await expect(
@@ -92,5 +93,6 @@ test('an approval and an expiry edit each tell the Coordinator, with a link', as
 
   // An unrelated user is told nothing.
   await signIn(page, 'attendee@example.com')
+  await page.getByRole('button', { name: /^Notifications/ }).click()
   await expect(decisionEntries(page, event.id)).toHaveCount(0)
 })

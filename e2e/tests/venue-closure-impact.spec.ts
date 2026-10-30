@@ -71,6 +71,7 @@ test('a closure over a live hold is saved, listed and notified', async ({ page }
   await page.getByRole('button', { name: 'Sign out' }).click()
 
   await signIn(page, 'venue-staff@example.com')
+  await page.getByRole('button', { name: 'Venue Catalogue' }).click()
   const expires = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()
   await api(page, `/api/venue-bookings/${booking.id}/approve`, 'POST', { expires_at: expires })
 
@@ -92,16 +93,21 @@ test('a closure over a live hold is saved, listed and notified', async ({ page }
   await page.getByRole('button', { name: 'Sign out' }).click()
 
   await signIn(page, VENUE_SPEC_ACCOUNT)
+  await page.getByRole('button', { name: /^Notifications/ }).click()
   // This event's own closure-impact notification: earlier runs left others in the inbox,
   // and this event also has an assignment notification.
   await expect(
     page
-      .getByRole('region', { name: 'Notifications' })
+      .getByLabel('Notifications', { exact: true })
       .getByRole('listitem', { name: new RegExp(`notification for event ${event.id}$`) })
       .filter({ hasText: 'venue_closure_impact' }),
   ).toBeVisible()
   // AC2, AC3: the existing booking list shows the arrangement needs action.
-  const card = page.getByRole('article').filter({ hasText: event.name })
+  await page.getByRole('button', { name: 'Review Queue' }).click()
+  const card = page
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name: event.name, exact: true }) })
+  await card.getByRole('button', { name: `View details for ${event.name}` }).click()
   await expect(card.getByText(/Needs attention\. The venue is closed/)).toBeVisible()
 
   // SCRUM-116 AC1 to AC3: start a linked replacement at another venue from the affected
@@ -128,11 +134,16 @@ test('a closure over a live hold is saved, listed and notified', async ({ page }
   // SCRUM-133: Venue Staff approve the replacement (a hold), then the Coordinator adopts
   // it. The original is cancelled and the link between the two stays.
   await signIn(page, 'venue-staff@example.com')
+  await page.getByRole('button', { name: 'Venue Catalogue' }).click()
   await api(page, `/api/venue-bookings/${replacement.id}/approve`, 'POST', { expires_at: expires })
   await page.getByRole('button', { name: 'Sign out' }).click()
 
   await signIn(page, VENUE_SPEC_ACCOUNT)
-  const adoptCard = page.getByRole('article').filter({ hasText: event.name })
+  await page.getByRole('button', { name: 'Review Queue' }).click()
+  const adoptCard = page
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name: event.name, exact: true }) })
+  await adoptCard.getByRole('button', { name: `View details for ${event.name}` }).click()
   await adoptCard
     .getByRole('button', { name: 'Adopt this replacement for Closure impact session' })
     .click()
@@ -145,6 +156,7 @@ test('a closure over a live hold is saved, listed and notified', async ({ page }
   // Clean up so no closure is left on the auditorium for later runs or specs. Removing
   // it clears the derived marker with nothing else to undo (AC6).
   await signIn(page, 'venue-staff@example.com')
+  await page.getByRole('button', { name: 'Venue Catalogue' }).click()
   const closures = await api<{ id: string }[]>(page, `/api/venues/${venue.id}/unavailabilities`)
   for (const closure of closures) {
     await page.evaluate(

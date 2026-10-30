@@ -16,10 +16,9 @@ async function signOut(page: Page) {
 }
 
 function ownRow(page: Page, name: string) {
-  const ownRequests = page
-    .getByRole('heading', { name: 'My event requests' })
-    .locator('xpath=../following-sibling::ul[1]')
-  return ownRequests.getByRole('listitem').filter({ hasText: name })
+  return page
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name, exact: true }) })
 }
 
 async function ownRequestId(page: Page, name: string) {
@@ -37,7 +36,8 @@ async function ownRequestId(page: Page, name: string) {
 test('an organiser submission notifies the active Lead inbox', async ({ page }) => {
   const name = `E2E lead notify ${Date.now()}`
   await signIn(page, 'organiser@example.com')
-  await expect(page.getByRole('heading', { name: 'My event requests' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'My Events', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: /Create event$/ }).click()
 
   await page.getByLabel('Name *').fill(name)
   await page.getByLabel('Purpose *').fill('Welcome new students')
@@ -61,7 +61,8 @@ test('an organiser submission notifies the active Lead inbox', async ({ page }) 
   await signOut(page)
 
   await signIn(page, 'coordinator-lead@example.com')
-  const inbox = page.getByLabel('Notifications')
+  await page.getByRole('button', { name: /^Notifications/ }).click()
+  const inbox = page.getByLabel('Notifications', { exact: true })
   await expect(inbox).toBeVisible()
   // Parallel specs submit requests too, so the newest item may belong to another event.
   // Select this spec's own by the event ID in its label, leaving the read state out of

@@ -16,6 +16,7 @@ async function signOut(page: Page) {
 }
 
 async function createSubmittedRequest(page: Page, name: string) {
+  await page.getByRole('button', { name: /Create event$/ }).click()
   await page.getByLabel('Name *').fill(name)
   await page.getByLabel('Purpose *').fill('Welcome new students')
   await page.getByLabel('Description *').fill('Campus orientation activities')
@@ -43,7 +44,7 @@ test('internal notes stay with the current assignee, never the organiser', async
   const note = `Offline call ${Date.now()}: venue confirmed layout TBC`
 
   await signIn(page, 'organiser@example.com')
-  await expect(page.getByRole('heading', { name: 'My event requests' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'My Events', exact: true })).toBeVisible()
   await createSubmittedRequest(page, name)
   await signOut(page)
 
@@ -77,11 +78,10 @@ test('internal notes stay with the current assignee, never the organiser', async
 
   // The Organiser has no clarification surface on their own submitted request.
   await signIn(page, 'organiser@example.com')
-  await expect(page.getByRole('heading', { name: 'My event requests' })).toBeVisible()
-  const ownRequests = page
-    .getByRole('heading', { name: 'My event requests' })
-    .locator('xpath=../following-sibling::ul[1]')
-  const ownRow = ownRequests.getByRole('listitem').filter({ hasText: name })
+  await expect(page.getByRole('heading', { name: 'My Events', exact: true })).toBeVisible()
+  const ownRow = page
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name, exact: true }) })
   await expect(ownRow).toContainText('Submitted')
   await expect(ownRow.getByText('Internal clarification notes')).toHaveCount(0)
   await expect(ownRow.getByText(note)).toHaveCount(0)

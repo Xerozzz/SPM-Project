@@ -112,13 +112,13 @@ test('an arranged event cannot be confirmed until safety has approved it', async
   const { event } = await arrangedEvent(page.request, 'E2E confirm blocked')
 
   await signIn(page, VENUE_SPEC_ACCOUNT)
-  // Anchored on the button, whose label names this event, rather than on the card: the
-  // Coordinator's cards contain nested articles and the board holds every other event
-  // this account has, so "the article mentioning the name" is not one element.
+  await page.getByRole('button', { name: 'Review Queue' }).click()
+  const card = page
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name: event.name, exact: true }) })
+  await card.getByRole('button', { name: `View details for ${event.name}` }).click()
   const button = page.getByRole('button', { name: `Confirm ${event.name}` })
   await expect(button).toBeVisible({ timeout: 15000 })
-  // The nearest enclosing section, not `filter({has})`: sections nest here, so that
-  // would match every ancestor of the button as well as its own panel.
   const panel = button.locator('xpath=ancestor::section[1]')
 
   await expect(panel.getByText('Not ready to confirm.')).toBeVisible()
@@ -132,6 +132,11 @@ test('a safety-approved event is confirmed and its hold becomes a booking', asyn
   await approveSafety(page.request, event.id)
 
   await signIn(page, VENUE_SPEC_ACCOUNT)
+  await page.getByRole('button', { name: 'Review Queue' }).click()
+  const card = page
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name: event.name, exact: true }) })
+  await card.getByRole('button', { name: `View details for ${event.name}` }).click()
   const button = page.getByRole('button', { name: `Confirm ${event.name}` })
   await expect(button).toBeVisible({ timeout: 15000 })
   await expect(button).toBeEnabled()

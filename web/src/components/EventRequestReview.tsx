@@ -26,6 +26,7 @@ import EventEquipmentRequirements from './EventEquipmentRequirements'
 import PlanningInfoEditor from './PlanningInfoEditor'
 import RegistrationSettingsCard from './RegistrationSettingsCard'
 import RegistrationReviewList from './RegistrationReviewList'
+import VenueArrangements from './VenueArrangements'
 import VenueBookingRequest from './VenueBookingRequest'
 
 /**
@@ -333,6 +334,7 @@ function ReviewDetails({
       {request.status === 'approved' && <ReminderSchedule event={request} />}
       {request.status === 'confirmed' && (
         <>
+          <VenueArrangements event={request} onVenueChanged={onConfirmed} />
           <RegistrationSettingsCard event={request} />
           <RegistrationReviewList eventId={request.id} />
         </>

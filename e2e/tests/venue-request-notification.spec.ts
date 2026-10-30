@@ -45,7 +45,8 @@ test('a new venue request notifies the Venue Staff inbox', async ({ page }) => {
   expect(created.ok(), `booking request -> ${created.status()}`).toBe(true)
 
   await signIn(page, 'venue-staff@example.com')
-  const inbox = page.getByLabel('Notifications')
+  await page.getByRole('button', { name: /^Notifications/ }).click()
+  const inbox = page.getByLabel('Notifications', { exact: true })
   await expect(inbox).toBeVisible()
   // Parallel specs submit venue requests too, so the newest item may belong to another
   // event. Select this spec's own: the label names the event ID after the read state,

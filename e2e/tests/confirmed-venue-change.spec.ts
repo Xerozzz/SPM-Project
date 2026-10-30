@@ -111,6 +111,11 @@ test('SCRUM-118: a venue change returns a Confirmed event to planning', async ({
   const reason = `Hall flooded ${Date.now()}`
 
   await signIn(page, VENUE_SPEC_ACCOUNT)
+  await page.getByRole('button', { name: 'Review Queue' }).click()
+  const card = page
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name: event.name, exact: true }) })
+  await card.getByRole('button', { name: `View details for ${event.name}` }).click()
   await page
     .getByRole('button', { name: `Cancel arrangement for ${morning}` })
     .click({ timeout: 15000 })

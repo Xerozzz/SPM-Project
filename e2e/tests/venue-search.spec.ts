@@ -17,6 +17,7 @@ async function signInAsCoordinator(page: Page) {
   await page.getByLabel('Email').fill('coordinator@example.com')
   await page.getByLabel('Password').fill('password123')
   await page.getByRole('button', { name: 'Sign in' }).click()
+  await page.getByRole('button', { name: 'Venue Planning' }).click()
   await expect(page.getByRole('heading', { name: 'Venue search' })).toBeVisible()
 }
 

@@ -42,7 +42,7 @@ async function call(
 
 function reviewEntries(page: Page, eventId: string) {
   return page
-    .getByLabel('Notifications')
+    .getByLabel('Notifications', { exact: true })
     .getByRole('listitem')
     .filter({ hasText: 'equipment_review_needed' })
     .filter({ hasText: eventId })
@@ -78,6 +78,7 @@ test('a new equipment requirement tells Technical Support, with a link to the re
 
   // Technical Support Staff see it in their inbox, with the review link.
   await signIn(page, 'tech-support@example.com')
+  await page.getByRole('button', { name: /^Notifications/ }).click()
   const entry = reviewEntries(page, approved.id)
   await expect(entry).toHaveCount(1)
   await expect(entry.getByRole('link', { name: 'Review equipment requirements' })).toHaveAttribute(
@@ -88,5 +89,6 @@ test('a new equipment requirement tells Technical Support, with a link to the re
 
   // An unrelated user is told nothing.
   await signIn(page, 'attendee@example.com')
+  await page.getByRole('button', { name: /^Notifications/ }).click()
   await expect(reviewEntries(page, approved.id)).toHaveCount(0)
 })

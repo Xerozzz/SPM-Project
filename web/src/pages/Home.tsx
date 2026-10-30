@@ -8,6 +8,7 @@ import AppShell, { type NavigationItem } from '../components/AppShell'
 import ActiveAssignments from '../components/ActiveAssignments'
 import AttendeeRegistrations from '../components/AttendeeRegistrations'
 import BookingProblems from '../components/BookingProblems'
+import CancelledEvents from '../components/CancelledEvents'
 import CompletedEvents from '../components/CompletedEvents'
 import EquipmentCatalogue from '../components/EquipmentCatalogue'
 import EquipmentReviewQueue from '../components/EquipmentReviewQueue'
@@ -260,6 +261,7 @@ export default function HomePage() {
           <EventRequestReview
             targetEventId={activeView === 'review-queue' ? navigation.eventId : null}
           />
+          <CancelledEvents />
         </ViewPanel>
       )}
       {hasRole('coordinator') && (
@@ -288,6 +290,7 @@ export default function HomePage() {
           <ActiveAssignments
             targetEventId={activeView === 'active-assignments' ? navigation.eventId : null}
           />
+          <CancelledEvents />
         </ViewPanel>
       )}
       {hasRole('venue_staff') && (

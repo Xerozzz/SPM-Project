@@ -31,10 +31,14 @@ test('a labelled session request shows its label and period everywhere', async (
   })
   // The event's assigned coordinator, who appears in no other spec (see the helper).
   await signIn(page, VENUE_SPEC_ACCOUNT)
+  await page.getByRole('button', { name: 'Review Queue' }).click()
 
   // Find this spec's Approved event and open its booking card.
-  const card = page.getByRole('article').filter({ hasText: event.name })
+  const card = page
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name: event.name, exact: true }) })
   await expect(card).toBeVisible()
+  await card.getByRole('button', { name: `View details for ${event.name}` }).click()
   await card.getByLabel('Active venue').selectOption({ label: 'Hall A' })
   // Exact, because `getByLabel` matches accessible names by substring and this spec
   // names its own event "E2E session label …": any control whose label carries the
@@ -50,9 +54,8 @@ test('a labelled session request shows its label and period everywhere', async (
 
   // Venue Staff see the same label in their decision queue.
   await signIn(page, 'venue-staff@example.com')
-  const queue = page.locator('main section', {
-    has: page.getByRole('heading', { name: 'Venue booking requests' }),
-  })
+  await page.getByRole('button', { name: 'Booking Decisions' }).click()
+  const queue = page.getByRole('main')
   // This event's own request: earlier runs left requests with the same label on others.
   await expect(
     queue.getByRole('article').filter({ hasText: event.name }).filter({ hasText: SESSION_LABEL }),
