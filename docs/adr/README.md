@@ -82,6 +82,8 @@ someone else made two weeks ago.
 | [0070](0070-hold-expiry-changes-recorded-in-the-update-transaction.md) | Hold expiry changes recorded in the update's transaction | Proposed |
 | [0071](0071-my-events-summary-and-details-views.md) | Separate My Events summaries, details and creation | Proposed |
 | [0072](0072-attendee-registration-summary-and-details.md) | Separate attendee registration summaries and details | Proposed |
+| [0073](0073-coordinator-review-summary-and-details.md) | Separate coordinator review summaries and details | Proposed |
+| [0074](0074-completed-event-summary-and-record-correction.md) | Separate completed-event summaries and record correction | Proposed |
 
 ## When to write one
 

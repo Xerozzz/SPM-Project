@@ -59,7 +59,8 @@ export default function VenueCalendar() {
   })
 
   return (
-    <section>
+    <section className="mt-6">
+      <h2 className="mb-4 font-medium">Check Venue Availability</h2>
       <div className="grid grid-cols-3 gap-2 text-sm">
         <label className="flex flex-col">
           Venue

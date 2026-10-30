@@ -107,7 +107,7 @@ export default function VenueSearch() {
     <section aria-label="Venue search" className="mt-6 rounded-lg border border-slate-200 p-4">
       <h2 className="font-medium">Venue search</h2>
       <p className="mt-1 text-sm text-slate-500">
-        Find active venues that fit the event requirements and are free for the slot.
+        Find active venues that fit the event requirements.
       </p>
 
       <form onSubmit={onSearch} className="mt-3 grid gap-3">

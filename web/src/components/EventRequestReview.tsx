@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import {
   approveEventRequest,
@@ -9,6 +9,7 @@ import {
   listRequestsForReview,
   rejectEventRequest,
 } from '../api/eventRequests'
+import { formatSingaporeTime } from '../api/venueCalendar'
 import { useAuth } from '../auth/useAuth'
 import { hasReviewNote } from '../validation/eventRequestReview'
 import { acceptsOrdinaryUpdate } from '../validation/planningInfo'
@@ -38,6 +39,10 @@ export default function EventRequestReview() {
   const client = useQueryClient()
   const [reason, setReason] = useState<Record<string, string>>({})
   const [outcome, setOutcome] = useState<string | null>(null)
+  const [selectedStatus, setSelectedStatus] = useState<EventRequest['status'] | 'all'>('all')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const openedFrom = useRef<string | null>(null)
+  const detailsHeading = useRef<HTMLHeadingElement>(null)
   const queryKey = ['event-requests', 'coordinator', token]
   const requests = useQuery({
     queryKey,
@@ -53,6 +58,23 @@ export default function EventRequestReview() {
     enabled: token !== null,
   })
   const refresh = () => void client.invalidateQueries({ queryKey })
+  const groupedRequests = ['submitted', 'approved', 'confirmed']
+    .map((status) => ({
+      status: status as EventRequest['status'],
+      requests: requests.data?.filter((request) => request.status === status) ?? [],
+    }))
+    .filter((group) => group.requests.length > 0)
+  const visibleRequests =
+    requests.data?.filter((request) =>
+      selectedId
+        ? request.id === selectedId
+        : selectedStatus === 'all' || request.status === selectedStatus,
+    ) ?? []
+
+  useEffect(() => {
+    if (selectedId) detailsHeading.current?.focus()
+    else document.getElementById(openedFrom.current ?? '')?.focus()
+  }, [selectedId])
   const approve = useMutation({
     mutationFn: (id: string) => approveEventRequest(token ?? '', id),
     onSuccess: (request) => {
@@ -70,6 +92,11 @@ export default function EventRequestReview() {
   })
   return (
     <section>
+      {selectedId && (
+        <button type="button" className="cs-button-secondary" onClick={() => setSelectedId(null)}>
+          ← Back to Review Queue
+        </button>
+      )}
       {requests.isPending && <p className="mt-2 text-sm">Loading…</p>}
       {requests.isError && (
         <p role="alert" className="mt-2 text-sm text-red-600">
@@ -79,21 +106,101 @@ export default function EventRequestReview() {
       {requests.data?.length === 0 && (
         <p className="mt-2 text-sm text-slate-500">No coordinator events are available.</p>
       )}
-      {requests.data?.map((request) => (
-        <ReviewCard
-          key={request.id}
-          request={request}
-          reason={reason[request.id] ?? ''}
-          onReasonChange={(value) => setReason({ ...reason, [request.id]: value })}
-          onApprove={() => approve.mutate(request.id)}
-          onReject={() => reject.mutate({ id: request.id, reason: reason[request.id] ?? '' })}
-          onConfirmed={(message) => {
-            setOutcome(message)
-            refresh()
-          }}
-          pending={approve.isPending || reject.isPending}
-        />
-      ))}
+      {requests.data && requests.data.length > 0 && (
+        <div className="mt-5">
+          {!selectedId && (
+            <div
+              role="group"
+              aria-label="Filter coordinator events by status"
+              className="flex gap-2 overflow-x-auto border-b border-slate-200 pb-3"
+            >
+              {[{ status: 'all' as const, requests: requests.data }, ...groupedRequests].map(
+                (group) => (
+                  <button
+                    key={group.status}
+                    type="button"
+                    aria-pressed={selectedStatus === group.status}
+                    onClick={() => setSelectedStatus(group.status)}
+                    className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium ${selectedStatus === group.status ? 'bg-[#202124] text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}
+                  >
+                    {group.status === 'all' ? 'All events' : statusTitle(group.status)}{' '}
+                    <span className="ml-1 opacity-70">{group.requests.length}</span>
+                  </button>
+                ),
+              )}
+            </div>
+          )}
+          {visibleRequests.length === 0 && (
+            <p className="py-8 text-sm text-slate-500">
+              No events in this status. Choose All events to see the rest.
+            </p>
+          )}
+          <ul className={`mt-5 grid gap-4 ${selectedId ? '' : 'md:grid-cols-2 xl:grid-cols-3'}`}>
+            {visibleRequests.map((request) => (
+              <li
+                key={request.id}
+                className="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-5"
+              >
+                <StatusLabel status={request.status} />
+                {selectedId ? (
+                  <h2 ref={detailsHeading} tabIndex={-1} className="mt-3 break-words">
+                    {titleOf(request)}
+                  </h2>
+                ) : (
+                  <h3 className="mt-3 break-words text-lg font-semibold tracking-normal">
+                    {titleOf(request)}
+                  </h3>
+                )}
+                <dl className="mt-4 flex-1 space-y-3 text-sm">
+                  <div>
+                    <dt className="text-xs text-slate-500">Schedule · Singapore time</dt>
+                    <dd className="mt-1">
+                      {request.start_at
+                        ? formatSingaporeTime(request.start_at)
+                        : 'Date to be confirmed'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-slate-500">Venue preference</dt>
+                    <dd className="mt-1 break-words">
+                      {request.venue_requirement || 'Not specified'}
+                    </dd>
+                  </div>
+                </dl>
+                {selectedId ? (
+                  <ReviewDetails
+                    request={request}
+                    reason={reason[request.id] ?? ''}
+                    onReasonChange={(value) => setReason({ ...reason, [request.id]: value })}
+                    onApprove={() => approve.mutate(request.id)}
+                    onReject={() =>
+                      reject.mutate({ id: request.id, reason: reason[request.id] ?? '' })
+                    }
+                    onConfirmed={(message) => {
+                      setOutcome(message)
+                      refresh()
+                    }}
+                    pending={approve.isPending || reject.isPending}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    id={`view-review-${request.id}`}
+                    className="cs-button-secondary mt-5 w-full"
+                    aria-label={`View details for ${titleOf(request)}`}
+                    onClick={(event) => {
+                      openedFrom.current = event.currentTarget.id
+                      setSelectedId(request.id)
+                    }}
+                  >
+                    View details →
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {outcome && (
         <p role="status" className="mt-4 rounded bg-green-50 p-3 text-sm text-green-800">
           {outcome}
@@ -108,7 +215,7 @@ export default function EventRequestReview() {
   )
 }
 
-function ReviewCard({
+function ReviewDetails({
   request,
   reason,
   onReasonChange,
@@ -126,8 +233,7 @@ function ReviewCard({
   pending: boolean
 }) {
   return (
-    <article className="mt-4 rounded border border-slate-200 p-3">
-      <h3 className="font-medium">{request.name}</h3>
+    <div className="mt-6 border-t border-slate-100 pt-5">
       <p className="mt-1 text-sm">{request.purpose}</p>
       <p className="mt-1 text-sm">{request.description}</p>
       <dl className="mt-2 text-sm text-slate-600">
@@ -236,6 +342,28 @@ function ReviewCard({
       {request.status_permits.includes('cancel') && (
         <CancelEvent event={request} onCancelled={onConfirmed} />
       )}
-    </article>
+    </div>
   )
+}
+
+function StatusLabel({ status }: { status: EventRequest['status'] }) {
+  const styles: Partial<Record<EventRequest['status'], string>> = {
+    submitted: 'bg-amber-50 text-amber-800',
+    approved: 'bg-sky-50 text-sky-800',
+    confirmed: 'bg-emerald-50 text-emerald-800',
+  }
+  return (
+    <span
+      className={`inline-flex self-start rounded-md px-2 py-0.5 text-xs font-medium ${styles[status] ?? 'bg-slate-100 text-slate-700'}`}
+    >
+      {statusTitle(status)}
+    </span>
+  )
+}
+
+function statusTitle(status: EventRequest['status']) {
+  return status.charAt(0).toUpperCase() + status.slice(1)
+}
+function titleOf(request: EventRequest) {
+  return request.name ?? 'Untitled event'
 }
