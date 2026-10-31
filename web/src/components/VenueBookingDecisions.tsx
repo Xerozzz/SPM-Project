@@ -25,8 +25,8 @@ type BookingTab = 'pending' | 'held' | 'decided'
  * SCRUM-75: they also see any clash and approve requests that have none.
  * SCRUM-110: approval creates a time-limited tentative hold, so it needs an expiry. */
 export default function VenueBookingDecisions({
-  targetEventId = null,
-}: { targetEventId?: string | null } = {}) {
+  targetBookingId = null,
+}: { targetBookingId?: string | null } = {}) {
   const { token } = useAuth()
   const client = useQueryClient()
   const [reasons, setReasons] = useState<Record<string, string>>({})
@@ -85,7 +85,7 @@ export default function VenueBookingDecisions({
     approve.reset()
     updateExpiry.reset()
   }
-  const [selectedId, setSelectedId] = useEventSelection(targetEventId, requests.data)
+  const [selectedId, setSelectedId] = useEventSelection(targetBookingId, requests.data)
   const pending = requests.data?.filter((booking) => booking.status === 'pending') ?? []
   const held = requests.data?.filter((booking) => booking.status === 'tentative') ?? []
   const decided =

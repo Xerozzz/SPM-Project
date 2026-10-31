@@ -202,7 +202,7 @@ test('links venue-cancellation notifications to the authorised staff view', asyn
   expect(item.textContent).toContain('booking-1')
   expect(item.textContent).toContain('2026-04-01T10:00:00Z')
   const link = screen.getByRole('link', { name: 'View venue booking decisions' })
-  expect(link.getAttribute('href')).toBe('?view=booking-decisions&event=req-1')
+  expect(link.getAttribute('href')).toBe('?view=booking-decisions&booking=booking-1')
 })
 
 // TC-127-04 (frontend part): a revised request identifies the replacement booking
@@ -225,7 +225,7 @@ test('links venue-revision notifications to the authorised staff view', async ()
   expect(item.textContent).toContain('revision-1')
   expect(item.textContent).toContain('2026-04-01T10:00:00Z')
   const link = screen.getByRole('link', { name: 'Review revised venue request' })
-  expect(link.getAttribute('href')).toBe('?view=booking-decisions&event=req-1')
+  expect(link.getAttribute('href')).toBe('?view=booking-decisions&booking=revision-1')
 })
 
 test('shows an error state when the inbox fails to load', async () => {

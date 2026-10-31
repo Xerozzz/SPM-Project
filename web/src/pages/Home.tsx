@@ -303,7 +303,7 @@ export default function HomePage() {
       {hasRole('venue_staff') && (
         <ViewPanel active={activeView === 'booking-decisions'}>
           <VenueBookingDecisions
-            targetEventId={activeView === 'booking-decisions' ? navigation.eventId : null}
+            targetBookingId={activeView === 'booking-decisions' ? navigation.bookingId : null}
           />
         </ViewPanel>
       )}
