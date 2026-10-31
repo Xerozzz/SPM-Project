@@ -1,7 +1,11 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
-import { type EventCalendarEntry, listOrganisationCalendar } from '../api/eventRequests'
+import {
+  type EventCalendarEntry,
+  listMyEventRequests,
+  listOrganisationCalendar,
+} from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
 
 /**
@@ -9,8 +13,14 @@ import { useAuth } from '../auth/useAuth'
  * only the calendar fields already loaded, and never fetches the full request, which the API
  * refuses to anyone but its owner.
  */
-export default function OrganisationEventCalendar() {
+export default function OrganisationEventCalendar({
+  onOpenOwnEvent = () => {},
+}: {
+  /** Opens the existing full details view only after the event is confirmed as the caller's. */
+  onOpenOwnEvent?: (eventId: string) => void
+} = {}) {
   const { token } = useAuth()
+  const queryClient = useQueryClient()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [month, setMonth] = useState(
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
@@ -21,6 +31,24 @@ export default function OrganisationEventCalendar() {
     enabled: token !== null,
   })
   const selected = calendar.data?.find((event) => event.id === selectedId)
+
+  async function openEvent(event: EventCalendarEntry) {
+    try {
+      // The caller's list is the only safe ownership source: the calendar projection must not
+      // disclose an organiser id, and a peer's full request endpoint is deliberately forbidden.
+      const ownRequests = await queryClient.fetchQuery({
+        queryKey: ['event-requests', 'mine', token],
+        queryFn: () => listMyEventRequests(token ?? ''),
+      })
+      if (ownRequests.some((request) => request.id === event.id)) {
+        onOpenOwnEvent(event.id)
+        return
+      }
+    } catch {
+      // The calendar projection remains useful if refreshing the caller's own list fails.
+    }
+    setSelectedId(event.id)
+  }
   const eventsByDay = (calendar.data ?? []).reduce<Record<string, EventCalendarEntry[]>>(
     (groups, event) => {
       const cursor = new Date(event.start_at)
@@ -105,7 +133,7 @@ export default function OrganisationEventCalendar() {
                     type="button"
                     aria-label={`View ${title} details`}
                     aria-expanded={selectedId === event.id}
-                    onClick={() => setSelectedId(event.id)}
+                    onClick={() => void openEvent(event)}
                     className="w-full rounded-lg p-2 text-left transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
                   >
                     <span className="block break-words font-medium tracking-[-0.02em] text-[#202124]">

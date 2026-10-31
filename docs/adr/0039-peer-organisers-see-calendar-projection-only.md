@@ -23,8 +23,9 @@ the same-organisation branch, and scope `GET /event-requests/drafts` to the call
 drafts. Organisation membership is then used in exactly one place: the
 `GET /event-requests/organisation-calendar` query, whose fixed five-field response
 (`id`, `name`, `start_at`, `end_at`, `status`) is everything a peer may learn. Selecting a
-calendar entry in the UI shows those fields and makes no further request. The Coordinator
-and Lead branches of the dependency are unchanged, so a dual-role account keeps them.
+peer calendar entry in the UI shows those fields and makes no request to that peer's
+individual event endpoint. The Coordinator and Lead branches of the dependency are
+unchanged, so a dual-role account keeps them.
 
 ## Alternatives considered
 
@@ -43,8 +44,8 @@ and Lead branches of the dependency are unchanged, so a dual-role account keeps 
 **Bad / accepted trade-offs**
 - Organisers can no longer review a colleague's draft before submission; the
   "Organisation drafts" UI section is removed.
-- The calendar detail panel shows the same four fields for the owner's own events; the
-  owner uses "My event requests" for full detail and editing.
+- An owner's calendar-entry navigation is defined separately in ADR-0080; it does not
+  widen a peer's calendar projection or API access.
 
 **What this makes harder to change later**
 - A future "share with my organisation" feature needs its own permission, not a widening
