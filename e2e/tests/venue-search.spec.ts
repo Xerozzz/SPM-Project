@@ -17,7 +17,8 @@ async function signInAsCoordinator(page: Page) {
   await page.getByLabel('Email').fill('coordinator@example.com')
   await page.getByLabel('Password').fill('password123')
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page.getByRole('heading', { name: 'Venue search' })).toBeVisible()
+  await page.getByRole('button', { name: 'Venue Planning', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Venue search', exact: true })).toBeVisible()
 }
 
 /**
@@ -39,31 +40,34 @@ test('TC-55-AC1-01: a coordinator can provide every supported search criterion',
   page,
 }) => {
   await signInAsCoordinator(page)
+  const venueSearch = page.getByRole('region', { name: 'Venue search', exact: true })
 
-  await page.getByLabel('Start date').fill(START_DATE)
-  await page.getByLabel('Start time').fill('10:00')
-  await page.getByLabel('End date').fill(END_DATE)
-  await page.getByLabel('End time').fill('12:00')
-  await page.getByLabel('Minimum capacity').fill('100')
-  await page.getByLabel('Location').fill('Level 2, School of Computing')
-  await page.getByLabel('Accessibility needs').fill('Step-free access')
-  await page.getByLabel('Facilities').fill('Projector')
-  await page.getByLabel('Room layout').selectOption('theatre')
+  await venueSearch.getByLabel('Start date', { exact: true }).fill(START_DATE)
+  await venueSearch.getByLabel('Start time', { exact: true }).fill('10:00')
+  await venueSearch.getByLabel('End date', { exact: true }).fill(END_DATE)
+  await venueSearch.getByLabel('End time', { exact: true }).fill('12:00')
+  await venueSearch.getByLabel('Minimum capacity', { exact: true }).fill('100')
+  await venueSearch.getByLabel('Location', { exact: true }).fill('Level 2, School of Computing')
+  await venueSearch.getByLabel('Accessibility needs', { exact: true }).fill('Step-free access')
+  await venueSearch.getByLabel('Facilities', { exact: true }).fill('Projector')
+  await venueSearch
+    .getByRole('combobox', { name: 'Room layout', exact: true })
+    .selectOption('theatre')
   await page.getByRole('button', { name: 'Search venues' }).click()
 
   // Scope the assertion to search results so Hall A in the venue catalogue cannot satisfy it.
-  const venueSearch = page.getByRole('region', { name: 'Venue search' })
   await expect(venueSearch.getByRole('listitem').filter({ hasText: /^Hall A ·/ })).toBeVisible()
 })
 
 test('TC-55-AC7-01: no-match guidance suggests adjusting filters', async ({ page }) => {
   await signInAsCoordinator(page)
+  const venueSearch = page.getByRole('region', { name: 'Venue search', exact: true })
 
-  await page.getByLabel('Start date').fill(START_DATE)
-  await page.getByLabel('Start time').fill('10:00')
-  await page.getByLabel('End date').fill(END_DATE)
-  await page.getByLabel('End time').fill('12:00')
-  await page.getByLabel('Minimum capacity').fill('999')
+  await venueSearch.getByLabel('Start date', { exact: true }).fill(START_DATE)
+  await venueSearch.getByLabel('Start time', { exact: true }).fill('10:00')
+  await venueSearch.getByLabel('End date', { exact: true }).fill(END_DATE)
+  await venueSearch.getByLabel('End time', { exact: true }).fill('12:00')
+  await venueSearch.getByLabel('Minimum capacity', { exact: true }).fill('999')
   await page.getByRole('button', { name: 'Search venues' }).click()
 
   await expect(page.getByText(/no .* venue .* found/i)).toBeVisible()

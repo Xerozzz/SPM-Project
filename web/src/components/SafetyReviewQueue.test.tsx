@@ -108,6 +108,7 @@ test('the plan a decision is about is shown in full', async () => {
   renderQueue()
 
   expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
+  expect(screen.getAllByText(/01\/01\/2030, 10:00:00 am to 2:00:00 pm/)).toHaveLength(2)
   expect(screen.getByText('200 expected')).toBeInTheDocument()
   expect(screen.getByText(/Step-free access/)).toBeInTheDocument()
   expect(screen.getByText(/Theatre/)).toBeInTheDocument()
@@ -116,12 +117,11 @@ test('the plan a decision is about is shown in full', async () => {
   expect(screen.getByText(/Projector/)).toBeInTheDocument()
   expect(screen.getByText('Available')).toBeInTheDocument()
   expect(screen.getByText('reserved')).toBeInTheDocument()
+  expect(screen.getByRole('article')).toHaveClass('rounded-2xl')
 })
 
 test('a hold that has run out is called out on the venue it belongs to', async () => {
-  renderQueue([
-    { ...READY, venues: [{ ...READY.venues[0], hold_expired: true }] },
-  ])
+  renderQueue([{ ...READY, venues: [{ ...READY.venues[0], hold_expired: true }] }])
 
   expect(await screen.findByText('Hold has run out')).toBeInTheDocument()
 })
@@ -135,13 +135,13 @@ test('a plan that cannot be reviewed yet says why, and offers no decision', asyn
     },
   ])
 
+  fireEvent.click(await screen.findByRole('tab', { name: /Waiting on arrangements 1/ }))
+
   expect(await screen.findByText('This plan cannot be reviewed yet.')).toBeInTheDocument()
   expect(screen.getByText(/A venue hold has run out/)).toBeInTheDocument()
   expect(screen.getByText(/Technical Support have not assessed/)).toBeInTheDocument()
   expect(screen.queryByLabelText('Reason for this decision')).not.toBeInTheDocument()
-  expect(
-    screen.queryByLabelText('Approve the plan for Orientation Day'),
-  ).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('Approve the plan for Orientation Day')).not.toBeInTheDocument()
 })
 
 test('a decision needs a reason before it can be recorded', async () => {
@@ -238,10 +238,7 @@ test('a decision against a plan that has moved is refused and the list is reload
       return json([READY])
     }
     if (key === 'POST /api/safety-reviews/event-1') {
-      return json(
-        { detail: { reason: 'plan_changed', plan_fingerprint: 'fingerprint-xyz' } },
-        409,
-      )
+      return json({ detail: { reason: 'plan_changed', plan_fingerprint: 'fingerprint-xyz' } }, 409)
     }
     return undefined
   })
@@ -340,16 +337,15 @@ test('the worklist separates what can be reviewed from what is waiting on a Coor
     },
   ])
 
-  expect(await screen.findByText('Ready to review (1)')).toBeInTheDocument()
-  expect(screen.getByText('Waiting on arrangements (1)')).toBeInTheDocument()
+  expect(await screen.findByRole('tab', { name: /Ready to review 1/ })).toBeInTheDocument()
+  expect(screen.getByRole('tab', { name: /Waiting on arrangements 1/ })).toBeInTheDocument()
 })
 
 test('the answer appears on the card that was acted on, not at the foot of the list', async () => {
   // The whole point: on a real board most events are waiting, so a message at the end of
   // the section is thousands of pixels below the button that produced it.
-  renderQueue(
-    [READY, { ...READY, event_request_id: 'event-2', event_name: 'Hackathon' }],
-    (key) => (key === 'POST /api/safety-reviews/event-2' ? json(RECORDED, 201) : undefined),
+  renderQueue([READY, { ...READY, event_request_id: 'event-2', event_name: 'Hackathon' }], (key) =>
+    key === 'POST /api/safety-reviews/event-2' ? json(RECORDED, 201) : undefined,
   )
 
   const hackathon = (await screen.findByText('Hackathon')).closest('article')

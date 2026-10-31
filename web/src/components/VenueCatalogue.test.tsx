@@ -41,7 +41,10 @@ function venue(overrides: Record<string, unknown> = {}) {
 }
 
 function renderCatalogue(role: 'venue_staff' | 'coordinator', fetcher: typeof fetch) {
-  localStorage.setItem('connectsphere.token', JSON.stringify({ token: 'token', userId: 'user-1', roles: [role] }))
+  localStorage.setItem(
+    'connectsphere.token',
+    JSON.stringify({ token: 'token', userId: 'user-1', roles: [role] }),
+  )
   vi.spyOn(globalThis, 'fetch').mockImplementation(fetcher)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
@@ -51,6 +54,11 @@ function renderCatalogue(role: 'venue_staff' | 'coordinator', fetcher: typeof fe
       </AuthProvider>
     </QueryClientProvider>,
   )
+}
+
+async function openVenueForm() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Add venue' }))
+  expect(screen.getByRole('heading', { name: 'Add a venue' })).toBeInTheDocument()
 }
 
 test('a coordinator sees the catalogue read-only', async () => {
@@ -245,6 +253,7 @@ test('adding a venue posts the form and confirms', async () => {
   })
 
   expect(await screen.findByText('No venues in the catalogue yet.')).toBeInTheDocument()
+  await openVenueForm()
   fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'Hall B' } })
   fireEvent.change(screen.getByLabelText(/^Location/), { target: { value: 'Level 3' } })
   fireEvent.change(screen.getByLabelText(/^Maximum capacity/), { target: { value: '80' } })
@@ -287,6 +296,7 @@ test('an untouched time field is sent as null, not an empty string', async () =>
     return json({ detail: [{ field: 'opens_at', reason: 'is required' }] }, 422)
   })
 
+  await openVenueForm()
   fireEvent.click(await screen.findByRole('button', { name: 'Add venue' }))
 
   await waitFor(() => {
@@ -305,6 +315,7 @@ test('a 422 that is not in the field-problem shape still reports something', asy
     return json({ detail: [{ type: 'time_parsing', loc: ['body', 'opens_at'] }] }, 422)
   })
 
+  await openVenueForm()
   fireEvent.click(await screen.findByRole('button', { name: 'Add venue' }))
 
   expect(await screen.findByRole('status')).toHaveTextContent('The venue could not be saved (422)')
@@ -374,6 +385,7 @@ test('a refused save names the fields to correct', async () => {
     )
   })
 
+  await openVenueForm()
   fireEvent.click(await screen.findByRole('button', { name: 'Add venue' }))
 
   // AC5: the affected field is identified, next to the input it belongs to.
@@ -388,6 +400,7 @@ test('a duplicate name is reported on the name field', async () => {
     return json({ detail: 'A venue with that name already exists' }, 409)
   })
 
+  await openVenueForm()
   fireEvent.click(await screen.findByRole('button', { name: 'Add venue' }))
 
   expect(await screen.findByText('Name is already used by another venue')).toBeInTheDocument()
@@ -409,6 +422,7 @@ test('an empty or untidy list of facilities is sent as a clean array', async () 
     return json(venue(), 201)
   })
 
+  await openVenueForm()
   fireEvent.change(await screen.findByLabelText(/^Facilities/), {
     target: { value: ' Projector , , Hearing loop , ' },
   })
@@ -421,7 +435,6 @@ test('an empty or untidy list of facilities is sent as a clean array', async () 
   expect(body.accessibility_features).toEqual([])
 })
 
-
 // --------------------------------------------------------------- SCRUM-82 buffers
 
 test('SCRUM-82 AC1: venue staff can set both buffers when adding a venue', async () => {
@@ -433,6 +446,7 @@ test('SCRUM-82 AC1: venue staff can set both buffers when adding a venue', async
   })
 
   await screen.findByText('No venues in the catalogue yet.')
+  await openVenueForm()
   fireEvent.change(screen.getByLabelText(/^Setup time/), { target: { value: '30' } })
   fireEvent.change(screen.getByLabelText(/^Turnaround time/), { target: { value: '45' } })
   fireEvent.click(screen.getByRole('button', { name: 'Add venue' }))
@@ -455,6 +469,7 @@ test('SCRUM-82 AC1: an untouched buffer is sent as null, not zero or an empty st
   })
 
   await screen.findByText('No venues in the catalogue yet.')
+  await openVenueForm()
   fireEvent.click(screen.getByRole('button', { name: 'Add venue' }))
 
   await waitFor(() => {
@@ -476,6 +491,7 @@ test('SCRUM-82 AC1: a buffer cleared after being typed goes back to null', async
   })
 
   await screen.findByText('No venues in the catalogue yet.')
+  await openVenueForm()
   fireEvent.change(screen.getByLabelText(/^Setup time/), { target: { value: '30' } })
   fireEvent.change(screen.getByLabelText(/^Setup time/), { target: { value: '' } })
   fireEvent.click(screen.getByRole('button', { name: 'Add venue' }))
@@ -498,6 +514,7 @@ test('SCRUM-82 AC1: a negative buffer is reported against its own field', async 
   })
 
   await screen.findByText('No venues in the catalogue yet.')
+  await openVenueForm()
   fireEvent.change(screen.getByLabelText(/^Setup time/), { target: { value: '-5' } })
   fireEvent.click(screen.getByRole('button', { name: 'Add venue' }))
 
@@ -549,4 +566,36 @@ test('SCRUM-82: editing a venue prefills its buffers', async () => {
   })
   // The untouched one has to go back as it was, not be wiped by the save.
   expect(body.turnaround_minutes).toBe(45)
+})
+
+// SCRUM-59: venue creation is separate from browsing and does not silently discard edits.
+test('opens creation separately and preserves edits when leaving is cancelled', async () => {
+  renderCatalogue('venue_staff', async () => json([venue()]))
+  await within(await screen.findByRole('list')).findByText('Hall A')
+  expect(screen.queryByLabelText(/^Name/)).toBeNull()
+  await openVenueForm()
+  expect(screen.queryByText('Hall A')).toBeNull()
+  fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'Unfinished venue' } })
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+  fireEvent.click(screen.getByRole('button', { name: /Back to venues/ }))
+  expect(screen.getByLabelText(/^Name/)).toHaveValue('Unfinished venue')
+  confirm.mockReturnValue(true)
+  fireEvent.click(screen.getByRole('button', { name: /Back to venues/ }))
+  expect(screen.queryByLabelText(/^Name/)).toBeNull()
+  expect(within(screen.getByRole('list')).getByText('Hall A')).toBeInTheDocument()
+})
+test('SCRUM-59: searches venue names, locations and facilities', async () => {
+  renderCatalogue('coordinator', async () =>
+    json([venue(), venue({ id: 'venue-2', name: 'Studio B', facilities: ['Hearing loop'] })]),
+  )
+  await screen.findByText('Hall A')
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search venues' }), {
+    target: { value: 'hearing loop' },
+  })
+  expect(screen.getByText('Studio B')).toBeInTheDocument()
+  expect(screen.queryByText('Hall A')).toBeNull()
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search venues' }), {
+    target: { value: 'missing' },
+  })
+  expect(screen.getByText('No venues match your search.')).toBeInTheDocument()
 })

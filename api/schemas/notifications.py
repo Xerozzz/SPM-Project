@@ -20,6 +20,7 @@ class NotificationRead(BaseModel):
 
     id: uuid.UUID
     event_request_id: uuid.UUID
+    event_name: str | None = None
     type: NotificationType
     source_type: NotificationSource
     source_id: str

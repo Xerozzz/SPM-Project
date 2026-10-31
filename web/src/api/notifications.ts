@@ -5,6 +5,7 @@
 export interface Notification {
   id: string
   event_request_id: string
+  event_name?: string | null
   type: string
   source_type: string
   source_id: string
@@ -23,13 +24,12 @@ export async function listNotifications(token: string): Promise<Notification[]> 
   if (!response.ok) {
     throw new Error(`/api/notifications responded ${response.status}`)
   }
-  return (await response.json()) as Notification[]
+  const body: unknown = await response.json()
+  if (!Array.isArray(body)) throw new Error('Could not read the notification inbox')
+  return body as Notification[]
 }
 
-export async function markNotificationViewed(
-  token: string,
-  id: string,
-): Promise<Notification> {
+export async function markNotificationViewed(token: string, id: string): Promise<Notification> {
   const response = await fetch(`/api/notifications/${id}/viewed`, {
     method: 'POST',
     headers: authHeaders(token),

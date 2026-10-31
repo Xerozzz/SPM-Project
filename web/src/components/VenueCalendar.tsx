@@ -15,6 +15,7 @@ import {
 } from '../api/venueCalendar'
 import { listVenues } from '../api/venues'
 import { useAuth } from '../auth/useAuth'
+import { formatDateRange, formatDisplayTime } from '../presentation/dates'
 
 const STATUS_STYLES: Record<CalendarStatus, string> = {
   confirmed: 'border-blue-300 bg-blue-50 text-blue-900',
@@ -59,9 +60,9 @@ export default function VenueCalendar() {
   })
 
   return (
-    <section className="mt-6 rounded-lg border border-slate-200 p-4">
-      <h2 className="font-medium">Venue calendar</h2>
-      <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
+    <section className="mt-6">
+      <h2 className="mb-4 font-medium">Check Venue Availability</h2>
+      <div className="grid grid-cols-3 gap-2 text-sm">
         <label className="flex flex-col">
           Venue
           <select
@@ -145,11 +146,11 @@ export default function VenueCalendar() {
                 </>
               )}
               <br />
-              {formatSingaporeTime(entry.start_at)} to {formatSingaporeTime(entry.end_at)}
+              {formatDateRange(entry.start_at, entry.end_at)}
               {entry.expires_at && (
                 <>
                   <br />
-                  <span>Held until {formatSingaporeTime(entry.expires_at)}</span>
+                  <span>Held until {formatDisplayTime(entry.expires_at)}</span>
                 </>
               )}
               {hasBuffer(entry) && (

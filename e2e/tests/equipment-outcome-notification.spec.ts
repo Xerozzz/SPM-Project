@@ -1,5 +1,6 @@
 import { expect, type APIRequestContext, type Page, test } from '@playwright/test'
 
+import { openWorkspace } from '../support/workspace'
 import { API, createApprovedEvent, tokenFor, VENUE_SPEC_ACCOUNT } from '../support/approved-event'
 
 // SCRUM-125: when Technical Support reviews or reserves equipment, the assigned
@@ -42,7 +43,7 @@ async function call(
 
 function outcomeEntries(page: Page, eventId: string) {
   return page
-    .getByLabel('Notifications')
+    .getByRole('region', { name: 'Notifications', exact: true })
     .getByRole('listitem')
     .filter({ hasText: /equipment_review_available|equipment_reserved_full/ })
     .filter({ hasText: eventId })
@@ -78,14 +79,16 @@ test('a review and a reservation each tell the Coordinator, with a link to their
 
   // The assigned Coordinator sees both outcomes in their inbox, with the view link.
   await signIn(page, VENUE_SPEC_ACCOUNT)
+  await openWorkspace(page, 'Notifications')
   const entries = outcomeEntries(page, approved.id)
   await expect(entries).toHaveCount(2)
   await expect(
     entries.first().getByRole('link', { name: 'View equipment outcome' }),
-  ).toHaveAttribute('href', '#coordinator-events')
+  ).toHaveAttribute('href', `?view=review-queue&event=${approved.id}`)
   await signOut(page)
 
   // An unrelated user is told nothing.
   await signIn(page, 'attendee@example.com')
+  await openWorkspace(page, 'Notifications')
   await expect(outcomeEntries(page, approved.id)).toHaveCount(0)
 })

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 
 import {
   createVenue,
@@ -14,6 +14,8 @@ import {
   type UpdatedVenue,
 } from '../api/venues'
 import { useAuth } from '../auth/useAuth'
+import { useUnsavedChanges } from '../hooks/useUnsavedChanges'
+import { matchesSearch } from '../presentation/search'
 import VenueUnavailabilityManager from './VenueUnavailabilityManager'
 
 /**
@@ -23,7 +25,9 @@ import VenueUnavailabilityManager from './VenueUnavailabilityManager'
  * reads the same catalogue without those controls (AC2). The server enforces the split
  * too, so hiding a button is presentation and not the authorisation rule.
  */
-export default function VenueCatalogue() {
+export default function VenueCatalogue({
+  onDirtyChange,
+}: { onDirtyChange?: (dirty: boolean) => void } = {}) {
   const { token, hasRole } = useAuth()
   const queryClient = useQueryClient()
   const isStaff = hasRole('venue_staff')
@@ -31,6 +35,8 @@ export default function VenueCatalogue() {
   const [outcome, setOutcome] = useState<string | null>(null)
   /** The venue being edited, or null when the form is adding a new one. */
   const [editing, setEditing] = useState<Venue | null>(null)
+  const [showForm, setShowForm] = useState(false)
+  const [search, setSearch] = useState('')
 
   const queryKey = ['venues', token]
   const venues = useQuery({
@@ -61,6 +67,7 @@ export default function VenueCatalogue() {
   function handleSaved(message: string) {
     setProblems([])
     setEditing(null)
+    setShowForm(false)
     setOutcome(message)
     refresh()
   }
@@ -85,58 +92,95 @@ export default function VenueCatalogue() {
   })
 
   return (
-    <section className="mt-6 rounded-lg border border-slate-200 p-4">
-      <h2 className="font-medium">Venue catalogue</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        {isStaff
-          ? 'Add venues, change their details, and take them out of use.'
-          : 'Venues available for planning. Venue Staff maintain this list.'}
-      </p>
-
+    <section>
+      {!showForm && (
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <label className="block max-w-md flex-1 text-sm font-medium">
+            Search venues
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Name, location or facilities"
+              className="cs-field"
+            />
+          </label>
+          {isStaff && (
+            <button
+              type="button"
+              className="cs-button"
+              onClick={() => {
+                setEditing(null)
+                setProblems([])
+                setOutcome(null)
+                setShowForm(true)
+              }}
+            >
+              <span aria-hidden="true" className="mr-1">
+                +
+              </span>
+              Add venue
+            </button>
+          )}
+        </div>
+      )}
       {venues.isPending && <p className="mt-2 text-sm">Loading…</p>}
       {venues.isError && (
         <p role="alert" className="mt-2 text-sm text-red-600">
           {venues.error.message}
         </p>
       )}
-      {venues.data?.length === 0 && (
+      {!showForm && venues.data?.length === 0 && (
         <p className="mt-2 text-sm text-slate-500">No venues in the catalogue yet.</p>
       )}
 
-      {venues.data && venues.data.length > 0 && (
+      {!showForm && venues.data && venues.data.length > 0 && (
         <ul className="mt-3 divide-y divide-slate-200">
-          {venues.data.map((venue) => (
-            <VenueRow
-              key={venue.id}
-              venue={venue}
-              canManage={isStaff}
-              isBusy={deactivate.isPending || save.isPending}
-              onEdit={() => {
-                setProblems([])
-                setOutcome(null)
-                setEditing(venue)
-              }}
-              onDeactivate={() => deactivate.mutate(venue.id)}
-            />
-          ))}
+          {venues.data
+            .filter((venue) =>
+              matchesSearch(search, venue.name, venue.location, venue.facilities.join(' ')),
+            )
+            .map((venue) => (
+              <VenueRow
+                key={venue.id}
+                venue={venue}
+                canManage={isStaff}
+                isBusy={deactivate.isPending || save.isPending}
+                onEdit={() => {
+                  setProblems([])
+                  setOutcome(null)
+                  setEditing(venue)
+                  setShowForm(true)
+                }}
+                onDeactivate={() => deactivate.mutate(venue.id)}
+              />
+            ))}
         </ul>
       )}
 
-      {isStaff && (
+      {!showForm &&
+        search &&
+        venues.data &&
+        !venues.data.some((venue) =>
+          matchesSearch(search, venue.name, venue.location, venue.facilities.join(' ')),
+        ) && <p className="mt-5 text-sm text-slate-500">No venues match your search.</p>}
+      {isStaff && showForm && (
         <VenueForm
           key={editing?.id ?? 'new'}
           editing={editing}
           problems={problems}
           isSaving={save.isPending}
+          onDirtyChange={onDirtyChange}
           onCancel={() => {
             setEditing(null)
             setProblems([])
+            setShowForm(false)
           }}
           onSubmit={(venue) => save.mutate({ id: editing?.id ?? null, venue })}
         />
       )}
 
-      {isStaff && venues.data && <VenueUnavailabilityManager venues={venues.data} />}
+      {isStaff && !showForm && venues.data && <VenueUnavailabilityManager venues={venues.data} />}
 
       {outcome && (
         <p role="status" className="mt-4 rounded bg-green-50 p-3 text-sm text-green-800">
@@ -276,16 +320,28 @@ function VenueForm({
   isSaving,
   onSubmit,
   onCancel,
+  onDirtyChange,
 }: {
   editing: Venue | null
   problems: VenueProblem[]
   isSaving: boolean
   onSubmit: (venue: VenueInput) => void
   onCancel: () => void
+  onDirtyChange?: (dirty: boolean) => void
 }) {
   const [values, setValues] = useState<VenueFormValues>(
     editing ? formValuesOf(editing) : emptyVenue,
   )
+  const baseline = editing ? formValuesOf(editing) : emptyVenue
+  const dirty = JSON.stringify(values) !== JSON.stringify(baseline)
+  useUnsavedChanges(dirty, onDirtyChange)
+  const form = useRef<HTMLFormElement>(null)
+  useEffect(() => {
+    form.current?.querySelector('input')?.focus()
+  }, [])
+  function close() {
+    if (!dirty || window.confirm('Discard your unsaved venue changes?')) onCancel()
+  }
   const reasonFor = (field: string) => problems.find((p) => p.field === field)?.reason
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -312,8 +368,16 @@ function VenueForm({
   }
 
   return (
-    <form className="mt-4 space-y-3 border-t border-slate-200 pt-4" noValidate onSubmit={submit}>
-      <h3 className="text-sm font-medium">{editing ? `Edit “${editing.name}”` : 'Add a venue'}</h3>
+    <form ref={form} className="mt-4 space-y-3" noValidate onSubmit={submit}>
+      <button
+        type="button"
+        className="cs-button-secondary mb-4"
+        onClick={close}
+        disabled={isSaving}
+      >
+        ← Back to venues
+      </button>
+      <h2 className="text-3xl font-medium">{editing ? `Edit “${editing.name}”` : 'Add a venue'}</h2>
 
       <Field label="Name" error={reasonFor('name')}>
         <input
@@ -449,15 +513,13 @@ function VenueForm({
         >
           {editing ? 'Save changes' : 'Add venue'}
         </button>
-        {editing && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded border border-slate-300 px-3 py-1.5 text-sm"
-          >
-            Cancel
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={close}
+          className="rounded border border-slate-300 px-3 py-1.5 text-sm"
+        >
+          Cancel
+        </button>
       </div>
     </form>
   )

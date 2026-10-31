@@ -92,21 +92,34 @@ function defaultHandler(key: string): Handler | null {
   return null
 }
 
-test('lists drafts with a submit button and submitted requests as proposals only', async () => {
+// SCRUM-46: summary cards open the existing actions in an event details view.
+async function openDetails(name: string) {
+  fireEvent.click(await screen.findByRole('button', { name: `View details for ${name}` }))
+}
+
+test('lists compact summaries and shows permitted actions only inside details', async () => {
   renderSignedIn({ 'GET /api/event-requests': () => json([draft, submitted]) })
 
   expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Submit for review' })).toBeInTheDocument()
   expect(screen.getByText('Open Day')).toBeInTheDocument()
-  // SCRUM-37: a submitted request is no longer edited directly, only changed by proposal.
-  expect(screen.getAllByRole('button', { name: /Propose a change/ })).toHaveLength(1)
-  expect(screen.getAllByRole('button', { name: /Edit draft/ })).toHaveLength(1)
+  expect(screen.queryByRole('button', { name: 'Submit for review' })).toBeNull()
+  expect(screen.queryByRole('button', { name: /Propose a change/ })).toBeNull()
+  await openDetails('Orientation Day')
+  expect(screen.getByRole('button', { name: 'Submit for review' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /Edit draft/ })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Orientation Day' })).toHaveFocus()
+  fireEvent.click(screen.getByRole('button', { name: /Back to My Events/ }))
+  expect(screen.getByRole('button', { name: 'View details for Orientation Day' })).toHaveFocus()
+  await openDetails('Open Day')
+  expect(screen.getByRole('button', { name: /Propose a change/ })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Edit draft/ })).toBeNull()
 })
 
 test('shows a rejection reason to the organiser', async () => {
   renderSignedIn({ 'GET /api/event-requests': () => json([rejected]) })
 
-  expect(await screen.findByText('Rejected Open Day')).toBeInTheDocument()
+  await openDetails('Rejected Open Day')
+  expect(screen.getByText('Rejected Open Day')).toBeInTheDocument()
   expect(
     screen.getByText('Rejection reason: Please provide a more accessible venue.'),
   ).toBeInTheDocument()
@@ -128,7 +141,8 @@ test('submitting an incomplete draft names the fields to correct', async () => {
       ),
   })
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Submit for review' }))
+  await openDetails('Orientation Day')
+  fireEvent.click(screen.getByRole('button', { name: 'Submit for review' }))
 
   const alert = await screen.findByRole('alert')
   expect(alert).toHaveTextContent('“Orientation Day” cannot be submitted yet')
@@ -150,7 +164,8 @@ test('submitting a complete draft shows confirmation and the new status', async 
     },
   })
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Submit for review' }))
+  await openDetails('Orientation Day')
+  fireEvent.click(screen.getByRole('button', { name: 'Submit for review' }))
 
   expect(await screen.findByRole('status')).toHaveTextContent(
     '“Orientation Day” has been submitted for review. Its status is now Submitted.',
@@ -164,7 +179,8 @@ describe('SCRUM-112 own drafts only (frontend unit)', () => {
   test('shows no organisation drafts section and never requests the drafts list', async () => {
     renderSignedIn({ 'GET /api/event-requests': () => json([draft]) })
 
-    expect(await screen.findByLabelText('Edit draft Orientation Day')).toBeInTheDocument()
+    await openDetails('Orientation Day')
+    expect(screen.getByLabelText('Edit draft Orientation Day')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Organisation drafts' })).toBeNull()
     expect(screen.queryByText(/Shared draft|Read-only/)).toBeNull()
     const urls = vi.mocked(globalThis.fetch).mock.calls.map(([input]) => String(input))
@@ -185,7 +201,7 @@ test('offers only what the API permits, not what the status implies', async () =
   const notSubmittable = { ...draft, status_permits: ['edit'] }
   renderSignedIn({ 'GET /api/event-requests': () => json([notSubmittable]) })
 
-  expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
+  await openDetails('Orientation Day')
   expect(screen.queryByRole('button', { name: 'Submit for review' })).not.toBeInTheDocument()
   expect(screen.queryByText(/Locked/)).not.toBeInTheDocument()
 })
@@ -228,7 +244,8 @@ test('choosing a draft hands the full request to the form above', async () => {
     (request) => chosen.push(request),
   )
 
-  fireEvent.click(await screen.findByLabelText('Edit draft Orientation Day'))
+  await openDetails('Orientation Day')
+  fireEvent.click(screen.getByLabelText('Edit draft Orientation Day'))
 
   await waitFor(() => expect(chosen).toHaveLength(1))
   expect(chosen[0].id).toBe('req-1')
@@ -237,13 +254,13 @@ test('choosing a draft hands the full request to the form above', async () => {
   expect(screen.queryByRole('form', { name: 'Event request draft form' })).toBeNull()
 })
 
-test('there is no New draft button, because the form above is always there', async () => {
+test('the list has a create action and no embedded event form', async () => {
   renderSignedIn({
     'GET /api/event-requests': () => json([draft]),
   })
 
-  await screen.findByLabelText('Edit draft Orientation Day')
-  expect(screen.queryByRole('button', { name: 'New draft' })).toBeNull()
+  expect(await screen.findByRole('button', { name: /Create event/ })).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: 'New event request' })).toBeNull()
 })
 
 describe('SCRUM-105 owner views assignment history (frontend unit)', () => {
@@ -268,12 +285,12 @@ describe('SCRUM-105 owner views assignment history (frontend unit)', () => {
       'GET /api/event-requests': () => json([draft, submitted]),
       [`GET ${historyUrl}`]: () => json([entry]),
     })
-    const rows = await screen.findAllByRole('listitem')
-    const draftRow = rows.find((row) => row.textContent?.includes('Orientation Day'))!
-    const submittedRow = rows.find((row) => row.textContent?.includes('Open Day'))!
-
-    expect(within(draftRow).queryByRole('button', { name: 'View assignment history' })).toBeNull()
+    await openDetails('Orientation Day')
+    expect(screen.queryByRole('button', { name: 'View assignment history' })).toBeNull()
     expect(requestedUrls()).not.toContain(historyUrl)
+    fireEvent.click(screen.getByRole('button', { name: /Back to My Events/ }))
+    await openDetails('Open Day')
+    const submittedRow = screen.getByRole('listitem')
 
     fireEvent.click(within(submittedRow).getByRole('button', { name: 'View assignment history' }))
 
@@ -291,7 +308,8 @@ describe('SCRUM-105 owner views assignment history (frontend unit)', () => {
       [`GET ${historyUrl}`]: () => json([]),
     })
 
-    fireEvent.click(await screen.findByRole('button', { name: 'View assignment history' }))
+    await openDetails('Open Day')
+    fireEvent.click(screen.getByRole('button', { name: 'View assignment history' }))
 
     expect(await screen.findByText('No assignment history for Open Day yet.')).toBeInTheDocument()
   })
@@ -305,11 +323,11 @@ describe('SCRUM-88 owner views the event history (frontend unit)', () => {
       'GET /api/event-requests': () => json([draft, submitted]),
       'GET /api/event-requests/req-1/history': () => json([]),
     })
-    const rows = await screen.findAllByRole('listitem')
-    const draftRow = rows.find((row) => row.textContent?.includes('Orientation Day'))!
-    const submittedRow = rows.find((row) => row.textContent?.includes('Open Day'))!
-
-    expect(within(submittedRow).getByRole('button', { name: 'View event history' })).toBeVisible()
+    await openDetails('Open Day')
+    expect(screen.getByRole('button', { name: 'View event history' })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: /Back to My Events/ }))
+    await openDetails('Orientation Day')
+    const draftRow = screen.getByRole('listitem')
     fireEvent.click(within(draftRow).getByRole('button', { name: 'View event history' }))
 
     expect(
@@ -318,4 +336,40 @@ describe('SCRUM-88 owner views the event history (frontend unit)', () => {
     const urls = vi.mocked(globalThis.fetch).mock.calls.map(([input]) => String(input))
     expect(urls).not.toContain('/api/event-requests/req-2/history')
   })
+})
+
+// SCRUM-46: filtering and incomplete drafts remain usable in the compact list.
+test('status filtering survives opening details and returning to the list', async () => {
+  renderSignedIn({ 'GET /api/event-requests': () => json([draft, submitted]) })
+  fireEvent.click(await screen.findByRole('button', { name: /^Submitted 1$/ }))
+  expect(screen.queryByText('Orientation Day')).toBeNull()
+  await openDetails('Open Day')
+  fireEvent.click(screen.getByRole('button', { name: /Back to My Events/ }))
+  expect(screen.getByRole('button', { name: /^Submitted 1$/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  expect(screen.queryByText('Orientation Day')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: /^All events 2$/ }))
+  expect(screen.getByText('Orientation Day')).toBeInTheDocument()
+  expect(screen.getAllByText('Date to be confirmed')).toHaveLength(2)
+})
+
+// SCRUM-46: searching changes the visible summaries without extra API reads.
+test('searches event names and restores the list when cleared', async () => {
+  renderSignedIn({ 'GET /api/event-requests': () => json([draft, submitted]) })
+  await screen.findByText('Orientation Day')
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search my events' }), {
+    target: { value: 'orientation' },
+  })
+  expect(screen.getByText('Orientation Day')).toBeInTheDocument()
+  expect(screen.queryByText('Open Day')).toBeNull()
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search my events' }), {
+    target: { value: 'missing' },
+  })
+  expect(screen.getByText('No events match your search or status filter.')).toBeInTheDocument()
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search my events' }), {
+    target: { value: '' },
+  })
+  expect(screen.getByText('Open Day')).toBeInTheDocument()
 })

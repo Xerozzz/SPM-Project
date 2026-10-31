@@ -1,33 +1,28 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 
-import { listNotifications, markNotificationViewed } from '../api/notifications'
+import { markNotificationViewed } from '../api/notifications'
+import { formatDisplayTime } from '../presentation/dates'
 import { useAuth } from '../auth/useAuth'
+import { useNotificationInbox } from '../hooks/useNotificationInbox'
+import { NOTIFICATION_TITLES, notificationLink } from '../presentation/notifications'
 
-/**
- * SCRUM-99: the signed-in user's private notification inbox. Every entry shows its
- * related event, the triggering action, and when it happened, newest first. Unread
- * entries carry both a badge and the word "Unread" (never colour alone); marking
- * viewed keeps the row visible with its viewed time.
- */
-export default function NotificationInbox() {
+/** SCRUM-99: readable private updates, with source identifiers available on demand. */
+export default function NotificationInbox({
+  allowedViews,
+  onNavigate,
+}: {
+  allowedViews?: string[]
+  onNavigate?: (view: string, eventId: string) => void
+} = {}) {
   const { token } = useAuth()
   const client = useQueryClient()
-  const inboxKey = ['notifications', 'inbox', token]
-  const inbox = useQuery({
-    queryKey: inboxKey,
-    queryFn: () => listNotifications(token ?? ''),
-    enabled: token !== null,
-  })
+  const inbox = useNotificationInbox()
   const markViewed = useMutation({
     mutationFn: (id: string) => markNotificationViewed(token ?? '', id),
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: inboxKey })
-    },
+    onSuccess: () => void client.invalidateQueries({ queryKey: ['notifications', 'inbox', token] }),
   })
-
   return (
-    <section aria-label="Notifications" className="mt-6 rounded-lg border border-slate-200 p-4">
-      <h2 className="font-medium">Notifications</h2>
+    <section aria-label="Notifications">
       {inbox.isPending && <p className="mt-2 text-sm">Loading notifications…</p>}
       {inbox.isError && (
         <p role="alert" className="mt-2 text-sm text-red-600">
@@ -40,107 +35,96 @@ export default function NotificationInbox() {
         </p>
       )}
       {inbox.data && inbox.data.length > 0 && (
-        <ul className="mt-2 space-y-3">
-          {inbox.data.map((notification) => (
-            <li
-              key={notification.id}
-              className="rounded border border-slate-200 p-3 text-sm"
-              aria-label={`${notification.is_unread ? 'Unread' : 'Viewed'} notification for event ${notification.event_request_id}`}
-            >
-              <p className="font-medium">
-                {notification.is_unread && (
-                  <span className="mr-2 rounded bg-blue-600 px-1.5 py-0.5 text-xs font-semibold text-white">
-                    Unread
-                  </span>
-                )}
-                {notification.type}
-              </p>
-              <dl className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1 text-slate-600">
-                <dt className="font-medium text-slate-500">Event ID</dt>
-                <dd>{notification.event_request_id}</dd>
-                <dt className="font-medium text-slate-500">Action</dt>
-                <dd>
-                  {notification.source_type} {notification.source_id}
-                </dd>
-                <dt className="font-medium text-slate-500">Happened</dt>
-                <dd>{notification.occurred_at}</dd>
-                {!notification.is_unread && (
-                  <>
-                    <dt className="font-medium text-slate-500">Viewed</dt>
-                    <dd>{notification.viewed_at}</dd>
-                  </>
-                )}
-              </dl>
-              <div className="mt-2 flex flex-col items-start gap-2">
-                {notification.source_type === 'registration_status' && (
-                  <a
-                    href={`#event-registration-${notification.event_request_id}`}
-                    className="text-blue-700 underline"
-                  >
-                    View my registration status
-                  </a>
-                )}
-                {/* SCRUM-124: the review queue is rendered for Technical Support
-                    Staff only, and its route requires that role, so this link is an
-                    authorised review view for exactly the inbox's recipients. */}
-                {notification.source_type === 'equipment_requirement_change' && (
-                  <a href="#equipment-review-queue" className="text-blue-700 underline">
-                    Review equipment requirements
-                  </a>
-                )}
-                {/* SCRUM-125: review outcomes and reservations notify the assigned
-                    Coordinator. The coordinator events section renders only the
-                    viewer's own assigned events (the API scopes by Coordinator ID),
-                    so this link is an authorised record view for exactly the
-                    inbox's recipient. */}
-                {(notification.source_type === 'equipment_review' ||
-                  notification.source_type === 'equipment_reservation') && (
-                  <a href="#coordinator-events" className="text-blue-700 underline">
-                    View equipment outcome
-                  </a>
-                )}
-                {/* SCRUM-122: venue decisions and hold-expiry edits notify the
-                    assigned Coordinator. The coordinator events section renders only
-                    the viewer's own assigned events (the API scopes by Coordinator
-                    ID), so this link is an authorised record view for exactly the
-                    inbox's recipient. */}
-                {notification.source_type === 'venue_decision' && (
-                  <a href="#coordinator-events" className="text-blue-700 underline">
-                    View venue decision
-                  </a>
-                )}
-                {/* SCRUM-123: a cancelled arrangement notifies the responsible Venue
-                    Staff. The decisions section renders for Venue Staff only, so
-                    this link is an authorised record view for exactly the inbox's
-                    recipients. */}
-                {notification.source_type === 'venue_cancellation' && (
-                  <a href="#venue-booking-decisions" className="text-blue-700 underline">
-                    View venue booking decisions
-                  </a>
-                )}
-                {/* SCRUM-127: a revised (replacement) request needs Venue Staff
-                    review. The decisions section renders for Venue Staff only, so
-                    this link is an authorised review view for exactly the inbox's
-                    recipients. */}
-                {notification.source_type === 'venue_revision' && (
-                  <a href="#venue-booking-decisions" className="text-blue-700 underline">
-                    Review revised venue request
-                  </a>
-                )}
-                {notification.is_unread && (
-                  <button
-                    type="button"
-                    disabled={markViewed.isPending}
-                    onClick={() => markViewed.mutate(notification.id)}
-                    className="rounded border border-slate-300 px-2 py-1"
-                  >
-                    Mark viewed
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
+        <ul className="space-y-3">
+          {inbox.data.map((notification) => {
+            const link = notificationLink(notification, allowedViews)
+            return (
+              <li
+                key={notification.id}
+                className={`rounded-xl border p-5 text-sm ${notification.is_unread ? 'border-sky-200 bg-sky-50/40' : 'border-slate-200 bg-white'}`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="!text-base !leading-6 font-semibold tracking-normal">
+                    {NOTIFICATION_TITLES[notification.type] ?? 'Event update'}
+                  </h2>
+                  {notification.is_unread && (
+                    <span className="rounded-full bg-sky-100 px-2 py-1 text-xs font-medium text-sky-800">
+                      Unread
+                    </span>
+                  )}
+                </div>
+                <p className="mt-2 font-medium text-slate-800">
+                  {notification.event_name || 'Untitled event'}
+                </p>
+                <time dateTime={notification.occurred_at} className="mt-1 block text-slate-500">
+                  {formatDisplayTime(notification.occurred_at)}
+                </time>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  {link && (
+                    <a
+                      href={link.href}
+                      className="font-medium text-sky-800 underline underline-offset-4"
+                      onClick={(event) => {
+                        if (
+                          onNavigate &&
+                          !event.metaKey &&
+                          !event.ctrlKey &&
+                          !event.shiftKey &&
+                          !event.altKey
+                        ) {
+                          event.preventDefault()
+                          onNavigate(link.view, notification.event_request_id)
+                        }
+                      }}
+                    >
+                      {link.label}
+                    </a>
+                  )}
+                  {notification.is_unread && (
+                    <button
+                      type="button"
+                      disabled={markViewed.isPending}
+                      onClick={() => markViewed.mutate(notification.id)}
+                      className="cs-button-secondary"
+                    >
+                      Mark viewed
+                    </button>
+                  )}
+                </div>
+                <details className="mt-4 text-xs text-slate-500">
+                  <summary className="cursor-pointer">Record details</summary>
+                  <dl className="mt-2 space-y-1 break-words">
+                    <div>
+                      <dt className="inline">Event ID: </dt>
+                      <dd className="inline">{notification.event_request_id}</dd>
+                    </div>
+                    <div>
+                      <dt className="inline">Action: </dt>
+                      <dd className="inline">
+                        {notification.type} · {notification.source_type} {notification.source_id}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="inline">Occurred: </dt>
+                      <dd className="inline">{notification.occurred_at}</dd>
+                    </div>
+                    {notification.viewed_at && (
+                      <div>
+                        <dt className="inline">Viewed: </dt>
+                        <dd className="inline">{notification.viewed_at}</dd>
+                      </div>
+                    )}
+                  </dl>
+                </details>
+              </li>
+            )
+          })}
         </ul>
+      )}
+      {markViewed.isError && (
+        <p role="alert" className="mt-3 text-sm text-red-600">
+          {markViewed.error.message}
+        </p>
       )}
     </section>
   )

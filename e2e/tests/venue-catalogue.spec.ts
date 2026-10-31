@@ -15,21 +15,32 @@ async function signIn(page: Page, email: string) {
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill('password123')
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page.getByRole('heading', { name: 'Venue catalogue' })).toBeVisible()
+  await page
+    .getByRole('button', {
+      name: email.startsWith('venue-staff') ? 'Venue Catalogue' : 'Venue Planning',
+      exact: true,
+    })
+    .click()
+  await expect(
+    page.getByRole('heading', {
+      name: email.startsWith('venue-staff') ? 'Venue Catalogue' : 'Venue Planning',
+      exact: true,
+    }),
+  ).toBeVisible()
 }
 
 function catalogue(page: Page) {
-  return page
-    .getByRole('heading', { name: 'Venue catalogue' })
-    .locator('xpath=..')
-    .getByRole('listitem')
+  return page.locator('main > section:not([hidden])').getByRole('listitem')
 }
 
 test('venue staff add, edit and deactivate a venue (AC1, AC3)', async ({ page }) => {
   const name = `E2E Hall ${Date.now()}`
   await signIn(page, 'venue-staff@example.com')
 
+  await page.getByRole('button', { name: 'Add venue', exact: true }).click()
   await page.getByLabel(/^Name/).fill(name)
+  await page.getByLabel(/^Setup time/).fill('0')
+  await page.getByLabel(/^Turnaround time/).fill('0')
   await page.getByLabel(/^Location/).fill('Level 4, Campus Green')
   await page.getByLabel(/^Maximum capacity/).fill('120')
   await page.getByLabel('classroom').check()
@@ -73,6 +84,7 @@ test('venue staff add, edit and deactivate a venue (AC1, AC3)', async ({ page })
 test('an incomplete venue is refused and the fields are named (AC5)', async ({ page }) => {
   await signIn(page, 'venue-staff@example.com')
 
+  await page.getByRole('button', { name: 'Add venue', exact: true }).click()
   // Submit the empty form: nothing typed, so every required field should come back named.
   await page.getByRole('button', { name: 'Add venue' }).click()
 

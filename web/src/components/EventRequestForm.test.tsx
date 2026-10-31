@@ -197,10 +197,10 @@ test('shows server validation errors beside the relevant fields', async () => {
   const fetchMock = vi.mocked(globalThis.fetch)
   fetchMock.mockClear()
   fetchMock.mockResolvedValueOnce(
-    new Response(
-      JSON.stringify({ detail: [{ field: 'name', reason: 'must be unique' }] }),
-      { status: 422, headers: { 'Content-Type': 'application/json' } },
-    ),
+    new Response(JSON.stringify({ detail: [{ field: 'name', reason: 'must be unique' }] }), {
+      status: 422,
+      headers: { 'Content-Type': 'application/json' },
+    }),
   )
   fireEvent.click(screen.getByRole('button', { name: 'Create event request' }))
 
@@ -214,10 +214,10 @@ test('maps missing-field server errors beside the relevant fields', async () => 
   const fetchMock = vi.mocked(globalThis.fetch)
   fetchMock.mockClear()
   fetchMock.mockResolvedValueOnce(
-    new Response(
-      JSON.stringify({ detail: [{ loc: ['body', 'name'], msg: 'Field required' }] }),
-      { status: 422, headers: { 'Content-Type': 'application/json' } },
-    ),
+    new Response(JSON.stringify({ detail: [{ loc: ['body', 'name'], msg: 'Field required' }] }), {
+      status: 422,
+      headers: { 'Content-Type': 'application/json' },
+    }),
   )
   fireEvent.click(screen.getByRole('button', { name: 'Create event request' }))
 
@@ -257,7 +257,6 @@ test('shows venue names and equipment types loaded from the catalogues', async (
   expect(await screen.findByRole('option', { name: 'Projector' })).toBeInTheDocument()
   expect(screen.getAllByText(/does not reserve a specific resource/i)).toHaveLength(2)
 })
-
 
 const existingDraft = {
   id: 'req-7',
@@ -305,7 +304,6 @@ test('editing a draft patches it rather than creating another', async () => {
     expect.objectContaining({ method: 'PATCH' }),
   )
 })
-
 
 // --------------------------------------------------------- the form inside its page
 //

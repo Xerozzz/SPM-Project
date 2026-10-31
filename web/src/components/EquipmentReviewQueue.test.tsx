@@ -81,6 +81,7 @@ test('SCRUM-44 AC1: what needs assessing, with the timing needed to assess it', 
   ).toBeInTheDocument()
   expect(screen.getByText('Needs an HDMI cable')).toBeInTheDocument()
   expect(screen.getByText('Pending review')).toBeInTheDocument()
+  expect(screen.getByRole('listitem')).toHaveClass('rounded-2xl')
 })
 
 test('SCRUM-44 AC2: recording an outcome sends it and says so', async () => {

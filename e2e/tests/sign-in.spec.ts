@@ -5,16 +5,21 @@ import { expect, test } from '@playwright/test'
 
 test('a seeded user can sign in, sees their roles, and can sign out', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible()
 
   await page.getByLabel('Email').fill('coordinator@example.com')
   await page.getByLabel('Password').fill('password123')
+  await page.getByRole('button', { name: 'Show password' }).click()
+  await expect(page.getByLabel('Password')).toHaveAttribute('type', 'text')
+  await expect(page.getByLabel('Password')).toHaveValue('password123')
+  await page.getByRole('button', { name: 'Hide password' }).click()
+  await expect(page.getByLabel('Password')).toHaveAttribute('type', 'password')
   await page.getByRole('button', { name: 'Sign in' }).click()
 
-  await expect(page.getByText('Signed in as: coordinator')).toBeVisible()
+  await expect(page.getByText('You are logged in as: Coordinator')).toBeVisible()
 
   await page.getByRole('button', { name: 'Sign out' }).click()
-  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible()
 })
 
 test('wrong credentials show a generic error and stay on sign-in', async ({ page }) => {
@@ -24,5 +29,5 @@ test('wrong credentials show a generic error and stay on sign-in', async ({ page
   await page.getByRole('button', { name: 'Sign in' }).click()
 
   await expect(page.getByRole('alert')).toHaveText('Invalid email or password')
-  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible()
 })

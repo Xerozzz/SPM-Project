@@ -48,6 +48,7 @@ test('SCRUM-42: an attendee registers and sees the pending status', async () => 
     </QueryClientProvider>,
   )
 
+  fireEvent.click(await screen.findByRole('button', { name: 'View details for Open Day' }))
   fireEvent.change(await screen.findByLabelText('Full name'), { target: { value: 'Ada Lovelace' } })
   fireEvent.change(screen.getByLabelText('Age'), { target: { value: '24' } })
   fireEvent.change(screen.getByLabelText('Phone number'), { target: { value: '+65 8123 4567' } })
@@ -88,6 +89,7 @@ test('SCRUM-42: invalid fields are named and entered values stay in the form', a
     </QueryClientProvider>,
   )
 
+  fireEvent.click(await screen.findByRole('button', { name: 'View details for Open Day' }))
   fireEvent.change(await screen.findByLabelText('Full name'), { target: { value: 'Ada Lovelace' } })
   fireEvent.click(screen.getByRole('button', { name: 'Register' }))
 
@@ -134,9 +136,56 @@ test('SCRUM-128: an attendee withdraws and sees the withdrawn status', async () 
     </QueryClientProvider>,
   )
 
+  fireEvent.click(await screen.findByRole('button', { name: 'View details for Open Day' }))
   expect(await screen.findByRole('status')).toHaveTextContent('Registration status: Pending')
   fireEvent.click(screen.getByRole('button', { name: 'Withdraw registration' }))
   expect(await screen.findByRole('status')).toHaveTextContent('Registration status: Withdrawn')
+})
+
+test('SCRUM-42: registration cards can be filtered by their status', async () => {
+  localStorage.setItem(
+    'connectsphere.token',
+    JSON.stringify({ token: 'token', userId: 'attendee-1', roles: ['attendee'] }),
+  )
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    if (String(input) === '/api/attendee/events') {
+      return json([
+        {
+          id: 'event-1',
+          name: 'Pending event',
+          description: null,
+          start_at: null,
+          end_at: null,
+          intake_open: true,
+        },
+        {
+          id: 'event-2',
+          name: 'Available event',
+          description: null,
+          start_at: null,
+          end_at: null,
+          intake_open: true,
+        },
+      ])
+    }
+    if (String(input) === '/api/attendee/events/event-1/registration') return json(registration())
+    if (String(input) === '/api/attendee/events/event-2/registration')
+      return json({ detail: 'Registration not found' }, 404)
+    throw new Error(`unexpected request ${String(input)}`)
+  })
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={client}>
+      <AuthProvider>
+        <AttendeeRegistrations />
+      </AuthProvider>
+    </QueryClientProvider>,
+  )
+
+  expect(await screen.findByRole('button', { name: /^Pending 1$/ })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: /^Pending 1$/ }))
+  expect(screen.getByText('Pending event')).toBeInTheDocument()
+  expect(screen.queryByText('Available event')).not.toBeInTheDocument()
 })
 
 function registration() {

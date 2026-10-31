@@ -27,9 +27,9 @@ export interface ApprovedEvent {
   end_at: string
 }
 
-// The API sits beside the web app on port 8000, as every spec assumes.
+// Use the same Vite API proxy as the browser, so isolated stacks can use another port.
 const WEB = new URL(process.env.E2E_BASE_URL ?? 'http://localhost:5173')
-export const API = `${WEB.protocol}//${WEB.hostname}:8000`
+export const API = WEB.origin
 
 /** A bearer token for a seeded account, straight from the login endpoint. */
 export async function tokenFor(request: APIRequestContext, email: string): Promise<string> {
@@ -49,10 +49,7 @@ export async function tokenFor(request: APIRequestContext, email: string): Promi
  * of 3,000 seconds (50 minutes) apart to the second, and even then `freeWindow` below
  * moves past a day that an earlier run's hold or closure still occupies.
  */
-export function uniqueWindow(
-  lane: 0 | 1 | 2,
-  skip = 0,
-): { start_at: string; end_at: string } {
+export function uniqueWindow(lane: 0 | 1 | 2, skip = 0): { start_at: string; end_at: string } {
   const slot = Math.floor(Date.now() / 1_000) % 3_000
   // `skip` moves on in steps of three days, so a spec stays in its own lane.
   const days = 400 + (slot + skip) * 3 + lane
@@ -180,5 +177,10 @@ export async function createApprovedEvent(
     `/api/event-requests/${assigned.id}/approve`,
   )) as ApprovedEvent & { status: string }
   expect(approved.status).toBe('approved')
-  return { id: approved.id, name: approved.name, start_at: approved.start_at, end_at: approved.end_at }
+  return {
+    id: approved.id,
+    name: approved.name,
+    start_at: approved.start_at,
+    end_at: approved.end_at,
+  }
 }

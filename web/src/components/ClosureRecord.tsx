@@ -71,44 +71,74 @@ export default function ClosureRecord({
         </details>
       )}
       {canCorrect && (
-        <div className="mt-3">
-          <h4 className="font-medium">Correct the record</h4>
-          <label className="mt-1 block">
-            Actual attendance
-            <input
-              type="number"
-              min={0}
-              step={1}
-              value={attendance}
-              onChange={(change) => setAttendance(change.target.value)}
-              className="mt-1 block w-32 rounded border border-slate-300 px-2 py-1"
-            />
-          </label>
-          <label className="mt-1 block">
-            Notes
-            <textarea
-              value={notes}
-              onChange={(change) => setNotes(change.target.value)}
-              rows={2}
-              className="mt-1 block w-full rounded border border-slate-300 px-2 py-1"
-            />
-          </label>
-          <button
-            type="button"
-            disabled={correct.isPending}
-            onClick={() => correct.mutate()}
-            className="mt-2 rounded border border-slate-300 px-3 py-1"
-          >
-            Save correction
-          </button>
-          {correct.isError && (
-            <p role="alert" className="mt-1 text-red-600">
-              {correct.error.message}
-            </p>
-          )}
-        </div>
+        <CorrectionForm
+          attendance={attendance}
+          notes={notes}
+          pending={correct.isPending}
+          error={correct.isError ? correct.error.message : null}
+          onAttendanceChange={setAttendance}
+          onNotesChange={setNotes}
+          onSave={() => correct.mutate()}
+        />
       )}
     </section>
+  )
+}
+
+function CorrectionForm({
+  attendance,
+  notes,
+  pending,
+  error,
+  onAttendanceChange,
+  onNotesChange,
+  onSave,
+}: {
+  attendance: string
+  notes: string
+  pending: boolean
+  error: string | null
+  onAttendanceChange: (value: string) => void
+  onNotesChange: (value: string) => void
+  onSave: () => void
+}) {
+  return (
+    <div className="mt-3">
+      <h3 className="font-medium">Correct the record</h3>
+      <label className="mt-1 block">
+        Actual attendance
+        <input
+          type="number"
+          min={0}
+          step={1}
+          value={attendance}
+          onChange={(change) => onAttendanceChange(change.target.value)}
+          className="mt-1 block w-32 rounded border border-slate-300 px-2 py-1"
+        />
+      </label>
+      <label className="mt-1 block">
+        Notes
+        <textarea
+          value={notes}
+          onChange={(change) => onNotesChange(change.target.value)}
+          rows={2}
+          className="mt-1 block w-full rounded border border-slate-300 px-2 py-1"
+        />
+      </label>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={onSave}
+        className="mt-2 rounded border border-slate-300 px-3 py-1"
+      >
+        Save correction
+      </button>
+      {error && (
+        <p role="alert" className="mt-1 text-red-600">
+          {error}
+        </p>
+      )}
+    </div>
   )
 }
 

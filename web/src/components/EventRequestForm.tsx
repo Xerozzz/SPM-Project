@@ -15,6 +15,7 @@ import {
   updateDraft,
 } from '../api/eventRequests'
 import { useAuth } from '../auth/useAuth'
+import { useUnsavedChanges } from '../hooks/useUnsavedChanges'
 import {
   type EventRequestFieldErrors,
   type EventRequestFieldName,
@@ -62,11 +63,13 @@ const textFields: Array<{
 export default function EventRequestForm({
   editing = null,
   onDone = () => {},
+  onDirtyChange,
 }: {
-  /** A draft the organiser chose to edit, from the list below. Null means a new one. */
+  /** A draft the organiser chose to edit. Null means a new request. */
   editing?: EventRequest | null
-  /** Called when the form has nothing left to show, so the list can clear its selection. */
-  onDone?: () => void
+  /** Return to My Events, with a confirmation after a successful save or submission. */
+  onDone?: (message?: string) => void
+  onDirtyChange?: (dirty: boolean) => void
 } = {}) {
   const { token } = useAuth()
   const queryClient = useQueryClient()
@@ -90,18 +93,21 @@ export default function EventRequestForm({
     if (editing) setOutcome(null)
     started.current = null
   }
-  // The form is above a long list, far enough up the page to be off screen by the time
-  // anyone reaches the draft they want. Choosing one filled it in where nobody could see
-  // it, so pressing Edit draft looked like it did nothing at all. Keyed on the id, not
-  // the object, so a list refresh does not drag the page around while someone is typing.
+  // Focus the name when opening the form or choosing a different draft. Using the id
+  // keeps list refreshes from interrupting someone who is typing.
   const editingId = editing?.id ?? null
   useEffect(() => {
-    if (editingId === null) return
     section.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
     // Moving focus is what tells a keyboard or screen reader user the form is now theirs;
     // the scroll only helps people who can see it.
     section.current?.querySelector<HTMLInputElement>('#name')?.focus({ preventScroll: true })
   }, [editingId])
+
+  const savedValues = editing ? formValuesOf(editing) : initialValues
+  const dirty = (Object.keys(initialValues) as FieldName[]).some(
+    (name) => values[name] !== savedValues[name],
+  )
+  useUnsavedChanges(dirty, onDirtyChange)
 
   const equipmentTypes = useQuery({
     queryKey: ['equipment-types', token],
@@ -153,7 +159,7 @@ export default function EventRequestForm({
       setErrors({})
       refreshLists()
       setOutcome(`“${request.name}” has been submitted for review.`)
-      onDone()
+      onDone(`“${request.name}” has been submitted for review.`)
     },
   })
 
@@ -165,9 +171,7 @@ export default function EventRequestForm({
   const saveDraft = useMutation({
     mutationFn: (draft: EventRequestDraftInput) => {
       const existing = editing?.id ?? started.current
-      return existing
-        ? updateDraft(token ?? '', existing, draft)
-        : createDraft(token ?? '', draft)
+      return existing ? updateDraft(token ?? '', existing, draft) : createDraft(token ?? '', draft)
     },
     onError: showProblems,
     onSuccess: (request) => {
@@ -176,7 +180,7 @@ export default function EventRequestForm({
       setErrors({})
       refreshLists()
       setOutcome(`“${request.name || 'Untitled request'}” has been saved as a draft.`)
-      onDone()
+      onDone(`“${request.name || 'Untitled request'}” has been saved as a draft.`)
     },
   })
 
@@ -236,103 +240,133 @@ export default function EventRequestForm({
     saveDraft.mutate(draftBody())
   }
 
-  return (
-    <section ref={section} className="mt-6 rounded-lg border border-slate-200 p-4">
-      <h2 className="font-medium">{editing ? 'Edit draft' : 'New event request'}</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        Fields marked * are required to submit a request. A draft can be saved without them.
-      </p>
-      <form className="mt-4 space-y-4" noValidate onSubmit={create}>
-        {textFields.map(({ name, multiline }) => (
-          <Field key={name} name={name} error={errors[name]}>
-            {multiline ? (
-              <textarea
-                id={name}
-                value={values[name]}
-                onChange={(event) => change(name, event.target.value)}
-                className="min-h-20 w-full rounded border border-slate-300 p-2"
-              />
-            ) : (
-              <input
-                id={name}
-                value={values[name]}
-                onChange={(event) => change(name, event.target.value)}
-                className="w-full rounded border border-slate-300 p-2"
-              />
-            )}
-          </Field>
-        ))}
-        <CatalogueRequirementField
-          name="venue_requirement"
-          options={venueNames.data ?? []}
-          placeholder="Select a venue"
-          value={values.venue_requirement}
-          error={errors.venue_requirement}
-          onChange={(value) => change('venue_requirement', value)}
-        />
-        <CatalogueRequirementField
-          name="equipment_requirement"
-          options={equipmentTypes.data ?? []}
-          placeholder="Select equipment"
-          value={values.equipment_requirement}
-          error={errors.equipment_requirement}
-          onChange={(value) => change('equipment_requirement', value)}
-        />
-        {(equipmentTypes.isError || venueNames.isError) && (
-          <p role="alert" className="text-sm text-red-600">
-            {equipmentTypes.error?.message ?? venueNames.error?.message}
-          </p>
-        )}
-        <div className="space-y-4">
-          <Field name="start_at" error={errors.start_at}>
-            <input
-              id="start_at"
-              type="datetime-local"
-              value={values.start_at}
-              onChange={(event) => change('start_at', event.target.value)}
-              className="w-full rounded border border-slate-300 p-2"
-            />
-          </Field>
-          <Field name="end_at" error={errors.end_at}>
-            <input
-              id="end_at"
-              type="datetime-local"
-              value={values.end_at}
-              onChange={(event) => change('end_at', event.target.value)}
-              className="w-full rounded border border-slate-300 p-2"
-            />
-          </Field>
-        </div>
-        <Field name="expected_attendance" error={errors.expected_attendance}>
-          <input
-            id="expected_attendance"
-            type="number"
-            min="1"
-            step="1"
-            value={values.expected_attendance}
-            onChange={(event) => change('expected_attendance', event.target.value)}
-            className="w-full rounded border border-slate-300 p-2"
+  function renderTextField({ name, multiline }: (typeof textFields)[number]) {
+    return (
+      <Field key={name} name={name} error={errors[name]}>
+        {multiline ? (
+          <textarea
+            id={name}
+            value={values[name]}
+            onChange={(event) => change(name, event.target.value)}
+            className="cs-field min-h-24 resize-y"
           />
-        </Field>
+        ) : (
+          <input
+            id={name}
+            value={values[name]}
+            onChange={(event) => change(name, event.target.value)}
+            className="cs-field"
+          />
+        )}
+      </Field>
+    )
+  }
+
+  return (
+    <section ref={section} className="cs-panel mt-6">
+      <div className="border-b border-slate-100 pb-4">
+        <h2 className="text-3xl font-medium tracking-[-0.04em] text-[#202124]">
+          {editing ? 'Edit draft' : 'New event request'}
+        </h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Fields marked * are required to submit a request. A draft can be saved without them.
+        </p>
+      </div>
+      <form className="mt-4 space-y-4" noValidate onSubmit={create}>
+        <fieldset className="space-y-4 border-b border-slate-100 pb-6">
+          <legend className="mb-4 text-lg font-semibold">Event details</legend>
+          {textFields
+            .filter((field) => ['name', 'purpose', 'description'].includes(field.name))
+            .map(renderTextField)}
+        </fieldset>
+        <fieldset className="space-y-4 border-b border-slate-100 pb-6">
+          <legend className="mb-4 text-lg font-semibold">Schedule and attendance</legend>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field name="start_at" error={errors.start_at}>
+              <input
+                id="start_at"
+                type="datetime-local"
+                value={values.start_at}
+                onChange={(event) => change('start_at', event.target.value)}
+                className="cs-field"
+              />
+            </Field>
+            <Field name="end_at" error={errors.end_at}>
+              <input
+                id="end_at"
+                type="datetime-local"
+                value={values.end_at}
+                onChange={(event) => change('end_at', event.target.value)}
+                className="cs-field"
+              />
+            </Field>
+          </div>
+          <Field name="expected_attendance" error={errors.expected_attendance}>
+            <input
+              id="expected_attendance"
+              type="number"
+              min="1"
+              step="1"
+              value={values.expected_attendance}
+              onChange={(event) => change('expected_attendance', event.target.value)}
+              className="cs-field"
+            />
+          </Field>
+        </fieldset>
+        <fieldset className="space-y-4 pb-4">
+          <legend className="mb-4 text-lg font-semibold">
+            Venue, equipment and additional needs
+          </legend>
+          <CatalogueRequirementField
+            name="venue_requirement"
+            options={venueNames.data ?? []}
+            placeholder="Select a venue"
+            value={values.venue_requirement}
+            error={errors.venue_requirement}
+            onChange={(value) => change('venue_requirement', value)}
+          />
+          <CatalogueRequirementField
+            name="equipment_requirement"
+            options={equipmentTypes.data ?? []}
+            placeholder="Select equipment"
+            value={values.equipment_requirement}
+            error={errors.equipment_requirement}
+            onChange={(value) => change('equipment_requirement', value)}
+          />
+          {(equipmentTypes.isError || venueNames.isError) && (
+            <p role="alert" className="text-sm text-red-600">
+              {equipmentTypes.error?.message ?? venueNames.error?.message}
+            </p>
+          )}
+          {textFields
+            .filter((field) => !['name', 'purpose', 'description'].includes(field.name))
+            .map(renderTextField)}
+        </fieldset>
         {/* Both buttons, not just the first: a Save draft that the API refuses used to
             fail silently, because `createDraft` throws a plain error that the field-level
             handler has nothing to do with. */}
         {(createRequest.error ?? saveDraft.error) && (
-          <p role="alert" className="text-sm text-red-600">
-            {(createRequest.error ?? saveDraft.error)?.message}. Your entered details are
-            still available to edit.
+          <p
+            role="alert"
+            className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          >
+            {(createRequest.error ?? saveDraft.error)?.message}. Your entered details are still
+            available to edit.
           </p>
         )}
         {outcome && (
-          <p role="status" className="text-sm text-green-700">
+          <p
+            role="status"
+            className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+          >
             {outcome}
           </p>
         )}
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">
           <button
             type="submit"
             disabled={createRequest.isPending || saveDraft.isPending}
-            className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+            className="cs-button"
           >
             {editing ? 'Submit for review' : 'Create event request'}
           </button>
@@ -340,16 +374,12 @@ export default function EventRequestForm({
             type="button"
             onClick={save}
             disabled={createRequest.isPending || saveDraft.isPending}
-            className="rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
+            className="cs-button-secondary"
           >
             Save draft
           </button>
           {editing && (
-            <button
-              type="button"
-              onClick={onDone}
-              className="rounded border border-slate-300 px-3 py-1.5 text-sm"
-            >
+            <button type="button" onClick={() => onDone()} className="cs-button-secondary">
               Cancel
             </button>
           )}
@@ -408,7 +438,7 @@ function CatalogueRequirementField({
         id={name}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded border border-slate-300 p-2"
+        className="cs-field"
       >
         <option value="">{placeholder}</option>
         {options.map((option) => (
@@ -435,7 +465,7 @@ function Field({
 }) {
   return (
     <div>
-      <label htmlFor={name} className="mb-1 block text-sm font-medium">
+      <label htmlFor={name} className="mb-1 block text-sm font-medium text-slate-700">
         {FIELD_LABELS[name]} *
       </label>
       {children}

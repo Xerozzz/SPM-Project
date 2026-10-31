@@ -124,7 +124,10 @@ test('AC3: a blank quantity is sent as absent, not as zero', async () => {
 test('AC3 and AC4: a refusal names the field to correct', async () => {
   renderEditor((key) =>
     key === 'POST /api/event-requests/event-1/equipment-requirements'
-      ? json({ detail: [{ field: 'equipment_type', reason: 'is already required for this event' }] }, 422)
+      ? json(
+          { detail: [{ field: 'equipment_type', reason: 'is already required for this event' }] },
+          422,
+        )
       : undefined,
   )
   await screen.findByLabelText('Quantity for Projector')
@@ -222,7 +225,14 @@ test('AC3: the catalogue comes from the route the Coordinator is allowed to read
 test('AC6: a requirement with equipment reserved against it says how much', async () => {
   renderEditor((key) =>
     key === 'GET /api/event-requests/event-1/equipment-requirements'
-      ? json([{ ...PROJECTOR, quantity: 9, reserved_quantity: 2, reservation_state: 'partially_reserved' }])
+      ? json([
+          {
+            ...PROJECTOR,
+            quantity: 9,
+            reserved_quantity: 2,
+            reservation_state: 'partially_reserved',
+          },
+        ])
       : undefined,
   )
 

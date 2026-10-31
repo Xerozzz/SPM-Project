@@ -12,9 +12,7 @@ export type EventRequestFormValues = Omit<
 export type EventRequestFieldName = keyof EventRequestFormValues
 export type EventRequestFieldErrors = Partial<Record<EventRequestFieldName, string>>
 
-export function validateEventRequest(
-  values: EventRequestFormValues,
-): EventRequestFieldErrors {
+export function validateEventRequest(values: EventRequestFormValues): EventRequestFieldErrors {
   const errors: EventRequestFieldErrors = {}
 
   for (const [name, value] of Object.entries(values)) {
@@ -22,10 +20,7 @@ export function validateEventRequest(
   }
 
   const attendance = Number(values.expected_attendance)
-  if (
-    values.expected_attendance &&
-    (!Number.isInteger(attendance) || attendance <= 0)
-  ) {
+  if (values.expected_attendance && (!Number.isInteger(attendance) || attendance <= 0)) {
     errors.expected_attendance = 'Enter a positive whole number.'
   }
 

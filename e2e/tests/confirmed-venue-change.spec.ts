@@ -1,5 +1,6 @@
 import { expect, type APIRequestContext, type Page, test } from '@playwright/test'
 
+import { openEvent } from '../support/workspace'
 import { API, createApprovedEvent, tokenFor, VENUE_SPEC_ACCOUNT } from '../support/approved-event'
 
 // SCRUM-118: the assigned Coordinator cancels one arrangement of a Confirmed event. That
@@ -111,6 +112,7 @@ test('SCRUM-118: a venue change returns a Confirmed event to planning', async ({
   const reason = `Hall flooded ${Date.now()}`
 
   await signIn(page, VENUE_SPEC_ACCOUNT)
+  const card = await openEvent(page, event.name, 'Review Queue')
   await page
     .getByRole('button', { name: `Cancel arrangement for ${morning}` })
     .click({ timeout: 15000 })
@@ -129,8 +131,8 @@ test('SCRUM-118: a venue change returns a Confirmed event to planning', async ({
   // Back in planning, the card is the Approved one again and SCRUM-109's list shows the
   // cancelled arrangement with its reason. Rows are anchored on their stamped labels.
   await expect(page.getByRole('button', { name: `Confirm ${event.name}` })).toBeVisible()
-  const morningRow = page.getByRole('listitem').filter({ hasText: morning })
-  const afternoonRow = page.getByRole('listitem').filter({ hasText: afternoon })
+  const morningRow = card.getByRole('listitem').filter({ hasText: morning })
+  const afternoonRow = card.getByRole('listitem').filter({ hasText: afternoon })
   await expect(morningRow).toContainText('Status: cancelled')
   await expect(morningRow).toContainText(`Reason: ${reason}`)
   await expect(afternoonRow).toContainText('Status: confirmed')

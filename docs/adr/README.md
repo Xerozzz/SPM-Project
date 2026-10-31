@@ -80,7 +80,15 @@ someone else made two weeks ago.
 | [0068](0068-change-request-and-completion-entries-with-typed-field-values.md) | Change request and completion entries, with a kind on each field change | Proposed |
 | [0069](0069-safety-decisions-hidden-by-a-shared-rule-and-closure-entries.md) | Safety decision entries hidden by a shared rule, and venue closure entries | Proposed |
 | [0070](0070-hold-expiry-changes-recorded-in-the-update-transaction.md) | Hold expiry changes recorded in the update's transaction | Proposed |
-
+| [0071](0071-my-events-summary-and-details-views.md) | Separate My Events summaries, details and creation | Proposed |
+| [0072](0072-attendee-registration-summary-and-details.md) | Separate attendee registration summaries and details | Proposed |
+| [0073](0073-coordinator-review-summary-and-details.md) | Separate coordinator review summaries and details | Proposed |
+| [0074](0074-completed-event-summary-and-record-correction.md) | Separate completed-event summaries and record correction | Proposed |
+| [0075](0075-active-assignment-summary-and-details.md) | Separate active-assignment summaries and details | Proposed |
+| [0076](0076-venue-booking-summary-and-details.md) | Separate venue booking hold and decision summaries from details | Proposed |
+| [0077](0077-responsive-sign-in-with-existing-illustration.md) | Present sign-in beside the existing team illustration | Proposed |
+| [0078](0078-venue-booking-summary-and-details-views.md) | Review venue bookings through summaries and a details view | Proposed |
+| [0079](0079-workspace-navigation-and-usability-conventions.md) | Use URL navigation and readable workspace presentation | Proposed |
 
 ## When to write one
 

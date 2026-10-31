@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import {
   type EventRequest,
@@ -10,7 +10,10 @@ import {
   submitEventRequest,
   SubmissionRejectedError,
 } from '../api/eventRequests'
+import { formatDateRange, formatDisplayTime } from '../presentation/dates'
+import { matchesSearch } from '../presentation/search'
 import { useAuth } from '../auth/useAuth'
+import { useEventSelection } from '../hooks/useEventSelection'
 import { acceptsChangeRequest } from '../validation/eventChange'
 import { AssignmentHistoryToggle } from './AssignmentHistory'
 import CancellationRecord from './CancellationRecord'
@@ -38,14 +41,22 @@ import RequestCancellation from './RequestCancellation'
  */
 export default function MyEventRequests({
   onEditDraft = () => {},
+  onCreateEvent = () => {},
+  targetEventId = null,
 }: {
-  /** Hands a draft to the form above, so there is only ever one form on the page. */
+  /** Opens the existing form with the full saved draft. */
   onEditDraft?: (request: EventRequest) => void
+  onCreateEvent?: () => void
+  targetEventId?: string | null
 } = {}) {
   const { token } = useAuth()
   const queryClient = useQueryClient()
   const [outcome, setOutcome] = useState<Outcome | null>(null)
   const [proposing, setProposing] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [selectedStatus, setSelectedStatus] = useState<EventRequest['status'] | 'all'>('all')
+  const detailsHeading = useRef<HTMLHeadingElement>(null)
+  const openedFrom = useRef<string | null>(null)
 
   // The token is part of the key: the list is per-user, and without it a sign-out and
   // sign-in as someone else on the same tab could briefly show the previous user's data
@@ -56,6 +67,22 @@ export default function MyEventRequests({
     queryFn: () => listMyEventRequests(token ?? ''),
     enabled: token !== null,
   })
+  const [selectedId, setSelectedId] = useEventSelection(targetEventId, requests.data)
+  const groupedRequests = STATUS_ORDER.map((status) => ({
+    status,
+    requests: requests.data?.filter((request) => request.status === status) ?? [],
+  })).filter((group) => group.requests.length > 0)
+  const visibleRequests =
+    requests.data?.filter((request) =>
+      selectedId
+        ? request.id === selectedId
+        : (selectedStatus === 'all' || request.status === selectedStatus) &&
+          matchesSearch(search, request.name, request.venue_requirement),
+    ) ?? []
+  useEffect(() => {
+    if (selectedId) detailsHeading.current?.focus()
+    else document.getElementById(openedFrom.current ?? '')?.focus()
+  }, [selectedId])
 
   // The mutation variable carries the request id plus its current name, so validation
   // feedback can name the request even when the API refuses submission.
@@ -75,8 +102,7 @@ export default function MyEventRequests({
     },
   })
 
-  // The list carries a summary, so the full request is fetched before the form above is
-  // filled in. Editing happens there, not here: one form on the page, not two.
+  // Fetch the full saved request before opening the existing editing form.
   const reopen = useMutation({
     mutationFn: (id: string) => getEventRequest(token ?? '', id),
     onSuccess: (request) => {
@@ -89,12 +115,29 @@ export default function MyEventRequests({
   })
 
   return (
-    <section className="mt-6 space-y-4">
-      <div className="rounded-lg border border-slate-200 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-medium">My event requests</h2>
+    <section className="mt-0 space-y-4">
+      {selectedId ? (
+        <button type="button" className="cs-button-secondary" onClick={() => setSelectedId(null)}>
+          ← Back to My Events
+        </button>
+      ) : (
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <label className="block max-w-md flex-1 text-sm font-medium">
+            Search my events
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Event name or venue"
+              className="cs-field"
+            />
+          </label>
+          <button type="button" className="cs-button" onClick={onCreateEvent}>
+            + Create event
+          </button>
         </div>
-
+      )}
+      <div>
         {requests.isPending && <p className="mt-2 text-sm">Loading...</p>}
         {requests.isError && (
           <p className="mt-2 text-sm text-red-600" role="alert">
@@ -102,113 +145,204 @@ export default function MyEventRequests({
           </p>
         )}
         {requests.data && requests.data.length === 0 && (
-          <p className="mt-2 text-sm text-slate-500">You have no event requests yet.</p>
+          <p className="mt-2 text-sm text-slate-500">
+            No events yet. Create your first event to get started.
+          </p>
         )}
 
         {requests.data && requests.data.length > 0 && (
-          <ul className="mt-3 divide-y divide-slate-200">
-            {requests.data.map((request) => (
-              <li
-                key={request.id}
-                className="flex flex-wrap items-center justify-between gap-4 py-3"
+          <div className="mt-5">
+            {!selectedId && (
+              <div
+                role="group"
+                aria-label="Filter events by status"
+                className="flex gap-2 overflow-x-auto border-b border-slate-200 pb-3"
               >
-                <div>
-                  <p className="font-medium">{titleOf(request)}</p>
-                  <p className="text-sm text-slate-500">
-                    <StatusLabel status={request.status} />
-                  </p>
-                  {request.status === 'rejected' && request.rejection_reason && (
-                    <p className="mt-1 text-sm text-red-700">
-                      Rejection reason: {request.rejection_reason}
-                    </p>
+                {[{ status: 'all' as const, requests: requests.data }, ...groupedRequests].map(
+                  (group) => (
+                    <button
+                      key={group.status}
+                      type="button"
+                      aria-pressed={selectedStatus === group.status}
+                      onClick={() => setSelectedStatus(group.status)}
+                      className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium ${selectedStatus === group.status ? 'bg-[#202124] text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}
+                    >
+                      {group.status === 'all' ? 'All events' : STATUS_TITLES[group.status]}{' '}
+                      <span className="ml-1 opacity-70">{group.requests.length}</span>
+                    </button>
+                  ),
+                )}
+              </div>
+            )}
+            {visibleRequests.length === 0 && (
+              <p className="py-8 text-sm text-slate-500">
+                No events match your search or status filter.
+              </p>
+            )}
+            <ul className={`mt-5 grid gap-4 ${selectedId ? '' : 'md:grid-cols-2 xl:grid-cols-3'}`}>
+              {visibleRequests.map((request) => (
+                <li
+                  key={request.id}
+                  className="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-5"
+                >
+                  <StatusLabel status={request.status} />
+                  {selectedId ? (
+                    <h2 ref={detailsHeading} tabIndex={-1} className="mt-3 break-words">
+                      {titleOf(request)}
+                    </h2>
+                  ) : (
+                    <h3 className="mt-3 break-words text-lg font-semibold tracking-normal">
+                      {titleOf(request)}
+                    </h3>
                   )}
-                  {(request.status === 'draft' || request.status === 'rejected') && (
-                    <p className="mt-1 text-xs text-slate-500">
-                      To change this request, edit it and submit it again.
-                    </p>
-                  )}
-                </div>
-                {request.status_permits.includes('edit') ? (
-                  <div className="flex flex-wrap gap-2">
+                  <dl className="mt-4 flex-1 space-y-3 text-sm">
+                    <div>
+                      <dt className="text-xs text-slate-500">Schedule · Singapore time</dt>
+                      <dd className="mt-1">
+                        {request.start_at
+                          ? request.end_at
+                            ? formatDateRange(request.start_at, request.end_at)
+                            : formatDisplayTime(request.start_at)
+                          : 'Date to be confirmed'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-slate-500">Venue preference</dt>
+                      <dd className="mt-1 break-words">
+                        {request.venue_requirement || 'Not specified'}
+                      </dd>
+                    </div>
+                    {selectedId && (
+                      <div>
+                        <dt className="text-xs text-slate-500">Expected attendance</dt>
+                        <dd className="mt-1">{request.expected_attendance ?? 'Not specified'}</dd>
+                      </div>
+                    )}
+                  </dl>
+                  {!selectedId ? (
                     <button
                       type="button"
-                      onClick={() => reopen.mutate(request.id)}
-                      disabled={reopen.isPending}
-                      aria-label={`Edit draft ${titleOf(request)}`}
-                      className="rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
+                      id={`view-event-${request.id}`}
+                      className="cs-button-secondary mt-5 w-full"
+                      aria-label={`View details for ${titleOf(request)}`}
+                      onClick={(event) => {
+                        openedFrom.current = event.currentTarget.id
+                        setOutcome(null)
+                        setProposing(null)
+                        setSelectedId(request.id)
+                      }}
                     >
-                      Edit draft
+                      View details →
                     </button>
-                    {request.status_permits.includes('submit') && (
-                      <button
-                        type="button"
-                        onClick={() => submit.mutate(request)}
-                        disabled={submit.isPending}
-                        className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-                      >
-                        Submit for review
-                      </button>
-                    )}
-                  </div>
-                ) : acceptsChangeRequest(request.status) ? (
-                  // SCRUM-37: after submission, significant changes are proposed, not edited.
-                  <button
-                    type="button"
-                    onClick={() => setProposing(request.id)}
-                    aria-label={`Propose a change to ${titleOf(request)}`}
-                    className="rounded border border-slate-300 px-3 py-1.5 text-sm"
-                  >
-                    Propose a change
-                  </button>
-                ) : request.status === 'cancelled' ? null : (
-                  <span className="text-sm text-slate-500">
-                    Locked - ask your coordinator to request changes
-                  </span>
-                )}
-                {acceptsChangeRequest(request.status) && (
-                  <div className="w-full">
-                    {proposing === request.id && (
-                      <ProposeChange eventId={request.id} onClose={() => setProposing(null)} />
-                    )}
-                    <ChangeRequestList eventId={request.id} />
-                  </div>
-                )}
-                {request.status === 'confirmed' && (
-                  <div className="w-full">
-                    <RegistrationIntakeControls event={request} />
-                    <RegistrationReviewList eventId={request.id} canDecide />
-                  </div>
-                )}
-                {/* SCRUM-86 AC4: the owning Organiser reads the closure record. */}
-                {request.status === 'completed' && (
-                  <div className="w-full">
-                    <ClosureRecord eventId={request.id} />
-                  </div>
-                )}
-                {/* SCRUM-115: ask the Coordinator to cancel, or see why it was cancelled. */}
-                {request.status_permits.includes('cancel') && (
-                  <div className="w-full">
-                    <RequestCancellation event={request} />
-                  </div>
-                )}
-                {request.status === 'cancelled' && (
-                  <div className="w-full">
-                    <CancellationRecord eventId={request.id} />
-                  </div>
-                )}
-                {/* SCRUM-105: a draft has never been submitted, so it has no history. */}
-                {request.status !== 'draft' && (
-                  <div className="w-full">
-                    <AssignmentHistoryToggle requestId={request.id} requestName={request.name} />
-                  </div>
-                )}
-                {/* SCRUM-88: this list holds only the viewer's own requests, drafts included. */}
-                <div className="w-full">
-                  <EventHistoryToggle eventId={request.id} eventName={request.name} />
-                </div>
-              </li>
-            ))}
-          </ul>
+                  ) : (
+                    <div className="mt-6 space-y-5 border-t border-slate-100 pt-5">
+                      <p className="whitespace-pre-wrap break-words text-sm text-slate-600">
+                        {request.description || 'No description added yet.'}
+                      </p>
+                      {request.status === 'rejected' && request.rejection_reason && (
+                        <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                          Rejection reason: {request.rejection_reason}
+                        </p>
+                      )}
+                      {(request.status === 'draft' || request.status === 'rejected') && (
+                        <p className="text-sm text-slate-500">
+                          To change this request, edit it and submit it again.
+                        </p>
+                      )}
+                      <section aria-label="Manage event" className="space-y-5">
+                        <div className="mt-4">
+                          {request.status_permits.includes('edit') ? (
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => reopen.mutate(request.id)}
+                                disabled={reopen.isPending}
+                                aria-label={`Edit draft ${titleOf(request)}`}
+                                className="cs-button-secondary"
+                              >
+                                Edit draft
+                              </button>
+                              {request.status_permits.includes('submit') && (
+                                <button
+                                  type="button"
+                                  onClick={() => submit.mutate(request)}
+                                  disabled={submit.isPending}
+                                  className="cs-button"
+                                >
+                                  Submit for review
+                                </button>
+                              )}
+                            </div>
+                          ) : acceptsChangeRequest(request.status) ? (
+                            // SCRUM-37: after submission, significant changes are proposed, not edited.
+                            <button
+                              type="button"
+                              onClick={() => setProposing(request.id)}
+                              aria-label={`Propose a change to ${titleOf(request)}`}
+                              className="cs-button-secondary"
+                            >
+                              Propose a change
+                            </button>
+                          ) : request.status === 'cancelled' ? null : (
+                            <span className="text-sm text-slate-500">
+                              Locked - ask your coordinator to request changes
+                            </span>
+                          )}
+                        </div>
+                        {acceptsChangeRequest(request.status) && (
+                          <div className="w-full">
+                            {proposing === request.id && (
+                              <ProposeChange
+                                eventId={request.id}
+                                onClose={() => setProposing(null)}
+                              />
+                            )}
+                            <ChangeRequestList eventId={request.id} />
+                          </div>
+                        )}
+                        {request.status === 'confirmed' && (
+                          <div className="w-full">
+                            <RegistrationIntakeControls event={request} />
+                            <RegistrationReviewList eventId={request.id} canDecide />
+                          </div>
+                        )}
+                        {/* SCRUM-86 AC4: the owning Organiser reads the closure record. */}
+                        {request.status === 'completed' && (
+                          <div className="w-full">
+                            <ClosureRecord eventId={request.id} />
+                          </div>
+                        )}
+                        {/* SCRUM-115: ask the Coordinator to cancel, or see why it was cancelled. */}
+                        {request.status_permits.includes('cancel') && (
+                          <div className="w-full">
+                            <RequestCancellation event={request} />
+                          </div>
+                        )}
+                        {request.status === 'cancelled' && (
+                          <div className="w-full">
+                            <CancellationRecord eventId={request.id} />
+                          </div>
+                        )}
+                        {/* SCRUM-105: a draft has never been submitted, so it has no history. */}
+                        {request.status !== 'draft' && (
+                          <div className="w-full">
+                            <AssignmentHistoryToggle
+                              requestId={request.id}
+                              requestName={request.name}
+                            />
+                          </div>
+                        )}
+                        {/* SCRUM-88: this list holds only the viewer's own requests, drafts included. */}
+                        <div className="w-full">
+                          <EventHistoryToggle eventId={request.id} eventName={request.name} />
+                        </div>
+                      </section>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
 
@@ -224,14 +358,43 @@ type Outcome =
 
 type SubmitTarget = Pick<EventRequest, 'id' | 'name'>
 
+const STATUS_ORDER: EventRequest['status'][] = [
+  'draft',
+  'submitted',
+  'approved',
+  'confirmed',
+  'completed',
+  'rejected',
+  'cancelled',
+]
+
+const STATUS_TITLES: Record<EventRequest['status'], string> = {
+  draft: 'Drafts',
+  submitted: 'Submitted',
+  approved: 'Approved',
+  confirmed: 'Confirmed',
+  completed: 'Completed',
+  rejected: 'Rejected',
+  cancelled: 'Cancelled',
+}
+
 function StatusLabel({ status }: { status: EventRequest['status'] }) {
-  if (status === 'submitted') return <>Submitted</>
-  if (status === 'approved') return <>Approved</>
-  if (status === 'rejected') return <>Rejected</>
-  if (status === 'confirmed') return <>Confirmed</>
-  if (status === 'completed') return <>Completed</>
-  if (status === 'cancelled') return <>Cancelled</>
-  return <>Draft</>
+  const styles: Record<EventRequest['status'], string> = {
+    draft: 'bg-slate-100 text-slate-700',
+    submitted: 'bg-amber-50 text-amber-800',
+    approved: 'bg-sky-50 text-sky-800',
+    rejected: 'bg-red-50 text-red-800',
+    confirmed: 'bg-emerald-50 text-emerald-800',
+    completed: 'bg-indigo-50 text-indigo-800',
+    cancelled: 'bg-slate-200 text-slate-700',
+  }
+  return (
+    <span
+      className={`inline-flex self-start rounded-md px-2 py-0.5 text-xs font-medium ${styles[status]}`}
+    >
+      {status === 'draft' ? 'Draft' : STATUS_TITLES[status]}
+    </span>
+  )
 }
 
 function OutcomeMessage({ outcome }: { outcome: Outcome }) {

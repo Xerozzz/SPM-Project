@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test'
 
+import { notificationEntries, openWorkspace } from '../support/workspace'
 import { API, createApprovedEvent, tokenFor, VENUE_SPEC_ACCOUNT } from '../support/approved-event'
 
 // TC-123-05: the Coordinator cancels one venue arrangement through the booking API,
@@ -27,9 +28,7 @@ test('a cancelled venue arrangement notifies the Venue Staff inbox', async ({ pa
   })
   const coordinator = await tokenFor(page.request, VENUE_SPEC_ACCOUNT)
   const headers = { Authorization: `Bearer ${coordinator}` }
-  const venues = (await (
-    await page.request.get(`${API}/api/venues`, { headers })
-  ).json()) as {
+  const venues = (await (await page.request.get(`${API}/api/venues`, { headers })).json()) as {
     id: string
     name: string
   }[]
@@ -54,20 +53,19 @@ test('a cancelled venue arrangement notifies the Venue Staff inbox', async ({ pa
   expect(cancelled.ok(), `booking cancel -> ${cancelled.status()}`).toBe(true)
 
   await signIn(page, 'venue-staff@example.com')
-  const inbox = page.getByLabel('Notifications')
-  await expect(inbox).toBeVisible()
-  // Parallel specs submit venue requests too, so the newest item may belong to another
-  // event. Select this spec's own: the label names the event ID after the read state,
-  // which is left out of the match so that "Unread" is still asserted below.
-  const own = inbox
-    .getByRole('listitem', { name: new RegExp(`notification for event ${event.id}$`) })
-    .filter({ hasText: 'venue_arrangement_cancelled' })
+  await openWorkspace(page, 'Notifications')
+  const own = notificationEntries(page, 'venue_arrangement_cancelled', event.id)
   await expect(own).toHaveCount(1)
+  await expect(
+    own.getByRole('heading', { name: 'Venue arrangement cancelled', exact: true }),
+  ).toBeVisible()
+  await expect(own).toContainText(event.name)
   await expect(own).toContainText('Unread')
+  await own.getByText('Record details', { exact: true }).click()
   await expect(own).toContainText('venue_arrangement_cancelled')
   await expect(own).toContainText(event.id)
   await expect(own.getByRole('link', { name: 'View venue booking decisions' })).toHaveAttribute(
     'href',
-    '#venue-booking-decisions',
+    `?view=booking-decisions&event=${event.id}`,
   )
 })

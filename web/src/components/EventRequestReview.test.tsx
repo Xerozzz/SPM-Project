@@ -70,6 +70,15 @@ function fillSession(label = 'Morning workshop') {
   fireEvent.change(screen.getByLabelText('Session label'), { target: { value: label } })
 }
 
+async function openReviewDetails(name = 'Orientation Day') {
+  fireEvent.click(await screen.findByRole('button', { name: `View details for ${name}` }))
+}
+
+function bookingRecords() {
+  const heading = screen.getByRole('heading', { name: 'Existing venue booking requests' })
+  return within(heading.parentElement as HTMLElement).getAllByRole('listitem')
+}
+
 afterEach(() => {
   localStorage.clear()
   vi.restoreAllMocks()
@@ -89,7 +98,12 @@ function signInAsCoordinator() {
   )
 }
 
-function renderReview(reviewable: unknown[], bookable: unknown[] = [], confirmed: unknown[] = []) {
+function renderReview(
+  reviewable: unknown[],
+  bookable: unknown[] = [],
+  confirmed: unknown[] = [],
+  arrangements: unknown[] = [],
+) {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const key = `${init?.method ?? 'GET'} ${String(input)}`
     if (key === 'GET /api/event-requests/reviewable') return json(reviewable)
@@ -108,6 +122,7 @@ function renderReview(reviewable: unknown[], bookable: unknown[] = [], confirmed
       })
     }
     if (key.endsWith('/registrations')) return json([])
+    if (key.endsWith('/venue-arrangements')) return json(arrangements)
     if (key.startsWith('GET ') && key.endsWith('/venue-bookings')) return json([])
     if (key === 'GET /api/venues') return json([])
     if (key.endsWith('/clarifications')) return json([])
@@ -229,7 +244,8 @@ test('coordinator reviews a request assigned to them and approves it', async () 
   renderReview([submitted])
 
   expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
-  expect(screen.getByText('Auditorium')).toBeInTheDocument()
+  await openReviewDetails()
+  expect(screen.getAllByText('Auditorium')).not.toHaveLength(0)
   expect(screen.getByLabelText('Internal note')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
   expect(await screen.findByRole('status')).toHaveTextContent(
@@ -245,6 +261,7 @@ test('SCRUM-104: the coordinator list holds only assigned events, so each card i
   renderReview([submitted])
 
   expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
+  await openReviewDetails()
   expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument()
   expect(screen.queryByText(/Assigned to another coordinator/)).not.toBeInTheDocument()
@@ -264,7 +281,14 @@ test('coordinator events include submitted and approved bookable requests', asyn
 
   expect(await screen.findByText('Orientation Day')).toBeInTheDocument()
   expect(screen.getByText('Awards Night')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: /^Approved 1$/ }))
+  expect(screen.getByText('Awards Night')).toBeInTheDocument()
+  expect(screen.queryByText('Orientation Day')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: /^All events 2$/ }))
+  await openReviewDetails()
   expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '← Back to Review Queue' }))
+  await openReviewDetails('Awards Night')
   expect(await screen.findByRole('heading', { name: 'Venue booking request' })).toBeInTheDocument()
 })
 
@@ -273,6 +297,7 @@ test('SCRUM-113: assigned coordinator sees confirmed registration settings witho
   const confirmed = { ...submitted, id: 'req-3', name: 'Alumni Dinner', status: 'confirmed' }
   renderReview([], [], [confirmed])
 
+  await openReviewDetails('Alumni Dinner')
   const settings = await screen.findByRole('region', { name: 'Registration settings' })
   expect(within(settings).getByText(/Open until/)).toBeInTheDocument()
   expect(within(settings).getByText(/Opened:/)).toBeInTheDocument()
@@ -282,6 +307,17 @@ test('SCRUM-113: assigned coordinator sees confirmed registration settings witho
   expect(screen.queryByRole('button', { name: 'Close registration' })).not.toBeInTheDocument()
 })
 
+test('SCRUM-118: confirmed event details retain the venue change controls', async () => {
+  signInAsCoordinator()
+  const confirmed = { ...submitted, status: 'confirmed', name: 'Alumni Dinner' }
+  renderReview([], [], [confirmed], [{ ...pendingBooking, status: 'confirmed' }])
+  await openReviewDetails('Alumni Dinner')
+  expect(await screen.findByRole('heading', { name: 'Arrangements' })).toBeVisible()
+  expect(
+    await screen.findByRole('button', { name: 'Cancel arrangement for Morning workshop' }),
+  ).toBeVisible()
+})
+
 // SCRUM-71: coordinators see retained venue booking requests, while submission
 // behaviour stays owned by SCRUM-38, extended by SCRUM-78 for additional venues.
 
@@ -289,11 +325,12 @@ test('SCRUM-78: pending venue booking history keeps the submission form availabl
   signInAsCoordinator()
   renderExistingBookingReview([pendingBooking])
 
+  await openReviewDetails()
   expect(
     await screen.findByRole('heading', { name: 'Existing venue booking requests' }),
   ).toBeInTheDocument()
   expect(screen.getByText('pending')).toBeInTheDocument()
-  const bookingRecord = screen.getByRole('listitem')
+  const [bookingRecord] = bookingRecords()
   expect(await within(bookingRecord).findByText('Small Hall')).toBeInTheDocument()
   expect(within(bookingRecord).getByText(bookingPeriod(pendingBooking))).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Venue booking request' })).toBeInTheDocument()
@@ -304,17 +341,18 @@ test('multiple venue bookings are displayed as independent records', async () =>
   signInAsCoordinator()
   renderExistingBookingReview([pendingBooking, rejectedBooking])
 
+  await openReviewDetails()
   expect(
     await screen.findByRole('heading', { name: 'Existing venue booking requests' }),
   ).toBeInTheDocument()
   expect(screen.getByText('pending')).toBeInTheDocument()
-  const bookingRecords = screen.getAllByRole('listitem')
-  expect(await within(bookingRecords[0]).findByText('Small Hall')).toBeInTheDocument()
-  expect(within(bookingRecords[0]).getByText(bookingPeriod(pendingBooking))).toBeInTheDocument()
+  const records = bookingRecords()
+  expect(await within(records[0]).findByText('Small Hall')).toBeInTheDocument()
+  expect(within(records[0]).getByText(bookingPeriod(pendingBooking))).toBeInTheDocument()
   expect(screen.getByText('rejected')).toBeInTheDocument()
   expect(screen.getByText('venue-2')).toBeInTheDocument()
-  expect(within(bookingRecords[1]).getByText(bookingPeriod(rejectedBooking))).toBeInTheDocument()
-  expect(bookingRecords).toHaveLength(2)
+  expect(within(records[1]).getByText(bookingPeriod(rejectedBooking))).toBeInTheDocument()
+  expect(records).toHaveLength(2)
   // SCRUM-78: independent history does not prevent another submission.
   expect(screen.getByRole('button', { name: 'Submit booking request' })).toBeInTheDocument()
 })
@@ -330,6 +368,7 @@ test('no existing venue booking keeps the normal submission form available', asy
     suitability,
   })
 
+  await openReviewDetails()
   expect(await screen.findByRole('heading', { name: 'Venue booking request' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Submit booking request' })).toBeInTheDocument()
 })
@@ -349,6 +388,7 @@ test('rejected-only venue booking history keeps the normal submission form avail
     [rejectedBooking],
   )
 
+  await openReviewDetails()
   expect(
     await screen.findByRole('heading', { name: 'Existing venue booking requests' }),
   ).toBeInTheDocument()
@@ -420,6 +460,7 @@ test('SCRUM-78: adds another venue, retains both records on reload and accepts a
   }
   const view = mount()
 
+  await openReviewDetails()
   expect(
     await screen.findByRole('heading', { name: 'Existing venue booking requests' }),
   ).toBeInTheDocument()
@@ -428,8 +469,8 @@ test('SCRUM-78: adds another venue, retains both records on reload and accepts a
   fillSession()
   expect(await screen.findByText('Capacity and facilities are suitable.')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Submit booking request' }))
-  await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(2))
-  const records = screen.getAllByRole('listitem')
+  await waitFor(() => expect(bookingRecords()).toHaveLength(2))
+  const records = bookingRecords()
   expect(within(records[0]).getByText('Small Hall')).toBeInTheDocument()
   expect(within(records[1]).getByText('Large Hall')).toBeInTheDocument()
   for (const record of records) {
@@ -448,10 +489,11 @@ test('SCRUM-78: adds another venue, retains both records on reload and accepts a
   view.unmount()
   mount()
 
+  await openReviewDetails()
   expect(
     await screen.findByRole('heading', { name: 'Existing venue booking requests' }),
   ).toBeInTheDocument()
-  expect(screen.getAllByRole('listitem')).toHaveLength(2)
+  expect(bookingRecords()).toHaveLength(2)
   await screen.findByRole('option', { name: 'Studio' })
   fireEvent.change(screen.getByLabelText('Active venue'), { target: { value: 'venue-3' } })
   fillSession()
@@ -459,12 +501,22 @@ test('SCRUM-78: adds another venue, retains both records on reload and accepts a
     expect(screen.getByRole('button', { name: 'Submit booking request' })).toBeEnabled(),
   )
   fireEvent.click(screen.getByRole('button', { name: 'Submit booking request' }))
-  await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3))
-  expect(within(screen.getAllByRole('listitem')[2]).getByText('Studio')).toBeInTheDocument()
+  await waitFor(() => expect(bookingRecords()).toHaveLength(3))
+  expect(within(bookingRecords()[2]).getByText('Studio')).toBeInTheDocument()
   const posts = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')
   expect(posts.map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
-    { venue_id: 'venue-2', session_label: 'Morning workshop', start_at: '2026-12-01T01:00:00.000Z', end_at: '2026-12-01T05:00:00.000Z' },
-    { venue_id: 'venue-3', session_label: 'Morning workshop', start_at: '2026-12-01T01:00:00.000Z', end_at: '2026-12-01T05:00:00.000Z' },
+    {
+      venue_id: 'venue-2',
+      session_label: 'Morning workshop',
+      start_at: '2026-12-01T01:00:00.000Z',
+      end_at: '2026-12-01T05:00:00.000Z',
+    },
+    {
+      venue_id: 'venue-3',
+      session_label: 'Morning workshop',
+      start_at: '2026-12-01T01:00:00.000Z',
+      end_at: '2026-12-01T05:00:00.000Z',
+    },
   ])
 })
 
@@ -491,6 +543,7 @@ test('approved event previews advisory warnings and submits a pending booking re
     suitability,
   })
 
+  await openReviewDetails()
   await screen.findByRole('option', { name: 'Small Hall' })
   fireEvent.change(screen.getByLabelText('Active venue'), {
     target: { value: 'venue-1' },
@@ -513,6 +566,7 @@ test('booking authorization failure shows the backend detail', async () => {
   signInAsCoordinator()
   renderBookingReview({ detail: 'Forbidden' }, 403)
 
+  await openReviewDetails()
   await screen.findByRole('option', { name: 'Small Hall' })
   fireEvent.change(screen.getByLabelText('Active venue'), {
     target: { value: 'venue-1' },
@@ -528,6 +582,7 @@ test('booking failure with a non-JSON body shows the generic status error', asyn
   signInAsCoordinator()
   renderBookingReview(new Response(null, { status: 500 }))
 
+  await openReviewDetails()
   await screen.findByRole('option', { name: 'Small Hall' })
   fireEvent.change(screen.getByLabelText('Active venue'), {
     target: { value: 'venue-1' },
@@ -558,6 +613,7 @@ test('SCRUM-89 AC4: a booking needing attention says so on the coordinator own e
   signInAsCoordinator()
   renderExistingBookingReview([{ ...rejectedBooking, status: 'confirmed', conflict: CLASH }])
 
+  await openReviewDetails()
   expect(await screen.findByText(/Needs attention/)).toBeInTheDocument()
   // The same wording the Venue Staff panel uses, not a second vocabulary.
   expect(screen.getByText(/Clashes with a confirmed booking from/)).toBeInTheDocument()
@@ -570,6 +626,7 @@ test('SCRUM-89 AC4: a booking with nothing wrong says nothing', async () => {
   signInAsCoordinator()
   renderExistingBookingReview([{ ...rejectedBooking, conflict: null }])
 
+  await openReviewDetails()
   expect(
     await screen.findByRole('heading', { name: 'Existing venue booking requests' }),
   ).toBeInTheDocument()
@@ -593,6 +650,7 @@ test('SCRUM-82 AC3: a booking says how long the venue is held when buffers widen
   signInAsCoordinator()
   renderExistingBookingReview([held])
 
+  await openReviewDetails()
   expect(await screen.findByText('Venue held:')).toBeInTheDocument()
   expect(
     screen.getByText(`${sgt('2030-05-01T01:30:00Z')} to ${sgt('2030-05-01T06:45:00Z')}`),
@@ -609,6 +667,7 @@ test('SCRUM-82 AC7: a booking at a venue with no buffers says nothing extra', as
   signInAsCoordinator()
   renderExistingBookingReview([held])
 
+  await openReviewDetails()
   await screen.findByText(bookingPeriod(pendingBooking))
   expect(screen.queryByText('Venue held:')).toBeNull()
 })
@@ -621,6 +680,7 @@ test('SCRUM-43: the organiser’s equipment choice is labelled as what was reque
   signInAsCoordinator()
   renderExistingBookingReview([])
 
+  await openReviewDetails()
   expect(await screen.findByText('Equipment requested:')).toBeInTheDocument()
   expect(screen.queryByText('Equipment:')).toBeNull()
 })
@@ -637,6 +697,7 @@ test('SCRUM-111 TC-111-10: the form sends the session label and period with the 
     suitability,
   })
 
+  await openReviewDetails()
   await screen.findByRole('option', { name: 'Small Hall' })
   fireEvent.change(screen.getByLabelText('Active venue'), {
     target: { value: 'venue-1' },
@@ -658,6 +719,7 @@ test('SCRUM-111 TC-111-10: existing requests show their session label', async ()
   signInAsCoordinator()
   renderExistingBookingReview([pendingBooking, rejectedBooking])
 
+  await openReviewDetails()
   expect(
     await screen.findByRole('heading', { name: 'Existing venue booking requests' }),
   ).toBeInTheDocument()
@@ -704,7 +766,8 @@ describe('SCRUM-105 assigned coordinator views assignment history (frontend unit
         },
       ]),
     )
-    const card = await screen.findByRole('article')
+    await openReviewDetails()
+    const card = await screen.findByRole('listitem')
     const toggle = within(card).getByRole('button', { name: 'View assignment history' })
 
     expect(vi.mocked(globalThis.fetch).mock.calls.map(([i]) => String(i))).not.toContain(historyUrl)
@@ -718,7 +781,8 @@ describe('SCRUM-105 assigned coordinator views assignment history (frontend unit
 
   test('a refused history shows only the error, with no entries', async () => {
     renderCard(json({ detail: 'Forbidden' }, 403))
-    const card = await screen.findByRole('article')
+    await openReviewDetails()
+    const card = await screen.findByRole('listitem')
 
     fireEvent.click(within(card).getByRole('button', { name: 'View assignment history' }))
 
@@ -788,7 +852,8 @@ describe('SCRUM-88 assigned coordinator views the event history (frontend unit)'
         },
       ]),
     )
-    const card = await screen.findByRole('article')
+    await openReviewDetails()
+    const card = await screen.findByRole('listitem')
     fireEvent.click(within(card).getByRole('button', { name: 'View event history' }))
 
     const row = (await within(card).findByText('Note: Check the fire exits')).closest('li')
@@ -797,7 +862,8 @@ describe('SCRUM-88 assigned coordinator views the event history (frontend unit)'
 
   test('a history refused after a reassignment shows no entries', async () => {
     renderCard(json({ detail: 'Forbidden' }, 403))
-    const card = await screen.findByRole('article')
+    await openReviewDetails()
+    const card = await screen.findByRole('listitem')
 
     fireEvent.click(within(card).getByRole('button', { name: 'View event history' }))
 

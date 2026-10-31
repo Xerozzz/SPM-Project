@@ -10,8 +10,8 @@ import uuid
 from datetime import datetime
 
 from core.database import Session
-from models.notification import Notification
 from repositories import notifications as repo
+from schemas.notifications import NotificationRead
 
 
 class NotificationError(Exception):
@@ -26,16 +26,26 @@ class NotificationNotFoundError(NotificationError):
     """
 
 
-def list_inbox(db: Session, recipient_id: uuid.UUID) -> list[Notification]:
+def list_inbox(db: Session, recipient_id: uuid.UUID) -> list[NotificationRead]:
     """The recipient's notifications, newest first."""
-    return repo.list_for_recipient(db, recipient_id)
+    names = repo.event_names_for_recipient(db, recipient_id)
+    return [
+        NotificationRead.model_validate(row).model_copy(
+            update={"event_name": names.get(row.event_request_id)}
+        )
+        for row in repo.list_for_recipient(db, recipient_id)
+    ]
 
 
 def mark_viewed(
     db: Session, notification_id: uuid.UUID, recipient_id: uuid.UUID, now: datetime
-) -> Notification:
+) -> NotificationRead:
     """Mark one owned notification viewed; a repeated mark keeps the first time."""
     notification = repo.get_for_recipient(db, notification_id, recipient_id)
     if notification is None:
         raise NotificationNotFoundError
-    return repo.mark_viewed(db, notification, now)
+    row = repo.mark_viewed(db, notification, now)
+    names = repo.event_names_for_recipient(db, recipient_id)
+    return NotificationRead.model_validate(row).model_copy(
+        update={"event_name": names.get(row.event_request_id)}
+    )

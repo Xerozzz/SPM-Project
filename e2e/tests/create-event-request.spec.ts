@@ -12,14 +12,14 @@ async function signInAsOrganiser(page: Page) {
   await page.getByLabel('Email').fill('organiser@example.com')
   await page.getByLabel('Password').fill('password123')
   await page.getByRole('button', { name: 'Sign in' }).click()
+  await page.getByRole('button', { name: /Create event$/ }).click()
   await expect(page.getByRole('heading', { name: 'New event request' })).toBeVisible()
 }
 
 function row(page: Page, name: string) {
-  const ownRequests = page
-    .getByRole('heading', { name: 'My event requests' })
-    .locator('xpath=../following-sibling::ul[1]')
-  return ownRequests.getByRole('listitem').filter({ hasText: name })
+  return page
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name, exact: true }) })
 }
 
 async function fillCompleteForm(page: Page, name: string) {
@@ -61,6 +61,9 @@ test('an organiser saves an event request as a draft without sending it', async 
     `“${name}” has been saved as a draft.`,
   )
   await expect(row(page, name)).toContainText('Draft')
-  // Still the organiser's to finish: the draft can be reopened in the same form above.
+  await row(page, name)
+    .getByRole('button', { name: `View details for ${name}` })
+    .click()
+  // Still the organiser's to finish: details offer the saved draft for editing.
   await expect(row(page, name).getByRole('button', { name: `Edit draft ${name}` })).toBeVisible()
 })

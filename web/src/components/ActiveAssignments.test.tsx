@@ -64,6 +64,10 @@ function renderOverview(
   )
 }
 
+async function openDetails(name: string) {
+  fireEvent.click(await screen.findByRole('button', { name: `View details for ${name}` }))
+}
+
 test('shows a loading state while the overview loads', () => {
   signInAsLead()
   renderOverview(() => new Promise<Response>(() => {}))
@@ -84,6 +88,7 @@ test('shows assigned and unassigned rows with every required field', async () =>
     throw new Error(`unexpected fetch ${String(input)}`)
   })
   await waitFor(() => expect(screen.getByText('Orientation Day')).toBeDefined())
+  await openDetails('Orientation Day')
   for (const value of [
     'req-1',
     'submitted',
@@ -91,13 +96,13 @@ test('shows assigned and unassigned rows with every required field', async () =>
     '2026-12-01T01:00:00Z',
     '2026-12-01T05:00:00Z',
     'coordinator@example.com',
-    'req-2',
-    'approved',
-    'organiser2@example.com',
-    'Open Day',
-    'Unassigned',
   ]) {
-    expect(screen.getByText(value)).toBeDefined()
+    expect(screen.getAllByText(value).length).toBeGreaterThan(0)
+  }
+  fireEvent.click(screen.getByRole('button', { name: '← Back to Active Assignments' }))
+  await openDetails('Open Day')
+  for (const value of ['req-2', 'approved', 'organiser2@example.com', 'Open Day', 'Unassigned']) {
+    expect(screen.getAllByText(value).length).toBeGreaterThan(0)
   }
   expect(screen.getByLabelText('Active requests')).toBeDefined()
 })
@@ -147,6 +152,7 @@ test('reassigning sends the current owner and confirms with the new owner', asyn
     throw new Error(`unexpected fetch ${String(input)}`)
   })
   await waitFor(() => expect(screen.getByText('Orientation Day')).toBeDefined())
+  await openDetails('Orientation Day')
   fireEvent.change(screen.getByLabelText('New coordinator for Orientation Day'), {
     target: { value: 'coord-2' },
   })
@@ -175,6 +181,7 @@ test('a stale reassignment keeps the row visible with an error', async () => {
     throw new Error(`unexpected fetch ${String(input)}`)
   })
   await waitFor(() => expect(screen.getByText('Orientation Day')).toBeDefined())
+  await openDetails('Orientation Day')
   fireEvent.change(screen.getByLabelText('New coordinator for Orientation Day'), {
     target: { value: 'coord-2' },
   })
@@ -194,6 +201,7 @@ test('unassigned rows offer history but no reassignment picker', async () => {
     throw new Error(`unexpected fetch ${String(input)}`)
   })
   await waitFor(() => expect(screen.getByText('Open Day')).toBeDefined())
+  await openDetails('Open Day')
   expect(screen.queryByLabelText('New coordinator for Open Day')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Show history' }))
   await waitFor(() =>
@@ -211,10 +219,8 @@ test('every row offers the event history', async () => {
     throw new Error(`unexpected fetch ${String(input)}`)
   })
   await waitFor(() => expect(screen.getByText('Open Day')).toBeDefined())
-  const toggles = screen.getAllByRole('button', { name: 'View event history' })
-  expect(toggles).toHaveLength(2)
-
-  fireEvent.click(toggles[1])
+  await openDetails('Open Day')
+  fireEvent.click(screen.getByRole('button', { name: 'View event history' }))
   await waitFor(() =>
     expect(screen.getByText('No history you can see for Open Day yet.')).toBeDefined(),
   )

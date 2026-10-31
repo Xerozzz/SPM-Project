@@ -5,5 +5,5 @@ import { expect, test } from '@playwright/test'
 test('unauthenticated users are shown the sign-in page', async ({ page }) => {
   await page.goto('/')
 
-  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible()
 })

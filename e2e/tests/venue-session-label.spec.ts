@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test'
 
+import { openEvent } from '../support/workspace'
 import { createApprovedEvent, VENUE_SPEC_ACCOUNT } from '../support/approved-event'
 
 // SCRUM-111 TC-111-11: a coordinator books one labelled session of a multi-session
@@ -33,7 +34,7 @@ test('a labelled session request shows its label and period everywhere', async (
   await signIn(page, VENUE_SPEC_ACCOUNT)
 
   // Find this spec's Approved event and open its booking card.
-  const card = page.getByRole('article').filter({ hasText: event.name })
+  const card = await openEvent(page, event.name, 'Review Queue')
   await expect(card).toBeVisible()
   await card.getByLabel('Active venue').selectOption({ label: 'Hall A' })
   // Exact, because `getByLabel` matches accessible names by substring and this spec
@@ -50,11 +51,9 @@ test('a labelled session request shows its label and period everywhere', async (
 
   // Venue Staff see the same label in their decision queue.
   await signIn(page, 'venue-staff@example.com')
-  const queue = page.locator('main section', {
-    has: page.getByRole('heading', { name: 'Venue booking requests' }),
-  })
-  // This event's own request: earlier runs left requests with the same label on others.
-  await expect(
-    queue.getByRole('article').filter({ hasText: event.name }).filter({ hasText: SESSION_LABEL }),
-  ).toBeVisible()
+  await page
+    .getByRole('button', { name: `View booking for ${event.name} at Hall A`, exact: true })
+    .click()
+  const booking = page.getByRole('region', { name: 'Booking details', exact: true })
+  await expect(booking).toContainText(SESSION_LABEL)
 })

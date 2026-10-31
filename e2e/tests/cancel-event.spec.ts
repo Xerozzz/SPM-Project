@@ -1,5 +1,6 @@
 import { expect, type APIRequestContext, type Page, test } from '@playwright/test'
 
+import { openEvent, openWorkspace } from '../support/workspace'
 import { API, createApprovedEvent, tokenFor, VENUE_SPEC_ACCOUNT } from '../support/approved-event'
 
 // SCRUM-115: the Organiser asks for a Confirmed event to be cancelled, the assigned
@@ -105,7 +106,7 @@ async function confirmedEvent(request: APIRequestContext) {
 
 function inboxEntries(page: Page, type: string, eventId: string) {
   return page
-    .getByLabel('Notifications')
+    .getByRole('region', { name: 'Notifications', exact: true })
     .getByRole('listitem')
     .filter({ hasText: type })
     .filter({ hasText: eventId })
@@ -119,22 +120,14 @@ test('a requested cancellation is applied and the staff who took part are told',
   await signIn(page, VENUE_SPEC_ACCOUNT)
 
   // AC1: the Organiser asks, with a reason.
-  const row = page
-    .getByRole('heading', { name: 'My event requests' })
-    .locator('xpath=../following-sibling::ul[1]')
-    .getByRole('listitem')
-    .filter({ hasText: event.name })
+  const row = await openEvent(page, event.name, 'My Events')
   await row.getByRole('button', { name: 'Ask to cancel', exact: true }).click()
   await page.getByLabel('Why should it be cancelled?').fill('Speaker is ill')
   await page.getByRole('button', { name: 'Send request' }).click()
   await expect(page.getByText('Your Coordinator has not answered yet.')).toBeVisible()
 
   // AC1 to AC3: the Coordinator sees the request and applies it.
-  const card = page
-    .getByRole('heading', { name: 'Coordinator events' })
-    .locator('xpath=..')
-    .getByRole('article')
-    .filter({ hasText: event.name })
+  const card = await openEvent(page, event.name, 'Review Queue')
   await card.getByRole('button', { name: 'Cancel this event…', exact: true }).click()
   const panel = card
     .getByRole('heading', { name: 'Cancel this event', exact: true })
@@ -147,6 +140,7 @@ test('a requested cancellation is applied and the staff who took part are told',
 
   // AC3: the Organiser's list shows it Cancelled, with the reason.
   await page.reload()
+  await openEvent(page, event.name, 'My Events')
   await expect(row.getByText('Cancelled', { exact: true })).toBeVisible()
   await expect(row.getByText(/Reason: Speaker is ill/)).toBeVisible()
   await signOut(page)
@@ -158,12 +152,14 @@ test('a requested cancellation is applied and the staff who took part are told',
     'safety-officer@example.com',
   ]) {
     await signIn(page, email)
+    await openWorkspace(page, 'Notifications')
     await expect(inboxEntries(page, 'event_cancelled', event.id)).toHaveCount(1)
     await signOut(page)
   }
 
   // An unrelated user is told nothing.
   await signIn(page, 'attendee@example.com')
+  await openWorkspace(page, 'Notifications')
   await expect(inboxEntries(page, 'event_cancelled', event.id)).toHaveCount(0)
 })
 
@@ -186,9 +182,11 @@ test('each attendee whose registration was cancelled is told, and nobody else', 
   })
 
   await signIn(page, 'attendee@example.com')
+  await openWorkspace(page, 'Notifications')
   await expect(inboxEntries(page, 'event_cancelled', event.id)).toHaveCount(1)
   await signOut(page)
 
   await signIn(page, 'attendee2@example.com')
+  await openWorkspace(page, 'Notifications')
   await expect(inboxEntries(page, 'event_cancelled', event.id)).toHaveCount(0)
 })

@@ -1,5 +1,7 @@
 import { expect, type Page, test } from '@playwright/test'
 
+import { eventRow, openWorkspace, notificationEntries } from '../support/workspace'
+
 // TC-96-07: an organiser submits a request, then an active Lead signs in and sees one
 // unread notification linking to the submitted event (event ID, action, time).
 test.describe.configure({ retries: 0 })
@@ -16,10 +18,7 @@ async function signOut(page: Page) {
 }
 
 function ownRow(page: Page, name: string) {
-  const ownRequests = page
-    .getByRole('heading', { name: 'My event requests' })
-    .locator('xpath=../following-sibling::ul[1]')
-  return ownRequests.getByRole('listitem').filter({ hasText: name })
+  return eventRow(page, name)
 }
 
 async function ownRequestId(page: Page, name: string) {
@@ -37,8 +36,9 @@ async function ownRequestId(page: Page, name: string) {
 test('an organiser submission notifies the active Lead inbox', async ({ page }) => {
   const name = `E2E lead notify ${Date.now()}`
   await signIn(page, 'organiser@example.com')
-  await expect(page.getByRole('heading', { name: 'My event requests' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'My Events', exact: true })).toBeVisible()
 
+  await page.getByRole('button', { name: /Create event$/ }).click()
   await page.getByLabel('Name *').fill(name)
   await page.getByLabel('Purpose *').fill('Welcome new students')
   await page.getByLabel('Description *').fill('Campus orientation activities')
@@ -61,16 +61,13 @@ test('an organiser submission notifies the active Lead inbox', async ({ page }) 
   await signOut(page)
 
   await signIn(page, 'coordinator-lead@example.com')
-  const inbox = page.getByLabel('Notifications')
-  await expect(inbox).toBeVisible()
-  // Parallel specs submit requests too, so the newest item may belong to another event.
-  // Select this spec's own by the event ID in its label, leaving the read state out of
-  // the match so that "Unread" is still asserted below.
-  const own = inbox
-    .getByRole('listitem', { name: new RegExp(`notification for event ${eventId}$`) })
-    .filter({ hasText: 'unassigned_submission' })
+  await openWorkspace(page, 'Notifications')
+  const own = notificationEntries(page, 'unassigned_submission', eventId)
   await expect(own).toHaveCount(1)
+  await expect(own.getByRole('heading', { name: 'New event awaiting assignment' })).toBeVisible()
+  await expect(own).toContainText(name)
   await expect(own).toContainText('Unread')
+  await own.getByText('Record details', { exact: true }).click()
   await expect(own).toContainText('unassigned_submission')
   await expect(own).toContainText(eventId)
 })

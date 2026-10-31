@@ -1,5 +1,7 @@
 import { expect, type Page, test } from '@playwright/test'
 
+import { eventRow, openWorkspace, openEvent } from '../support/workspace'
+
 // TC-102-08: a Lead assigns then reassigns a request; the incoming coordinator,
 // outgoing coordinator and organiser see assignment notifications in their inboxes,
 // while an unrelated user sees none.
@@ -17,15 +19,12 @@ async function signOut(page: Page) {
 }
 
 function ownRow(page: Page, name: string) {
-  const ownRequests = page
-    .getByRole('heading', { name: 'My event requests' })
-    .locator('xpath=../following-sibling::ul[1]')
-  return ownRequests.getByRole('listitem').filter({ hasText: name })
+  return eventRow(page, name)
 }
 
 function inboxEntries(page: Page, type: string, eventId: string) {
   return page
-    .getByLabel('Notifications')
+    .getByRole('region', { name: 'Notifications', exact: true })
     .getByRole('listitem')
     .filter({ hasText: type })
     .filter({ hasText: eventId })
@@ -48,8 +47,9 @@ test('assignment and reassignment notify the affected inboxes only', async ({ pa
   // No baselines: every inbox assertion below is scoped to this run's event ID,
   // so parallel specs assigning other requests cannot shift the counts.
   await signIn(page, 'organiser@example.com')
-  await expect(page.getByRole('heading', { name: 'My event requests' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'My Events', exact: true })).toBeVisible()
 
+  await page.getByRole('button', { name: /Create event$/ }).click()
   await page.getByLabel('Name *').fill(name)
   await page.getByLabel('Purpose *').fill('Welcome new students')
   await page.getByLabel('Description *').fill('Campus orientation activities')
@@ -84,6 +84,7 @@ test('assignment and reassignment notify the affected inboxes only', async ({ pa
     `“${name}” has been assigned.`,
   )
 
+  await openEvent(page, name, 'Active Assignments')
   const overview = page.getByLabel('Active requests')
   await expect(overview).toBeVisible()
   const entry = overview.getByRole('listitem').filter({ hasText: name })
@@ -98,6 +99,7 @@ test('assignment and reassignment notify the affected inboxes only', async ({ pa
 
   // The incoming coordinator gains exactly one unread reassignment notification.
   await signIn(page, 'coordinator2@example.com')
+  await openWorkspace(page, 'Notifications')
   const incomingEntries = inboxEntries(page, 'coordinator_reassigned', eventId)
   await expect(incomingEntries).toHaveCount(1)
   await expect(incomingEntries.first()).toContainText('Unread')
@@ -105,6 +107,7 @@ test('assignment and reassignment notify the affected inboxes only', async ({ pa
 
   // The outgoing coordinator gains exactly one unread reassignment notification.
   await signIn(page, 'coordinator@example.com')
+  await openWorkspace(page, 'Notifications')
   const outgoingEntries = inboxEntries(page, 'coordinator_reassigned', eventId)
   await expect(outgoingEntries).toHaveCount(1)
   await expect(outgoingEntries.first()).toContainText('Unread')
@@ -112,6 +115,7 @@ test('assignment and reassignment notify the affected inboxes only', async ({ pa
 
   // The owning organiser gains one assignment and one reassignment notification.
   await signIn(page, 'organiser@example.com')
+  await openWorkspace(page, 'Notifications')
   const organiserAssigned = inboxEntries(page, 'coordinator_assigned', eventId)
   const organiserReassigned = inboxEntries(page, 'coordinator_reassigned', eventId)
   await expect(organiserAssigned).toHaveCount(1)
@@ -122,5 +126,6 @@ test('assignment and reassignment notify the affected inboxes only', async ({ pa
 
   // An unrelated user gains no assignment notification.
   await signIn(page, 'attendee@example.com')
+  await openWorkspace(page, 'Notifications')
   await expect(inboxEntries(page, 'coordinator_', eventId)).toHaveCount(0)
 })

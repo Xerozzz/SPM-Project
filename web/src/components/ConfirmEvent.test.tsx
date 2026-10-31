@@ -208,7 +208,9 @@ test('a refusal that arrives anyway is explained with its reasons', async () => 
 
 test('a readiness check that cannot be loaded is reported', async () => {
   renderCard(READY, (key) =>
-    key === 'GET /api/event-requests/event-1/confirmation' ? json({ detail: 'nope' }, 500) : undefined,
+    key === 'GET /api/event-requests/event-1/confirmation'
+      ? json({ detail: 'nope' }, 500)
+      : undefined,
   )
 
   expect(await screen.findByRole('alert')).toHaveTextContent(

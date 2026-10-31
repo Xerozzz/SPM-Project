@@ -1,5 +1,7 @@
 import { expect, type Locator, type Page, test } from '@playwright/test'
 
+import { eventRow, openWorkspace, openEvent } from '../support/workspace'
+
 // SCRUM-105: the owning Organiser and the current assigned Coordinator open the event's
 // assignment history from their own views; reassignment moves the Coordinator's access,
 // and neither view offers assign or reassign. The Lead's own history view keeps working
@@ -25,28 +27,21 @@ async function signOut(page: Page) {
 }
 
 function ownRow(page: Page, name: string) {
-  return page
-    .getByRole('heading', { name: 'My event requests' })
-    .locator('xpath=../following-sibling::ul[1]')
-    .getByRole('listitem')
-    .filter({ hasText: name })
+  return eventRow(page, name)
 }
 
 function coordinatorCard(page: Page, name: string) {
-  return page
-    .getByRole('heading', { name: 'Coordinator events' })
-    .locator('..')
-    .getByRole('article')
-    .filter({ hasText: name })
+  return eventRow(page, name)
 }
 
 function leadRow(page: Page, name: string) {
-  return page.getByLabel('Active requests').getByRole('listitem').filter({ hasText: name })
+  return eventRow(page, name)
 }
 
 /** The Organiser creates a complete request, which submits it in the same press. */
 async function submitAsOrganiser(page: Page, name: string) {
   await signIn(page, 'organiser@example.com')
+  await page.getByRole('button', { name: /Create event$/ }).click()
   await page.getByLabel('Name *').fill(name)
   await page.getByLabel('Purpose *').fill('Welcome new students')
   await page.getByLabel('Description *').fill('Campus orientation activities')
@@ -80,6 +75,9 @@ async function assignAsLead(page: Page, name: string) {
 
 /** Opens the toggle and returns the history's entries; the history loads only now. */
 async function openHistory(scope: Locator) {
+  await expect(scope).toBeVisible()
+  const details = scope.getByRole('button', { name: /^View details for/ })
+  if (await details.isVisible()) await details.click()
   await scope.getByRole('button', { name: 'View assignment history' }).click()
   await expect(scope.getByText('Assignment history', { exact: true })).toBeVisible()
   return scope.locator('ol').getByRole('listitem')
@@ -140,6 +138,7 @@ test('owner and current coordinator view assignment history; reassignment moves 
 
   // The Lead reassigns to the second coordinator.
   await signIn(page, 'coordinator-lead@example.com')
+  await openEvent(page, name, 'Active Assignments')
   await leadRow(page, name)
     .getByLabel(`New coordinator for ${name}`)
     .selectOption({ label: 'coordinator2@example.com' })
@@ -151,7 +150,10 @@ test('owner and current coordinator view assignment history; reassignment moves 
 
   // The outgoing coordinator no longer has the card, so no way to the history.
   await signIn(page, 'coordinator@example.com')
-  await expect(page.getByRole('heading', { name: 'Coordinator events' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Review Queue', exact: true })).toBeVisible()
+  await expect(
+    page.locator('main > section:not([hidden])').getByText('Loading…', { exact: true }),
+  ).toHaveCount(0)
   await expect(coordinatorCard(page, name)).toHaveCount(0)
   await signOut(page)
 
@@ -178,29 +180,31 @@ test('a draft row offers no assignment history toggle', async ({ page }) => {
   // A submitted row in the same list shows the toggle is present where it should be.
   await submitAsOrganiser(page, submittedName)
   await page.reload()
+  await page.getByRole('button', { name: /Create event$/ }).click()
   await page.getByLabel('Name *').fill(draftName)
   await page.getByRole('button', { name: 'Save draft' }).click()
   await expect(page.getByRole('status').filter({ hasText: 'saved as a draft' })).toContainText(
     `“${draftName}” has been saved as a draft.`,
   )
 
+  await openEvent(page, draftName, 'My Events')
   await expect(ownRow(page, draftName)).toContainText('Draft')
   await expect(
     ownRow(page, draftName).getByRole('button', { name: 'View assignment history' }),
   ).toHaveCount(0)
+  await openEvent(page, submittedName, 'My Events')
   await expect(
     ownRow(page, submittedName).getByRole('button', { name: 'View assignment history' }),
   ).toBeVisible()
 })
 
-test("the Lead's active assignments still show the history, now with emails", async ({
-  page,
-}) => {
+test("the Lead's active assignments still show the history, now with emails", async ({ page }) => {
   const name = `E2E history lead ${Date.now()}`
   await submitAsOrganiser(page, name)
   await signOut(page)
 
   await assignAsLead(page, name)
+  await openEvent(page, name, 'Active Assignments')
   const row = leadRow(page, name)
   await row.getByRole('button', { name: 'Show history' }).click()
   await expect(row.getByText('Assignment history', { exact: true })).toBeVisible()

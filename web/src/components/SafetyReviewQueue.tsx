@@ -22,6 +22,27 @@ function name(plan: EventPlan): string {
   return plan.event_name ?? 'Untitled event'
 }
 
+/** Keep a same-day plan readable without repeating its date in the Singapore-time display. */
+function formatSingaporeRange(startAt: string, endAt: string): string {
+  const start = formatSingaporeParts(startAt)
+  const end = formatSingaporeParts(endAt)
+  return start.date === end.date
+    ? `${start.date}, ${start.time} to ${end.time}`
+    : `${start.formatted} to ${end.formatted}`
+}
+
+function formatSingaporeParts(value: string) {
+  const formatted = formatSingaporeTime(value)
+  const separator = formatted.indexOf(', ')
+  return separator === -1
+    ? { date: formatted, time: formatted, formatted }
+    : {
+        date: formatted.slice(0, separator),
+        time: formatted.slice(separator + 2),
+        formatted,
+      }
+}
+
 /** SCRUM-53's states, said plainly. The Officer cares how much is actually secured. */
 const RESERVATION_LABELS: Record<string, string> = {
   not_reserved: 'nothing reserved',
@@ -59,6 +80,7 @@ export default function SafetyReviewQueue() {
   const [showing, setShowing] = useState<string | null>(null)
   const [outcome, setOutcome] = useState<Answer | null>(null)
   const [failure, setFailure] = useState<Answer | null>(null)
+  const [selectedTab, setSelectedTab] = useState<'ready' | 'waiting'>('ready')
 
   const queryKey = ['safety-reviews', token]
   const worklist = useQuery({
@@ -140,13 +162,7 @@ export default function SafetyReviewQueue() {
   const waiting = worklist.data?.filter((plan) => !plan.may_review) ?? []
 
   return (
-    <section className="mt-6 rounded-lg border border-slate-200 p-4">
-      <h2 className="font-medium">Events to review for safety</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        The plan each event is being run to. A decision is recorded against the plan you
-        are looking at, and approving it does not confirm the event.
-      </p>
-
+    <section>
       {worklist.isPending && <p className="mt-2 text-sm">Loading…</p>}
       {worklist.isError && (
         <p role="alert" className="mt-2 text-sm text-red-600">
@@ -159,25 +175,48 @@ export default function SafetyReviewQueue() {
 
       {worklist.isSuccess && worklist.data.length > 0 && (
         <>
-          <h3 className="mt-4 text-sm font-medium">Ready to review ({ready.length})</h3>
-          {ready.length === 0 ? (
-            <p className="mt-1 text-sm text-slate-500">
-              Nothing is arranged enough to review yet.
-            </p>
-          ) : (
-            ready.map(card)
-          )}
-
-          <h3 className="mt-6 text-sm font-medium">
-            Waiting on arrangements ({waiting.length})
-          </h3>
-          {waiting.length === 0 ? (
-            <p className="mt-1 text-sm text-slate-500">
-              Every event being planned is ready to review.
-            </p>
-          ) : (
-            waiting.map(card)
-          )}
+          <div
+            role="tablist"
+            aria-label="Safety review status"
+            className="mt-5 flex gap-2 border-b border-slate-200 pb-3"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selectedTab === 'ready'}
+              onClick={() => setSelectedTab('ready')}
+              className={`rounded-lg px-4 py-2 text-sm font-medium ${selectedTab === 'ready' ? 'bg-[#202124] text-white' : 'bg-white text-slate-600'}`}
+            >
+              Ready to review <span className="ml-1 opacity-70">{ready.length}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selectedTab === 'waiting'}
+              onClick={() => setSelectedTab('waiting')}
+              className={`rounded-lg px-4 py-2 text-sm font-medium ${selectedTab === 'waiting' ? 'bg-[#202124] text-white' : 'bg-white text-slate-600'}`}
+            >
+              Waiting on arrangements <span className="ml-1 opacity-70">{waiting.length}</span>
+            </button>
+          </div>
+          {selectedTab === 'ready' &&
+            (ready.length === 0 ? (
+              <p className="mt-1 text-sm text-slate-500">
+                Nothing is arranged enough to review yet.
+              </p>
+            ) : (
+              <div className="mt-5 space-y-4">{ready.map(card)}</div>
+            ))}
+          {selectedTab === 'waiting' &&
+            (waiting.length === 0 ? (
+              <p className="mt-1 text-sm text-slate-500">
+                Every event being planned is ready to review.
+              </p>
+            ) : (
+              <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {waiting.map(card)}
+              </div>
+            ))}
         </>
       )}
     </section>
@@ -207,11 +246,11 @@ function PlanCard({
   onDecide: (decision: SafetyDecision) => void
 }) {
   return (
-    <article className="mt-4 rounded border border-slate-200 p-3 text-sm">
-      <h4 className="font-medium">{name(plan)}</h4>
+    <article className="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-5 text-sm">
+      <h4 className="text-lg font-semibold tracking-normal">{name(plan)}</h4>
       {plan.event_start_at && plan.event_end_at && (
         <p className="text-slate-500">
-          {formatSingaporeTime(plan.event_start_at)} to {formatSingaporeTime(plan.event_end_at)}
+          {formatSingaporeRange(plan.event_start_at, plan.event_end_at)}
         </p>
       )}
       <p className="text-slate-500">
@@ -234,7 +273,7 @@ function PlanCard({
           {plan.venues.map((venue) => (
             <li key={venue.booking_id}>
               <span className="font-medium">{venue.session_label}</span>{' '}
-              {formatSingaporeTime(venue.start_at)} to {formatSingaporeTime(venue.end_at)}{' '}
+              {formatSingaporeRange(venue.start_at, venue.end_at)}{' '}
               <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">
                 {STATUS_LABELS[venue.status]}
               </span>
@@ -278,9 +317,8 @@ function PlanCard({
           reviewed again, because the Coordinator has to act on it. */}
       {plan.latest_decision && (
         <p className="mt-3 rounded bg-slate-50 p-2">
-          <span className="font-medium">{DECISION_LABELS[plan.latest_decision.decision]}</span>{' '}
-          on {formatSingaporeTime(plan.latest_decision.decided_at)}:{' '}
-          {plan.latest_decision.comment}
+          <span className="font-medium">{DECISION_LABELS[plan.latest_decision.decision]}</span> on{' '}
+          {formatSingaporeTime(plan.latest_decision.decided_at)}: {plan.latest_decision.comment}
           <InvalidatedNote review={plan.latest_decision} />
         </p>
       )}

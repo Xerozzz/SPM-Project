@@ -11,17 +11,17 @@ async function signInAsOrganiser(page: Page) {
   await page.getByLabel('Email').fill('organiser@example.com')
   await page.getByLabel('Password').fill('password123')
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page.getByRole('heading', { name: 'My event requests' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'My Events', exact: true })).toBeVisible()
 }
 
 function row(page: Page, name: string) {
-  const ownRequests = page
-    .getByRole('heading', { name: 'My event requests' })
-    .locator('xpath=../following-sibling::ul[1]')
-  return ownRequests.getByRole('listitem').filter({ hasText: name })
+  return page
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name, exact: true }) })
 }
 
 async function createCompleteDraft(page: Page, name: string) {
+  await page.getByRole('button', { name: /Create event$/ }).click()
   await page.getByLabel('Name *').fill(name)
   await page.getByLabel('Purpose *').fill('Welcome new students')
   await page.getByLabel('Description *').fill('Campus orientation activities')
@@ -48,6 +48,9 @@ test('a complete draft is submitted and confirmed (AC1), then locked (AC3)', asy
   await createCompleteDraft(page, name)
 
   await expect(row(page, name)).toContainText('Draft')
+  await row(page, name)
+    .getByRole('button', { name: `View details for ${name}` })
+    .click()
   await row(page, name).getByRole('button', { name: 'Submit for review' }).click()
 
   // Home also has a role="status" line for API health, so pick ours by its text.
@@ -68,6 +71,9 @@ test('a complete draft is submitted and confirmed (AC1), then locked (AC3)', asy
 test('an incomplete draft is refused and the fields are named (AC2)', async ({ page }) => {
   await signInAsOrganiser(page)
 
+  await row(page, 'Hackathon (draft)')
+    .getByRole('button', { name: 'View details for Hackathon (draft)' })
+    .click()
   await row(page, 'Hackathon (draft)').getByRole('button', { name: 'Submit for review' }).click()
 
   const alert = page.getByRole('alert')
