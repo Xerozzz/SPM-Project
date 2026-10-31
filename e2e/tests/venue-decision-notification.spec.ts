@@ -1,5 +1,6 @@
 import { expect, type APIRequestContext, type Page, test } from '@playwright/test'
 
+import { openWorkspace } from '../support/workspace'
 import { API, createApprovedEvent, tokenFor, VENUE_SPEC_ACCOUNT } from '../support/approved-event'
 
 // TC-122-06: Venue Staff approve a Pending venue booking and edit the hold's expiry;
@@ -42,15 +43,13 @@ async function call(
 
 function decisionEntries(page: Page, eventId: string) {
   return page
-    .getByLabel('Notifications', { exact: true })
+    .getByRole('region', { name: 'Notifications', exact: true })
     .getByRole('listitem')
     .filter({ hasText: /venue_booking_approved|venue_hold_expiry_updated/ })
     .filter({ hasText: eventId })
 }
 
-test('an approval and an expiry edit each tell the Coordinator, with a link', async ({
-  page,
-}) => {
+test('an approval and an expiry edit each tell the Coordinator, with a link', async ({ page }) => {
   const event = await createApprovedEvent(page.request, {
     name: `E2E venue decision ${Date.now()}`,
     lane: 1,
@@ -63,12 +62,18 @@ test('an approval and an expiry edit each tell the Coordinator, with a link', as
   }[]
   const venue = venues.find((row) => row.name === 'Hall A')
   expect(venue, 'seeded venue Hall A').toBeDefined()
-  const created = (await call(page.request, coordinator, 'POST', `/api/event-requests/${event.id}/venue-bookings`, {
-    venue_id: venue!.id,
-    session_label: 'Decision session',
-    start_at: event.start_at,
-    end_at: event.end_at,
-  })) as { id: string }
+  const created = (await call(
+    page.request,
+    coordinator,
+    'POST',
+    `/api/event-requests/${event.id}/venue-bookings`,
+    {
+      venue_id: venue!.id,
+      session_label: 'Decision session',
+      start_at: event.start_at,
+      end_at: event.end_at,
+    },
+  )) as { id: string }
 
   // Venue Staff approve the Pending request, then edit the active hold's expiry.
   const staff = await tokenFor(page.request, 'venue-staff@example.com')
@@ -83,16 +88,17 @@ test('an approval and an expiry edit each tell the Coordinator, with a link', as
 
   // The assigned Coordinator sees both alerts in their inbox, with the view link.
   await signIn(page, VENUE_SPEC_ACCOUNT)
-  await page.getByRole('button', { name: /^Notifications/ }).click()
+  await openWorkspace(page, 'Notifications')
   const entries = decisionEntries(page, event.id)
   await expect(entries).toHaveCount(2)
-  await expect(
-    entries.first().getByRole('link', { name: 'View venue decision' }),
-  ).toHaveAttribute('href', '#coordinator-events')
+  await expect(entries.first().getByRole('link', { name: 'View venue decision' })).toHaveAttribute(
+    'href',
+    `?view=review-queue&event=${event.id}`,
+  )
   await signOut(page)
 
   // An unrelated user is told nothing.
   await signIn(page, 'attendee@example.com')
-  await page.getByRole('button', { name: /^Notifications/ }).click()
+  await openWorkspace(page, 'Notifications')
   await expect(decisionEntries(page, event.id)).toHaveCount(0)
 })

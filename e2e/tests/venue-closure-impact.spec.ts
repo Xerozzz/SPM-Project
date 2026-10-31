@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test'
 
+import { notificationEntries, openEvent, openWorkspace } from '../support/workspace'
 import { createApprovedEvent, VENUE_SPEC_ACCOUNT } from '../support/approved-event'
 
 // SCRUM-81, SCRUM-116 and SCRUM-133: Venue Staff record a closure over a live venue hold. The closure is saved,
@@ -26,7 +27,7 @@ async function api<T>(page: Page, path: string, method = 'GET', body?: unknown):
     async ({ path, method, body }) => {
       const raw = localStorage.getItem('connectsphere.token')
       const token = raw ? (JSON.parse(raw) as { token: string }).token : ''
-      const base = `${window.location.protocol}//${window.location.hostname}:8000`
+      const base = window.location.origin
       const response = await fetch(`${base}${path}`, {
         method,
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -71,10 +72,10 @@ test('a closure over a live hold is saved, listed and notified', async ({ page }
   await page.getByRole('button', { name: 'Sign out' }).click()
 
   await signIn(page, 'venue-staff@example.com')
-  await page.getByRole('button', { name: 'Venue Catalogue' }).click()
   const expires = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()
   await api(page, `/api/venue-bookings/${booking.id}/approve`, 'POST', { expires_at: expires })
 
+  await openWorkspace(page, 'Venue Catalogue')
   // The closure manager's own section, not the catalogue section around it.
   const section = page.locator('section:has(> h2:text-is("Venue unavailability"))')
   await section.locator('select').first().selectOption({ label: VENUE_NAME })
@@ -83,7 +84,7 @@ test('a closure over a live hold is saved, listed and notified', async ({ page }
   await section
     .getByLabel('End date and time')
     .fill(await localInput(page, new Date(start.getTime() + 3600_000).toISOString()))
-  await section.getByLabel('Reason').fill('Burst pipe')
+  await section.getByLabel('Reason').fill(`Burst pipe ${event.id}`)
   await section.getByRole('button', { name: 'Record unavailability' }).click()
 
   const status = section.getByRole('status')
@@ -93,21 +94,13 @@ test('a closure over a live hold is saved, listed and notified', async ({ page }
   await page.getByRole('button', { name: 'Sign out' }).click()
 
   await signIn(page, VENUE_SPEC_ACCOUNT)
-  await page.getByRole('button', { name: /^Notifications/ }).click()
-  // This event's own closure-impact notification: earlier runs left others in the inbox,
-  // and this event also has an assignment notification.
+  await openWorkspace(page, 'Notifications')
+  const notice = notificationEntries(page, 'venue_closure_impact', event.id)
   await expect(
-    page
-      .getByLabel('Notifications', { exact: true })
-      .getByRole('listitem', { name: new RegExp(`notification for event ${event.id}$`) })
-      .filter({ hasText: 'venue_closure_impact' }),
+    notice.getByRole('heading', { name: 'Venue closure affects an arrangement' }),
   ).toBeVisible()
-  // AC2, AC3: the existing booking list shows the arrangement needs action.
-  await page.getByRole('button', { name: 'Review Queue' }).click()
-  const card = page
-    .getByRole('listitem')
-    .filter({ has: page.getByRole('heading', { name: event.name, exact: true }) })
-  await card.getByRole('button', { name: `View details for ${event.name}` }).click()
+  await expect(notice).toContainText(event.name)
+  const card = await openEvent(page, event.name, 'Review Queue')
   await expect(card.getByText(/Needs attention\. The venue is closed/)).toBeVisible()
 
   // SCRUM-116 AC1 to AC3: start a linked replacement at another venue from the affected
@@ -134,16 +127,11 @@ test('a closure over a live hold is saved, listed and notified', async ({ page }
   // SCRUM-133: Venue Staff approve the replacement (a hold), then the Coordinator adopts
   // it. The original is cancelled and the link between the two stays.
   await signIn(page, 'venue-staff@example.com')
-  await page.getByRole('button', { name: 'Venue Catalogue' }).click()
   await api(page, `/api/venue-bookings/${replacement.id}/approve`, 'POST', { expires_at: expires })
   await page.getByRole('button', { name: 'Sign out' }).click()
 
   await signIn(page, VENUE_SPEC_ACCOUNT)
-  await page.getByRole('button', { name: 'Review Queue' }).click()
-  const adoptCard = page
-    .getByRole('listitem')
-    .filter({ has: page.getByRole('heading', { name: event.name, exact: true }) })
-  await adoptCard.getByRole('button', { name: `View details for ${event.name}` }).click()
+  const adoptCard = await openEvent(page, event.name, 'Review Queue')
   await adoptCard
     .getByRole('button', { name: 'Adopt this replacement for Closure impact session' })
     .click()
@@ -156,14 +144,15 @@ test('a closure over a live hold is saved, listed and notified', async ({ page }
   // Clean up so no closure is left on the auditorium for later runs or specs. Removing
   // it clears the derived marker with nothing else to undo (AC6).
   await signIn(page, 'venue-staff@example.com')
-  await page.getByRole('button', { name: 'Venue Catalogue' }).click()
-  const closures = await api<{ id: string }[]>(page, `/api/venues/${venue.id}/unavailabilities`)
+  const closures = (
+    await api<{ id: string; reason: string }[]>(page, `/api/venues/${venue.id}/unavailabilities`)
+  ).filter((closure) => closure.reason === `Burst pipe ${event.id}`)
   for (const closure of closures) {
     await page.evaluate(
       async ({ venueId, id }) => {
         const raw = localStorage.getItem('connectsphere.token')
         const token = raw ? (JSON.parse(raw) as { token: string }).token : ''
-        const base = `${window.location.protocol}//${window.location.hostname}:8000`
+        const base = window.location.origin
         await fetch(`${base}/api/venues/${venueId}/unavailabilities/${id}`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` },

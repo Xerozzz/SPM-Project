@@ -67,6 +67,10 @@ const DESTINATIONS: Record<string, { views: string[]; label: string }> = {
   event_submission: { views: ['unassigned-queue'], label: 'Review event assignment' },
   safety_plan: { views: ['safety-review'], label: 'Review event safety' },
   event_completion: { views: ['completed-events', 'my-events'], label: 'View completed event' },
+  event_cancellation: {
+    views: ['review-queue', 'active-assignments', 'my-events', 'registrations'],
+    label: 'View cancelled event',
+  },
 }
 
 export function notificationLink(notification: Notification, allowedViews?: string[]) {

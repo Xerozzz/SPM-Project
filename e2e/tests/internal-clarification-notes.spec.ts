@@ -1,5 +1,7 @@
 import { expect, type Page, test } from '@playwright/test'
 
+import { eventRow, openWorkspace, openEvent } from '../support/workspace'
+
 // TC-106-09: the assigned Coordinator records an internal note and sees it after
 // reload; the Organiser has no clarification surface; after a Lead reassigns, the
 // outgoing Coordinator loses the note and the incoming Coordinator gains it.
@@ -35,8 +37,7 @@ async function createSubmittedRequest(page: Page, name: string) {
 }
 
 function coordinatorCard(page: Page, name: string) {
-  const section = page.getByRole('heading', { name: 'Coordinator events' }).locator('..')
-  return section.getByRole('article').filter({ hasText: name })
+  return eventRow(page, name)
 }
 
 test('internal notes stay with the current assignee, never the organiser', async ({ page }) => {
@@ -64,6 +65,7 @@ test('internal notes stay with the current assignee, never the organiser', async
 
   // The assigned Coordinator records an internal note and still sees it after reload.
   await signIn(page, 'coordinator@example.com')
+  await openEvent(page, name, 'Review Queue')
   const card = coordinatorCard(page, name)
   await expect(card).toBeVisible()
   await expect(card.getByText('Internal clarification notes')).toBeVisible()
@@ -73,15 +75,14 @@ test('internal notes stay with the current assignee, never the organiser', async
     'Message sent.',
   )
   await page.reload()
+  await openEvent(page, name, 'Review Queue')
   await expect(coordinatorCard(page, name).getByText(note)).toBeVisible()
   await signOut(page)
 
   // The Organiser has no clarification surface on their own submitted request.
   await signIn(page, 'organiser@example.com')
   await expect(page.getByRole('heading', { name: 'My Events', exact: true })).toBeVisible()
-  const ownRow = page
-    .getByRole('listitem')
-    .filter({ has: page.getByRole('heading', { name, exact: true }) })
+  const ownRow = await openEvent(page, name, 'My Events')
   await expect(ownRow).toContainText('Submitted')
   await expect(ownRow.getByText('Internal clarification notes')).toHaveCount(0)
   await expect(ownRow.getByText(note)).toHaveCount(0)
@@ -94,6 +95,7 @@ test('internal notes stay with the current assignee, never the organiser', async
 
   // The Lead reassigns; the outgoing Coordinator loses the note.
   await signIn(page, 'coordinator-lead@example.com')
+  await openEvent(page, name, 'Active Assignments')
   const overviewEntry = page
     .getByLabel('Active requests')
     .getByRole('listitem')
@@ -108,12 +110,16 @@ test('internal notes stay with the current assignee, never the organiser', async
   await signOut(page)
 
   await signIn(page, 'coordinator@example.com')
-  const outgoing = page.getByRole('heading', { name: 'Coordinator events' }).locator('..')
-  await expect(outgoing.getByRole('article').filter({ hasText: name })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Review Queue', exact: true })).toBeVisible()
+  await expect(
+    page.locator('main > section:not([hidden])').getByText('Loading…', { exact: true }),
+  ).toHaveCount(0)
+  await expect(eventRow(page, name)).toHaveCount(0)
   await signOut(page)
 
   // The incoming Coordinator inherits the existing note and can add another.
   await signIn(page, 'coordinator2@example.com')
+  await openEvent(page, name, 'Review Queue')
   const incoming = coordinatorCard(page, name)
   await expect(incoming).toBeVisible()
   await expect(incoming.getByText(note)).toBeVisible()
@@ -124,6 +130,7 @@ test('internal notes stay with the current assignee, never the organiser', async
     'Message sent.',
   )
   await page.reload()
+  await openEvent(page, name, 'Review Queue')
   await expect(coordinatorCard(page, name).getByText(note)).toBeVisible()
   await expect(coordinatorCard(page, name).getByText(followUp)).toBeVisible()
 })

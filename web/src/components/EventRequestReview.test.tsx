@@ -98,7 +98,12 @@ function signInAsCoordinator() {
   )
 }
 
-function renderReview(reviewable: unknown[], bookable: unknown[] = [], confirmed: unknown[] = []) {
+function renderReview(
+  reviewable: unknown[],
+  bookable: unknown[] = [],
+  confirmed: unknown[] = [],
+  arrangements: unknown[] = [],
+) {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const key = `${init?.method ?? 'GET'} ${String(input)}`
     if (key === 'GET /api/event-requests/reviewable') return json(reviewable)
@@ -117,6 +122,7 @@ function renderReview(reviewable: unknown[], bookable: unknown[] = [], confirmed
       })
     }
     if (key.endsWith('/registrations')) return json([])
+    if (key.endsWith('/venue-arrangements')) return json(arrangements)
     if (key.startsWith('GET ') && key.endsWith('/venue-bookings')) return json([])
     if (key === 'GET /api/venues') return json([])
     if (key.endsWith('/clarifications')) return json([])
@@ -299,6 +305,17 @@ test('SCRUM-113: assigned coordinator sees confirmed registration settings witho
   expect(screen.queryByRole('button', { name: 'Open registration' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Extend deadline' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Close registration' })).not.toBeInTheDocument()
+})
+
+test('SCRUM-118: confirmed event details retain the venue change controls', async () => {
+  signInAsCoordinator()
+  const confirmed = { ...submitted, status: 'confirmed', name: 'Alumni Dinner' }
+  renderReview([], [], [confirmed], [{ ...pendingBooking, status: 'confirmed' }])
+  await openReviewDetails('Alumni Dinner')
+  expect(await screen.findByRole('heading', { name: 'Arrangements' })).toBeVisible()
+  expect(
+    await screen.findByRole('button', { name: 'Cancel arrangement for Morning workshop' }),
+  ).toBeVisible()
 })
 
 // SCRUM-71: coordinators see retained venue booking requests, while submission

@@ -1,5 +1,7 @@
 import { expect, type Locator, type Page, test } from '@playwright/test'
 
+import { eventRow, openWorkspace, openEvent } from '../support/workspace'
+
 // SCRUM-105: the owning Organiser and the current assigned Coordinator open the event's
 // assignment history from their own views; reassignment moves the Coordinator's access,
 // and neither view offers assign or reassign. The Lead's own history view keeps working
@@ -25,22 +27,15 @@ async function signOut(page: Page) {
 }
 
 function ownRow(page: Page, name: string) {
-  return page
-    .getByRole('listitem')
-    .filter({ has: page.getByRole('heading', { name, exact: true }) })
+  return eventRow(page, name)
 }
 
 function coordinatorCard(page: Page, name: string) {
-  return page
-    .getByRole('listitem')
-    .filter({ has: page.getByRole('heading', { name, exact: true }) })
+  return eventRow(page, name)
 }
 
 function leadRow(page: Page, name: string) {
-  return page
-    .getByLabel('Active requests')
-    .getByRole('listitem')
-    .filter({ has: page.getByRole('heading', { name, exact: true }) })
+  return eventRow(page, name)
 }
 
 /** The Organiser creates a complete request, which submits it in the same press. */
@@ -80,8 +75,9 @@ async function assignAsLead(page: Page, name: string) {
 
 /** Opens the toggle and returns the history's entries; the history loads only now. */
 async function openHistory(scope: Locator) {
-  const viewDetails = scope.getByRole('button', { name: /View details/ })
-  if ((await viewDetails.count()) > 0) await viewDetails.click()
+  await expect(scope).toBeVisible()
+  const details = scope.getByRole('button', { name: /^View details for/ })
+  if (await details.isVisible()) await details.click()
   await scope.getByRole('button', { name: 'View assignment history' }).click()
   await expect(scope.getByText('Assignment history', { exact: true })).toBeVisible()
   return scope.locator('ol').getByRole('listitem')
@@ -142,7 +138,7 @@ test('owner and current coordinator view assignment history; reassignment moves 
 
   // The Lead reassigns to the second coordinator.
   await signIn(page, 'coordinator-lead@example.com')
-  await leadRow(page, name).getByRole('button', { name: /View details/ }).click()
+  await openEvent(page, name, 'Active Assignments')
   await leadRow(page, name)
     .getByLabel(`New coordinator for ${name}`)
     .selectOption({ label: 'coordinator2@example.com' })
@@ -154,6 +150,10 @@ test('owner and current coordinator view assignment history; reassignment moves 
 
   // The outgoing coordinator no longer has the card, so no way to the history.
   await signIn(page, 'coordinator@example.com')
+  await expect(page.getByRole('heading', { name: 'Review Queue', exact: true })).toBeVisible()
+  await expect(
+    page.locator('main > section:not([hidden])').getByText('Loading…', { exact: true }),
+  ).toHaveCount(0)
   await expect(coordinatorCard(page, name)).toHaveCount(0)
   await signOut(page)
 
@@ -187,25 +187,25 @@ test('a draft row offers no assignment history toggle', async ({ page }) => {
     `“${draftName}” has been saved as a draft.`,
   )
 
+  await openEvent(page, draftName, 'My Events')
   await expect(ownRow(page, draftName)).toContainText('Draft')
   await expect(
     ownRow(page, draftName).getByRole('button', { name: 'View assignment history' }),
   ).toHaveCount(0)
+  await openEvent(page, submittedName, 'My Events')
   await expect(
     ownRow(page, submittedName).getByRole('button', { name: 'View assignment history' }),
   ).toBeVisible()
 })
 
-test("the Lead's active assignments still show the history, now with emails", async ({
-  page,
-}) => {
+test("the Lead's active assignments still show the history, now with emails", async ({ page }) => {
   const name = `E2E history lead ${Date.now()}`
   await submitAsOrganiser(page, name)
   await signOut(page)
 
   await assignAsLead(page, name)
+  await openEvent(page, name, 'Active Assignments')
   const row = leadRow(page, name)
-  await row.getByRole('button', { name: /View details/ }).click()
   await row.getByRole('button', { name: 'Show history' }).click()
   await expect(row.getByText('Assignment history', { exact: true })).toBeVisible()
   const entries = row.locator('ol').getByRole('listitem')

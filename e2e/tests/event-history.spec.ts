@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page, test } from '@playwright/test'
 
+import { eventRow, openEvent, openWorkspace } from '../support/workspace'
 import {
   API,
   type ApprovedEvent,
@@ -55,20 +56,15 @@ async function signOut(page: Page) {
 }
 
 function ownRow(page: Page, name: string) {
-  return page
-    .getByRole('listitem')
-    .filter({ has: page.getByRole('heading', { name, exact: true }) })
+  return eventRow(page, name)
 }
 
 function cancelledCard(page: Page, name: string) {
-  const section = page.getByRole('heading', { name: 'Cancelled events' }).locator('..')
-  return section.getByRole('article').filter({ hasText: name })
+  return page.getByRole('article').filter({ has: page.getByRole('heading', { name, exact: true }) })
 }
 
 function coordinatorCard(page: Page, name: string) {
-  return page
-    .getByRole('listitem')
-    .filter({ has: page.getByRole('heading', { name, exact: true }) })
+  return eventRow(page, name)
 }
 
 /** Opens the event history inside `scope` and returns its entries, oldest first. */
@@ -90,10 +86,8 @@ test('the owner sees creation, submission, assignment and approval in order', as
   })
 
   await signIn(page, VENUE_SPEC_ACCOUNT)
-  await page.getByRole('button', { name: 'My Events' }).click()
-  const row = ownRow(page, event.name)
-  await row.getByRole('button', { name: `View details for ${event.name}` }).click()
-  const entries = await openHistory(row)
+  await openEvent(page, event.name, 'My Events')
+  const entries = await openHistory(ownRow(page, event.name))
 
   await expect(entries).toHaveText([
     new RegExp(`^Draft created by ${VENUE_SPEC_ACCOUNT}`),
@@ -118,9 +112,8 @@ test('an internal note appears for the assigned Coordinator and never for the ow
   })
 
   await signIn(page, COORDINATOR)
-  await page.getByRole('button', { name: 'Review Queue' }).click()
+  await openEvent(page, event.name, 'Review Queue')
   const card = coordinatorCard(page, event.name)
-  await card.getByRole('button', { name: `View details for ${event.name}` }).click()
   await card.getByLabel('Internal note', { exact: true }).fill(note)
   await card.getByRole('button', { name: 'Record internal note' }).click()
   await expect(card.getByRole('status').filter({ hasText: 'Message sent' })).toBeVisible()
@@ -132,9 +125,8 @@ test('an internal note appears for the assigned Coordinator and never for the ow
   await signOut(page)
 
   await signIn(page, VENUE_SPEC_ACCOUNT)
-  await page.getByRole('button', { name: 'My Events' }).click()
+  await openEvent(page, event.name, 'My Events')
   const row = ownRow(page, event.name)
-  await row.getByRole('button', { name: `View details for ${event.name}` }).click()
   const ownerView = await openHistory(row)
   await expect(ownerView).toHaveText([
     /^Draft created/,
@@ -167,9 +159,7 @@ test('the assigned Coordinator and a Lead open a cancelled event history from it
 
   for (const viewer of [COORDINATOR, LEAD]) {
     await signIn(page, viewer)
-    await page
-      .getByRole('button', { name: viewer === LEAD ? 'Active Assignments' : 'Review Queue' })
-      .click()
+    await openWorkspace(page, viewer === LEAD ? 'Active Assignments' : 'Review Queue')
     const card = cancelledCard(page, cancelled.name)
     await expect(card).toContainText(`Reason: ${reason}`)
     const entries = await openHistory(card)

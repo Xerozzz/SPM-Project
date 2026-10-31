@@ -1,5 +1,7 @@
 import { expect, type Page, test } from '@playwright/test'
 
+import { eventRow, openWorkspace, openEvent } from '../support/workspace'
+
 // TC-101-08: an organiser submits a request, then a Lead signs in and sees it in the
 // unassigned queue with every required field.
 test.describe.configure({ retries: 0 })
@@ -16,17 +18,15 @@ async function signOut(page: Page) {
 }
 
 function ownRow(page: Page, name: string) {
-  return page
-    .getByRole('listitem')
-    .filter({ has: page.getByRole('heading', { name, exact: true }) })
+  return eventRow(page, name)
 }
 
 test('an organiser submission appears in the Lead unassigned queue', async ({ page }) => {
   const name = `E2E unassigned ${Date.now()}`
   await signIn(page, 'organiser@example.com')
   await expect(page.getByRole('heading', { name: 'My Events', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: /Create event$/ }).click()
 
+  await page.getByRole('button', { name: /Create event$/ }).click()
   await page.getByLabel('Name *').fill(name)
   await page.getByLabel('Purpose *').fill('Welcome new students')
   await page.getByLabel('Description *').fill('Campus orientation activities')
@@ -62,8 +62,8 @@ test('a Lead assigns an unassigned request to an eligible coordinator', async ({
   const name = `E2E assign ${Date.now()}`
   await signIn(page, 'organiser@example.com')
   await expect(page.getByRole('heading', { name: 'My Events', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: /Create event$/ }).click()
 
+  await page.getByRole('button', { name: /Create event$/ }).click()
   await page.getByLabel('Name *').fill(name)
   await page.getByLabel('Purpose *').fill('Welcome new students')
   await page.getByLabel('Description *').fill('Campus orientation activities')
@@ -107,8 +107,8 @@ test('a Lead reassigns an assigned request and views its history', async ({ page
   const name = `E2E reassign ${Date.now()}`
   await signIn(page, 'organiser@example.com')
   await expect(page.getByRole('heading', { name: 'My Events', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: /Create event$/ }).click()
 
+  await page.getByRole('button', { name: /Create event$/ }).click()
   await page.getByLabel('Name *').fill(name)
   await page.getByLabel('Purpose *').fill('Welcome new students')
   await page.getByLabel('Description *').fill('Campus orientation activities')
@@ -141,6 +141,7 @@ test('a Lead reassigns an assigned request and views its history', async ({ page
   )
 
   // The assigned row now lives in the overview with a reassignment picker.
+  await openEvent(page, name, 'Active Assignments')
   const overview = page.getByLabel('Active requests')
   await expect(overview).toBeVisible()
   const entry = overview.getByRole('listitem').filter({ hasText: name })
@@ -169,8 +170,8 @@ test('a reassigned request moves coordinator access and keeps Lead visibility', 
   const name = `E2E assigned access ${Date.now()}`
   await signIn(page, 'organiser@example.com')
   await expect(page.getByRole('heading', { name: 'My Events', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: /Create event$/ }).click()
 
+  await page.getByRole('button', { name: /Create event$/ }).click()
   await page.getByLabel('Name *').fill(name)
   await page.getByLabel('Purpose *').fill('Welcome new students')
   await page.getByLabel('Description *').fill('Campus orientation activities')
@@ -199,6 +200,7 @@ test('a reassigned request moves coordinator access and keeps Lead visibility', 
   await expect(page.getByRole('status').filter({ hasText: 'has been assigned' })).toContainText(
     `“${name}” has been assigned.`,
   )
+  await openEvent(page, name, 'Active Assignments')
   const overview = page.getByLabel('Active requests')
   const entry = overview.getByRole('listitem').filter({ hasText: name })
   await entry
@@ -212,20 +214,23 @@ test('a reassigned request moves coordinator access and keeps Lead visibility', 
 
   // The outgoing coordinator's list no longer holds the event after refresh.
   await signIn(page, 'coordinator@example.com')
-  const outgoing = page.getByRole('heading', { name: 'Coordinator events' }).locator('..')
-  await expect(outgoing.getByRole('article').filter({ hasText: name })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Review Queue', exact: true })).toBeVisible()
+  await expect(
+    page.locator('main > section:not([hidden])').getByText('Loading…', { exact: true }),
+  ).toHaveCount(0)
+  await expect(eventRow(page, name)).toHaveCount(0)
   await signOut(page)
 
   // The incoming coordinator sees it with the decision buttons.
   await signIn(page, 'coordinator2@example.com')
-  const incoming = page.getByRole('heading', { name: 'Coordinator events' }).locator('..')
-  const card = incoming.getByRole('article').filter({ hasText: name })
+  const card = await openEvent(page, name, 'Review Queue')
   await expect(card).toBeVisible()
   await expect(card.getByRole('button', { name: 'Approve' })).toBeVisible()
   await signOut(page)
 
   // The Lead still sees the allocation after refresh.
   await signIn(page, 'coordinator-lead@example.com')
+  await openWorkspace(page, 'Active Assignments')
   await expect(page.getByLabel('Active requests')).toBeVisible()
   await page.reload()
   const refreshed = page.getByLabel('Active requests')

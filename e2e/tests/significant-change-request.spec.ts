@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test'
 
+import { eventRow, openEvent, openWorkspace } from '../support/workspace'
 import {
   API,
   type ApprovedEvent,
@@ -25,15 +26,7 @@ async function signIn(page: Page, email: string) {
 }
 
 function ownRow(page: Page, name: string) {
-  return page
-    .getByRole('listitem')
-    .filter({ has: page.getByRole('heading', { name, exact: true }) })
-}
-
-function coordinatorCard(page: Page, name: string) {
-  return page
-    .getByRole('listitem')
-    .filter({ has: page.getByRole('heading', { name, exact: true }) })
+  return eventRow(page, name)
 }
 
 /** The event the current test made, so the hand-back below can find it. */
@@ -78,9 +71,8 @@ test('an organiser proposes a change and the coordinator can compare it', async 
     coordinator: COORDINATOR,
   })
   await signIn(page, VENUE_SPEC_ACCOUNT)
-  await page.getByRole('button', { name: 'My Events' }).click()
+  await openEvent(page, event.name, 'My Events')
   const row = ownRow(page, event.name)
-  await row.getByRole('button', { name: `View details for ${event.name}` }).click()
   await row.getByRole('button', { name: `Propose a change to ${event.name}` }).click()
   const form = row.getByRole('form', { name: 'Propose a change' })
 
@@ -103,9 +95,7 @@ test('an organiser proposes a change and the coordinator can compare it', async 
 
   // AC5, AC6: the coordinator sees the same pending request, and the event is unchanged.
   await signIn(page, COORDINATOR)
-  await page.getByRole('button', { name: 'Review Queue' }).click()
-  const card = coordinatorCard(page, event.name)
-  await card.getByRole('button', { name: `View details for ${event.name}` }).click()
+  const card = await openEvent(page, event.name, 'Review Queue')
   await expect(card.getByText(REASON)).toBeVisible()
   await expect(card.getByText('Attendance:').locator('..')).toContainText('30')
 })
@@ -122,9 +112,8 @@ test('the coordinator approves a change and it is applied', async ({ page }) => 
     coordinator: COORDINATOR,
   })
   await signIn(page, VENUE_SPEC_ACCOUNT)
-  await page.getByRole('button', { name: 'My Events' }).click()
+  await openEvent(page, event.name, 'My Events')
   const row = ownRow(page, event.name)
-  await row.getByRole('button', { name: `View details for ${event.name}` }).click()
   await row.getByRole('button', { name: `Propose a change to ${event.name}` }).click()
   const form = row.getByRole('form', { name: 'Propose a change' })
   await form.getByLabel('Layout').fill('Cabaret style')
@@ -134,9 +123,7 @@ test('the coordinator approves a change and it is applied', async ({ page }) => 
   await page.getByRole('button', { name: 'Sign out' }).click()
 
   await signIn(page, COORDINATOR)
-  await page.getByRole('button', { name: 'Review Queue' }).click()
-  const card = coordinatorCard(page, event.name)
-  await card.getByRole('button', { name: `View details for ${event.name}` }).click()
+  const card = await openEvent(page, event.name, 'Review Queue')
   const request = card.getByRole('article').filter({ hasText: LAYOUT_REASON })
   await request.getByLabel('Decision note').fill('Cabaret fits the hall')
   await request.getByRole('button', { name: 'Approve change' }).click()

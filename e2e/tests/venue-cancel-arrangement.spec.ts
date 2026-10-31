@@ -1,5 +1,6 @@
 import { expect, type APIRequestContext, type Page, test } from '@playwright/test'
 
+import { openEvent } from '../support/workspace'
 import { API, createApprovedEvent, tokenFor, VENUE_SPEC_ACCOUNT } from '../support/approved-event'
 
 // SCRUM-109, TC-109-01: the assigned Coordinator cancels one of two venue arrangements
@@ -63,20 +64,18 @@ async function eventWithTwoArrangements(request: APIRequestContext) {
 test('TC-109-01: the assigned Coordinator cancels one arrangement and the other stays', async ({
   page,
 }) => {
-  const { event, sessions } = await eventWithTwoArrangements(page.request)
-  const { morning, afternoon } = sessions
+  const {
+    event,
+    sessions: { morning, afternoon },
+  } = await eventWithTwoArrangements(page.request)
   const reason = `Moved online ${Date.now()}`
 
   await signIn(page, VENUE_SPEC_ACCOUNT)
-  await page.getByRole('button', { name: 'Review Queue' }).click()
-  const card = page
-    .getByRole('listitem')
-    .filter({ has: page.getByRole('heading', { name: event.name, exact: true }) })
-  await card.getByRole('button', { name: `View details for ${event.name}` }).click()
+  const card = await openEvent(page, event.name, 'Review Queue')
   // Rows are anchored on their stamped session labels: this account's board holds every
   // earlier run's events too.
-  const morningRow = page.getByRole('listitem').filter({ hasText: morning })
-  const afternoonRow = page.getByRole('listitem').filter({ hasText: afternoon })
+  const morningRow = card.getByRole('listitem').filter({ hasText: morning })
+  const afternoonRow = card.getByRole('listitem').filter({ hasText: afternoon })
   await page
     .getByRole('button', { name: `Cancel arrangement for ${morning}` })
     .click({ timeout: 15000 })

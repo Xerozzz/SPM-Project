@@ -52,6 +52,16 @@ function renderWorkspace(role = 'organiser') {
   const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     const url = String(input)
     if (url === '/api/notifications') return json([notification])
+    if (url.endsWith('/assigned-cancelled') || url.endsWith('/cancelled'))
+      return json([
+        {
+          id: 'cancelled-1',
+          name: 'Cancelled Fair',
+          start_at: '2026-12-01T02:00:00Z',
+          cancelled_at: '2026-10-30T10:00:00Z',
+          cancellation_reason: 'Speaker withdrew',
+        },
+      ])
     if (url === '/api/event-requests') return json([event])
     if (url === '/api/event-requests/req-1') return json(event)
     return json([])
@@ -90,6 +100,36 @@ test('a direct event URL restores the selected event on reload', async () => {
   window.history.replaceState(null, '', '/?view=my-events&event=req-1')
   renderWorkspace()
   expect(await screen.findByRole('heading', { name: 'Welcome Fair', level: 2 })).toBeVisible()
+})
+
+// SCRUM-88 AC6: coordinators and leads retain cancelled records on their own screens.
+test.each(['coordinator', 'coordinator_lead'])(
+  'a %s can open cancelled event records',
+  async (role) => {
+    window.history.replaceState(
+      null,
+      '',
+      `/?view=${role === 'coordinator' ? 'review-queue' : 'active-assignments'}`,
+    )
+    const { fetch } = renderWorkspace(role)
+    expect(await screen.findByRole('heading', { name: 'Cancelled events', level: 2 })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Cancelled Fair' })).toBeVisible()
+    await waitFor(() =>
+      expect(fetch.mock.calls.map(([url]) => String(url))).toContain(
+        `/api/event-requests/${role === 'coordinator' ? 'assigned-cancelled' : 'cancelled'}`,
+      ),
+    )
+  },
+)
+
+test('attendees have no cancelled staff records screen or request', async () => {
+  window.history.replaceState(null, '', '/?view=review-queue')
+  const { fetch } = renderWorkspace('attendee')
+  expect(
+    await screen.findByRole('heading', { name: 'Event Registrations', level: 1 }),
+  ).toBeVisible()
+  expect(screen.queryByRole('heading', { name: 'Cancelled events' })).toBeNull()
+  expect(fetch.mock.calls.some(([url]) => String(url).includes('cancelled'))).toBe(false)
 })
 test('an unavailable role screen falls back without reading organiser events', async () => {
   window.history.replaceState(null, '', '/?view=my-events&event=req-1')

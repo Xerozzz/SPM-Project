@@ -34,3 +34,13 @@ test('a safety decision also opens the owning organiser event', () => {
 test('a link is omitted when no destination is permitted for the role', () => {
   expect(notificationLink(notification, ['registrations', 'notifications'])).toBeNull()
 })
+
+// SCRUM-88 / SCRUM-115: terminal events leave the coordinator's working queue.
+test('cancellation links lead coordinators to retained records and organisers to their event', () => {
+  const cancelled = { ...notification, type: 'event_cancelled', source_type: 'event_cancellation' }
+  expect(notificationLink(cancelled, ['review-queue', 'notifications'])?.view).toBe('review-queue')
+  expect(notificationLink(cancelled, ['active-assignments', 'notifications'])?.view).toBe(
+    'active-assignments',
+  )
+  expect(notificationLink(cancelled, ['my-events', 'notifications'])?.view).toBe('my-events')
+})

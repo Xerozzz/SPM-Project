@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test'
 
+import { notificationEntries, openWorkspace } from '../support/workspace'
 import { API, createApprovedEvent, tokenFor, VENUE_SPEC_ACCOUNT } from '../support/approved-event'
 
 // TC-127-05: the Coordinator submits a revised (replacement) venue request through the
@@ -29,9 +30,7 @@ test('a revised venue request notifies the Venue Staff inbox', async ({ page }) 
   })
   const coordinator = await tokenFor(page.request, VENUE_SPEC_ACCOUNT)
   const headers = { Authorization: `Bearer ${coordinator}` }
-  const venues = (await (
-    await page.request.get(`${API}/api/venues`, { headers })
-  ).json()) as {
+  const venues = (await (await page.request.get(`${API}/api/venues`, { headers })).json()) as {
     id: string
     name: string
   }[]
@@ -85,34 +84,28 @@ test('a revised venue request notifies the Venue Staff inbox', async ({ page }) 
   })
   expect(revised.ok(), `revision request -> ${revised.status()}`).toBe(true)
 
-  // Clean up the closure so later runs and specs see a free venue.
-  const closures = (await (
-    await page.request.get(`${API}/api/venues/${venue.id}/unavailabilities`, {
-      headers: staffHeaders,
-    })
-  ).json()) as { id: string }[]
-  for (const closure of closures) {
-    await page.request.delete(`${API}/api/venues/${venue.id}/unavailabilities/${closure.id}`, {
-      headers: staffHeaders,
-    })
-  }
+  // Remove only this spec's closure; parallel closure tests own their records.
+  const closure = (await closed.json()) as { id: string }
+  const removed = await page.request.delete(
+    `${API}/api/venues/${venue.id}/unavailabilities/${closure.id}`,
+    { headers: staffHeaders },
+  )
+  expect(removed.ok(), `closure cleanup -> ${removed.status()}`).toBe(true)
 
   await signIn(page, 'venue-staff@example.com')
-  await page.getByRole('button', { name: /^Notifications/ }).click()
-  const inbox = page.getByLabel('Notifications', { exact: true })
-  await expect(inbox).toBeVisible()
-  // Parallel specs submit venue requests too, so the newest item may belong to another
-  // event. Select this spec's own: the label names the event ID after the read state,
-  // which is left out of the match so that "Unread" is still asserted below.
-  const own = inbox
-    .getByRole('listitem', { name: new RegExp(`notification for event ${event.id}$`) })
-    .filter({ hasText: 'venue_revision_submitted' })
+  await openWorkspace(page, 'Notifications')
+  const own = notificationEntries(page, 'venue_revision_submitted', event.id)
   await expect(own).toHaveCount(1)
+  await expect(
+    own.getByRole('heading', { name: 'Revised venue request awaiting review', exact: true }),
+  ).toBeVisible()
+  await expect(own).toContainText(event.name)
   await expect(own).toContainText('Unread')
+  await own.getByText('Record details', { exact: true }).click()
   await expect(own).toContainText('venue_revision_submitted')
   await expect(own).toContainText(event.id)
   await expect(own.getByRole('link', { name: 'Review revised venue request' })).toHaveAttribute(
     'href',
-    '#venue-booking-decisions',
+    `?view=booking-decisions&event=${event.id}`,
   )
 })
