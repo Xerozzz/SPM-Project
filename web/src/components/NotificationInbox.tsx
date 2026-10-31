@@ -12,7 +12,7 @@ export default function NotificationInbox({
   onNavigate,
 }: {
   allowedViews?: string[]
-  onNavigate?: (view: string, eventId: string) => void
+  onNavigate?: (view: string, eventId?: string | null, bookingId?: string | null) => void
 } = {}) {
   const { token } = useAuth()
   const client = useQueryClient()
@@ -73,7 +73,7 @@ export default function NotificationInbox({
                           !event.altKey
                         ) {
                           event.preventDefault()
-                          onNavigate(link.view, notification.event_request_id)
+                          onNavigate(link.view, link.eventId, link.bookingId)
                         }
                       }}
                     >

@@ -72,17 +72,21 @@ test('a revised venue request notifies the Venue Staff inbox', async ({ page }) 
   expect(closed.ok(), `closure record -> ${closed.status()}`).toBe(true)
 
   // Submit the revised (replacement) request at another venue.
-  const revised = await page.request.post(`${API}/api/event-requests/${event.id}/venue-bookings`, {
-    headers,
-    data: {
-      venue_id: other.id,
-      session_label: 'Revision notify session',
-      start_at: event.start_at,
-      end_at: event.end_at,
-      replaces_booking_id: booking.id,
+  const revisedResponse = await page.request.post(
+    `${API}/api/event-requests/${event.id}/venue-bookings`,
+    {
+      headers,
+      data: {
+        venue_id: other.id,
+        session_label: 'Revision notify session',
+        start_at: event.start_at,
+        end_at: event.end_at,
+        replaces_booking_id: booking.id,
+      },
     },
-  })
-  expect(revised.ok(), `revision request -> ${revised.status()}`).toBe(true)
+  )
+  expect(revisedResponse.ok(), `revision request -> ${revisedResponse.status()}`).toBe(true)
+  const revised = (await revisedResponse.json()) as { id: string }
 
   // Remove only this spec's closure; parallel closure tests own their records.
   const closure = (await closed.json()) as { id: string }
@@ -106,6 +110,6 @@ test('a revised venue request notifies the Venue Staff inbox', async ({ page }) 
   await expect(own).toContainText(event.id)
   await expect(own.getByRole('link', { name: 'Review revised venue request' })).toHaveAttribute(
     'href',
-    `?view=booking-decisions&event=${event.id}`,
+    `?view=booking-decisions&booking=${revised.id}`,
   )
 })

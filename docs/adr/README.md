@@ -90,6 +90,7 @@ someone else made two weeks ago.
 | [0078](0078-venue-booking-summary-and-details-views.md) | Review venue bookings through summaries and a details view | Proposed |
 | [0079](0079-workspace-navigation-and-usability-conventions.md) | Use URL navigation and readable workspace presentation | Proposed |
 | [0080](0080-owner-calendar-entry-opens-my-events-details.md) | Open an owner's calendar entry in My Events details | Proposed |
+| [0081](0081-notification-links-target-their-venue-booking.md) | Target a venue booking from its notification | Proposed |
 
 ## When to write one
 

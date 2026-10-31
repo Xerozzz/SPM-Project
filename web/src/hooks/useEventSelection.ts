@@ -7,7 +7,11 @@ export function useEventSelection(
 ) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const handled = useRef<string | null>(null)
-  const availableId = rows?.find((row) => (row.event_request_id ?? row.id) === eventId)?.id
+  // A direct row ID (for example, a booking notification's source ID) is unambiguous.
+  // Retain the event-request fallback for screens that select a related record by event.
+  const availableId =
+    rows?.find((row) => row.id === eventId)?.id ??
+    rows?.find((row) => row.event_request_id === eventId)?.id
   useEffect(() => {
     if (!eventId) {
       handled.current = null

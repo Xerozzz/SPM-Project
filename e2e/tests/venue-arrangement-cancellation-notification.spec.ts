@@ -66,6 +66,6 @@ test('a cancelled venue arrangement notifies the Venue Staff inbox', async ({ pa
   await expect(own).toContainText(event.id)
   await expect(own.getByRole('link', { name: 'View venue booking decisions' })).toHaveAttribute(
     'href',
-    `?view=booking-decisions&event=${event.id}`,
+    `?view=booking-decisions&booking=${booking.id}`,
   )
 })

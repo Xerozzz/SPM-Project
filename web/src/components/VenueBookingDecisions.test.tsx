@@ -57,13 +57,13 @@ function json(body: unknown, status = 200) {
   })
 }
 
-function renderPanel(fetcher: typeof fetch) {
+function renderPanel(fetcher: typeof fetch, targetBookingId: string | null = null) {
   const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(fetcher)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
       <AuthProvider>
-        <VenueBookingDecisions />
+        <VenueBookingDecisions targetBookingId={targetBookingId} />
       </AuthProvider>
     </QueryClientProvider>,
   )
@@ -101,6 +101,21 @@ test('shows a pending request with its venue, event and requirements', async () 
   expect(
     screen.getByRole('button', { name: 'View booking for Orientation Day at Hall A' }),
   ).toHaveFocus()
+})
+
+test('opens the booking selected by its notification target', async () => {
+  const afternoon = {
+    ...PENDING,
+    id: 'booking-2',
+    session_label: 'Afternoon workshop',
+    start_at: '2030-01-01T04:00:00Z',
+    end_at: '2030-01-01T08:00:00Z',
+  }
+  renderPanel(async () => json([PENDING, afternoon]), afternoon.id)
+
+  const details = await screen.findByRole('region', { name: 'Booking details' })
+  expect(within(details).getByText('Afternoon workshop')).toBeInTheDocument()
+  expect(within(details).queryByText('Morning workshop')).toBeNull()
 })
 
 test('shows an empty state when nothing is waiting', async () => {
