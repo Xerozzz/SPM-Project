@@ -25,19 +25,23 @@ const shared: EventCalendarEntry = {
 
 function renderCalendar({
   entries = [],
+  ownEntries = [],
   status = 200,
   pending = false,
+  onOpenOwnEvent = () => {},
 }: {
   entries?: EventCalendarEntry[]
+  ownEntries?: { id: string }[]
   status?: number
   pending?: boolean
+  onOpenOwnEvent?: (eventId: string) => void
 } = {}) {
   localStorage.setItem(
     'connectsphere.token',
     JSON.stringify({ token: 'token', userId: 'organiser', roles: ['organiser'] }),
   )
-  // SCRUM-112: the calendar endpoint is the only one this component may call; any other
-  // request, including the full event request, fails the test.
+  // SCRUM-112: a peer calendar click may load the caller's own-event list to establish
+  // ownership, but it must never request the peer's individual event endpoint.
   const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     expect(init?.headers).toEqual({ Authorization: 'Bearer token' })
     const url = String(input)
@@ -45,13 +49,14 @@ function renderCalendar({
       if (pending) return new Promise<Response>(() => {})
       return new Response(JSON.stringify(entries), { status })
     }
+    if (url === '/api/event-requests') return new Response(JSON.stringify(ownEntries))
     throw new Error(`unexpected request ${url}`)
   })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
       <AuthProvider>
-        <OrganisationEventCalendar />
+        <OrganisationEventCalendar onOpenOwnEvent={onOpenOwnEvent} />
       </AuthProvider>
     </QueryClientProvider>,
   )
@@ -66,7 +71,7 @@ describe('SCRUM-87 organisation calendar (frontend unit)', () => {
     expect(event).toHaveTextContent('draft')
 
     fireEvent.click(event)
-    const details = screen.getByRole('article', { name: 'Event calendar details' })
+    const details = await screen.findByRole('article', { name: 'Event calendar details' })
     expect(
       within(details).getByText(new Date(shared.start_at).toLocaleString()),
     ).toBeInTheDocument()
@@ -82,6 +87,24 @@ describe('SCRUM-87 organisation calendar (frontend unit)', () => {
     ).toBeInTheDocument()
     const ownEvent = screen.getByRole('button', { name: 'View Own event details' })
     expect(ownEvent).toHaveTextContent('submitted')
+  })
+
+  test('opens an owned event in My Events details instead of the calendar projection', async () => {
+    const onOpenOwnEvent = vi.fn()
+    const fetchSpy = renderCalendar({
+      entries: [{ ...shared, id: 'own-event', name: 'Own event' }],
+      ownEntries: [{ id: 'own-event' }],
+      onOpenOwnEvent,
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View Own event details' }))
+
+    await vi.waitFor(() => expect(onOpenOwnEvent).toHaveBeenCalledWith('own-event'))
+    expect(screen.queryByRole('article', { name: 'Event calendar details' })).toBeNull()
+    expect(fetchSpy.mock.calls.map(([input]) => String(input))).toEqual([
+      '/api/event-requests/organisation-calendar',
+      '/api/event-requests',
+    ])
   })
 
   test('shows the no-event state', async () => {
@@ -107,7 +130,7 @@ describe('SCRUM-112 peer calendar entries show calendar fields only (frontend un
     const fetchSpy = renderCalendar({ entries: [shared] })
     fireEvent.click(await screen.findByRole('button', { name: 'View Shared workshop details' }))
 
-    const details = screen.getByRole('article', { name: 'Event calendar details' })
+    const details = await screen.findByRole('article', { name: 'Event calendar details' })
     expect(within(details).getByRole('heading', { name: 'Shared workshop' })).toBeInTheDocument()
     expect(within(details).getByText('draft')).toBeInTheDocument()
     expect(
@@ -120,6 +143,7 @@ describe('SCRUM-112 peer calendar entries show calendar fields only (frontend un
     expect(within(details).queryByRole('textbox')).not.toBeInTheDocument()
     expect(fetchSpy.mock.calls.map(([input]) => String(input))).toEqual([
       '/api/event-requests/organisation-calendar',
+      '/api/event-requests',
     ])
   })
 
@@ -134,8 +158,8 @@ describe('SCRUM-112 peer calendar entries show calendar fields only (frontend un
   test('unnamed dated drafts remain identifiable and openable', async () => {
     const fetchSpy = renderCalendar({ entries: [{ ...shared, name: null }] })
     fireEvent.click(await screen.findByRole('button', { name: 'View Untitled event details' }))
-    const details = screen.getByRole('article', { name: 'Event calendar details' })
+    const details = await screen.findByRole('article', { name: 'Event calendar details' })
     expect(within(details).getByText('Untitled event')).toBeInTheDocument()
-    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
   })
 })

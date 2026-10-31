@@ -246,7 +246,9 @@ export default function HomePage() {
       )}
       {hasRole('organiser') && (
         <ViewPanel active={activeView === 'event-calendar'}>
-          <OrganisationEventCalendar />
+          <OrganisationEventCalendar
+            onOpenOwnEvent={(eventId) => navigation.navigate('my-events', eventId)}
+          />
         </ViewPanel>
       )}
       {hasRole('attendee') && (
