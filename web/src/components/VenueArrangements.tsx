@@ -13,6 +13,9 @@ import CancelArrangementDialog from './CancelArrangementDialog'
  * Coordinator as a venue change. Cancelling one returns the event to planning (ADR-0066),
  * so the parent is told and refreshes: the event leaves the confirmed list and comes back
  * as Approved, where SCRUM-109's list shows the cancelled arrangement.
+ *
+ * What cancelling does is said up front, beside the arrangements, so the Coordinator
+ * knows before pressing Cancel arrangement, not only once the dialog is open.
  */
 export default function VenueArrangements({
   event,
@@ -34,6 +37,9 @@ export default function VenueArrangements({
     enabled: token !== null && arrangements.isSuccess,
   })
   const venueNames = new Map((venues.data ?? []).map((venue) => [venue.id, venue.name]))
+  const canCancelAny = (arrangements.data ?? []).some((booking) =>
+    canOfferVenueChange(booking, event, userId),
+  )
 
   return (
     <section className="mt-4 rounded border border-slate-200 p-3 text-sm">
@@ -46,6 +52,13 @@ export default function VenueArrangements({
       )}
       {arrangements.data?.length === 0 && (
         <p className="mt-2 text-slate-500">This event has no venue arrangements.</p>
+      )}
+      {canCancelAny && (
+        <p role="note" className="mt-2 rounded bg-amber-50 p-2 text-amber-900">
+          This event is confirmed. Cancelling an arrangement starts a venue change: the event goes
+          back to planning, needs a new safety review, and new registrations are paused. Existing
+          registrations are kept.
+        </p>
       )}
       <ul className="mt-2 space-y-2 text-slate-600">
         {arrangements.data?.map((booking) => {
