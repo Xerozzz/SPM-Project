@@ -5,6 +5,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from domain.event_status import EventStatus
 from domain.registration import RegistrationStatus
 from models.event_registration import EventRegistration
 
@@ -19,6 +20,7 @@ class AttendeeEventRead(BaseModel):
     description: str | None
     start_at: datetime | None
     end_at: datetime | None
+    status: EventStatus
     intake_open: bool = False
 
 

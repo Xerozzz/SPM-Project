@@ -55,13 +55,21 @@ def list_for_event(db: Session, event_id: uuid.UUID) -> list[EventRegistration]:
 def list_events_for_attendee(
     db: Session, attendee_id: uuid.UUID, now: datetime
 ) -> list[tuple[EventRequest, bool]]:
-    """Open events plus confirmed events where this attendee has a lifecycle to manage."""
-    events: list[tuple[EventRequest, bool]] = []
-    for event in event_repo.list_confirmed(db):
-        intake_open = _intake_open(event, now)
-        if intake_open or repo.get_for_attendee(db, event.id, attendee_id) is not None:
-            events.append((event, intake_open))
-    return events
+    """Open events plus every event this attendee registered for.
+
+    A registered event stays listed while it is replanned, cancelled or completed, so the
+    attendee can still see their registration and the notification links still open it.
+    """
+    events = {
+        event.id: event for event in event_repo.list_confirmed(db) if _intake_open(event, now)
+    }
+    for event in repo.list_events_registered_by(db, attendee_id):
+        events.setdefault(event.id, event)
+    ordered = sorted(
+        events.values(),
+        key=lambda event: (event.start_at is None, event.start_at or now, event.id),
+    )
+    return [(event, _intake_open(event, now)) for event in ordered]
 
 
 def event_for_registration(db: Session, event_id: uuid.UUID, now: datetime) -> EventRequest:

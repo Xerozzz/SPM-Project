@@ -165,6 +165,12 @@ export default function AttendeeRegistrations({
                         : 'Date to be confirmed'}
                     </dd>
                   </div>
+                  {eventNotice(entry.event) && (
+                    <div>
+                      <dt className="text-xs text-slate-500">Event update</dt>
+                      <dd className="mt-1 text-amber-800">{eventNotice(entry.event)}</dd>
+                    </div>
+                  )}
                   {selectedId && entry.event.description && (
                     <div>
                       <dt className="text-xs text-slate-500">About this event</dt>
@@ -336,6 +342,13 @@ function StatusLabel({ filter }: { filter: Exclude<RegistrationFilter, 'all'> })
 
 function entryFilter(entry: RegistrationEntry): Exclude<RegistrationFilter, 'all'> {
   return entry.registration?.status ?? 'available'
+}
+function eventNotice(event: AttendeeEvent): string | null {
+  if (event.status === 'approved')
+    return 'This event is being replanned. Registration is paused until the organiser reopens it.'
+  if (event.status === 'cancelled') return 'This event has been cancelled.'
+  if (event.status === 'completed') return 'This event has ended.'
+  return null
 }
 function titleOf(event: AttendeeEvent): string {
   return event.name ?? 'Untitled event'

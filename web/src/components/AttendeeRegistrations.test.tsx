@@ -188,6 +188,50 @@ test('SCRUM-42: registration cards can be filtered by their status', async () =>
   expect(screen.queryByText('Available event')).not.toBeInTheDocument()
 })
 
+test('SCRUM-42: a registration stays visible while its event is replanned', async () => {
+  localStorage.setItem(
+    'connectsphere.token',
+    JSON.stringify({ token: 'token', userId: 'attendee-1', roles: ['attendee'] }),
+  )
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const request = `${init?.method ?? 'GET'} ${String(input)}`
+    if (request === 'GET /api/attendee/events') {
+      return json([
+        {
+          id: 'event-1',
+          name: 'Open Day',
+          description: 'Campus tours',
+          start_at: '2030-03-04T10:00:00Z',
+          end_at: '2030-03-04T12:00:00Z',
+          status: 'approved',
+          intake_open: false,
+        },
+      ])
+    }
+    if (request === 'GET /api/attendee/events/event-1/registration') {
+      return json(registration())
+    }
+    throw new Error(`unexpected request ${request}`)
+  })
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={client}>
+      <AuthProvider>
+        <AttendeeRegistrations targetEventId="event-1" />
+      </AuthProvider>
+    </QueryClientProvider>,
+  )
+
+  expect(await screen.findByRole('heading', { name: 'Open Day' })).toBeInTheDocument()
+  expect(
+    screen.getByText(
+      'This event is being replanned. Registration is paused until the organiser reopens it.',
+    ),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('Registration status: Pending')
+  expect(screen.queryByRole('button', { name: 'Register' })).not.toBeInTheDocument()
+})
+
 function registration() {
   return {
     id: 'registration-1',
