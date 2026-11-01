@@ -24,7 +24,7 @@ const OPEN_DAY: CancelledEvent = {
   cancellation_reason: 'Speaker withdrew',
 }
 
-function renderAs(roles: string[], rows: CancelledEvent[]) {
+function renderAs(roles: string[], rows: CancelledEvent[], targetEventId: string | null = null) {
   localStorage.setItem(
     'connectsphere.token',
     JSON.stringify({ token: 'token', userId: 'u-1', roles }),
@@ -41,7 +41,7 @@ function renderAs(roles: string[], rows: CancelledEvent[]) {
   const view = render(
     <QueryClientProvider client={client}>
       <AuthProvider>
-        <CancelledEvents />
+        <CancelledEvents targetEventId={targetEventId} />
       </AuthProvider>
     </QueryClientProvider>,
   )
@@ -92,5 +92,26 @@ describe('SCRUM-88 cancelled events offer the event history (frontend unit)', ()
     await waitFor(() => expect(urls()).toEqual(['/api/event-requests/cancelled']))
 
     expect(container).toBeEmptyDOMElement()
+  })
+})
+
+describe('a "View cancelled event" notification opens the event (frontend unit)', () => {
+  test('the event named by the notification is focused with its history open', async () => {
+    const OTHER: CancelledEvent = { ...OPEN_DAY, id: 'ev-2', name: 'Sports Day' }
+    const { urls } = renderAs(['coordinator'], [OTHER, OPEN_DAY], 'ev-1')
+
+    expect(await screen.findByText('No history you can see for Open Day yet.')).toBeInTheDocument()
+    const [, target] = screen.getAllByRole('article')
+    expect(target).toHaveTextContent('Open Day')
+    expect(target).toHaveAttribute('aria-current', 'true')
+    expect(target).toHaveFocus()
+    expect(urls()).not.toContain('/api/event-requests/ev-2/history')
+  })
+
+  test('without a target every history stays closed', async () => {
+    renderAs(['coordinator'], [OPEN_DAY])
+
+    expect(await screen.findByRole('button', { name: 'View event history' })).toBeInTheDocument()
+    expect(screen.getByRole('article')).not.toHaveAttribute('aria-current')
   })
 })

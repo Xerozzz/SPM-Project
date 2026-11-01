@@ -263,7 +263,9 @@ export default function HomePage() {
           <EventRequestReview
             targetEventId={activeView === 'review-queue' ? navigation.eventId : null}
           />
-          <CancelledEvents />
+          <CancelledEvents
+            targetEventId={activeView === 'review-queue' ? navigation.eventId : null}
+          />
         </ViewPanel>
       )}
       {hasRole('coordinator') && (
@@ -292,7 +294,9 @@ export default function HomePage() {
           <ActiveAssignments
             targetEventId={activeView === 'active-assignments' ? navigation.eventId : null}
           />
-          <CancelledEvents />
+          <CancelledEvents
+            targetEventId={activeView === 'active-assignments' ? navigation.eventId : null}
+          />
         </ViewPanel>
       )}
       {hasRole('venue_staff') && (

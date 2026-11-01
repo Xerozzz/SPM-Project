@@ -71,11 +71,13 @@ export default function EventHistory({
 export function EventHistoryToggle({
   eventId,
   eventName,
+  initiallyOpen = false,
 }: {
   eventId: string
   eventName: string | null
+  initiallyOpen?: boolean
 }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(initiallyOpen)
   return (
     <div>
       <button
