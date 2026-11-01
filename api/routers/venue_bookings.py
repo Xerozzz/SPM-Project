@@ -101,11 +101,31 @@ def list_venue_bookings(event: PlanningEvent, db: Db) -> list[VenueBookingRead]:
             venue = venue_repo.get(db, row.venue_id)
             assert venue is not None  # a booking cannot exist without its venue.
             venues[row.venue_id] = venue
-    return [_booking_read(row, venues[row.venue_id], problems.get(row.id)) for row in rows]
+    return [
+        _booking_read(row, venues[row.venue_id], _conflict_of(db, row, venues, problems))
+        for row in rows
+    ]
+
+
+def _conflict_of(
+    db: Session,
+    row: VenueBooking,
+    venues: dict[uuid.UUID, Venue],
+    problems: dict[uuid.UUID, buffer_review.ReviewedBooking],
+) -> ConflictRead | None:
+    """A standing booking's clash comes from the buffer review. A pending request is
+    checked the way Venue Staff will check it, so the Coordinator sees the clash now."""
+    problem = problems.get(row.id)
+    if problem is not None:
+        return ConflictRead.from_error(problem.conflict, buffer_review.buffers_of(problem.venue))
+    pending = service.pending_conflict(db, row)
+    if pending is not None:
+        return ConflictRead.from_error(pending, buffer_review.buffers_of(venues[row.venue_id]))
+    return None
 
 
 def _booking_read(
-    row: VenueBooking, venue: Venue, problem: buffer_review.ReviewedBooking | None
+    row: VenueBooking, venue: Venue, conflict: ConflictRead | None
 ) -> VenueBookingRead:
     buffers = buffer_review.buffers_of(venue)
     held_from, held_to = effective_interval(row.start_at, row.end_at, buffers)
@@ -115,11 +135,7 @@ def _booking_read(
         ),
         effective_start_at=held_from,
         effective_end_at=held_to,
-        conflict=(
-            ConflictRead.from_error(problem.conflict, buffer_review.buffers_of(problem.venue))
-            if problem is not None
-            else None
-        ),
+        conflict=conflict,
     )
 
 
