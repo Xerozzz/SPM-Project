@@ -1,7 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import {
+  checkEquipmentAvailability,
   listRequirementsForReview,
   type RequirementForReview,
   reserveEquipment,
@@ -35,6 +36,18 @@ export default function EquipmentReviewQueue() {
     queryFn: () => listRequirementsForReview(token ?? ''),
     enabled: token !== null,
   })
+  const availabilityQueries = useQueries({
+    queries: (queue.data ?? []).map((requirement) => ({
+      queryKey: ['equipment-availability', token, requirement.event_request_id],
+      queryFn: () => checkEquipmentAvailability(token ?? '', requirement.event_request_id),
+      enabled: token !== null,
+    })),
+  })
+  const availabilityByRequirementId = new Map(
+    availabilityQueries
+      .flatMap((query) => query.data ?? [])
+      .map((availability) => [availability.id, availability]),
+  )
 
   function starting() {
     setOutcome(null)
@@ -91,83 +104,100 @@ export default function EquipmentReviewQueue() {
 
       {queue.data && queue.data.length > 0 && (
         <ul className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {queue.data.map((requirement) => (
-            <li
-              key={requirement.id}
-              className="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-5 text-sm"
-            >
-              <p className="font-semibold">
-                {requirement.equipment_type} &times;{requirement.quantity}
-                <span className="mt-1 block font-normal text-slate-500">
-                  for {requirement.event_name ?? 'Untitled event'}
-                </span>
-              </p>
-              {requirement.event_start_at && requirement.event_end_at && (
-                <p className="text-slate-500">
-                  {formatSingaporeTime(requirement.event_start_at)} to{' '}
-                  {formatSingaporeTime(requirement.event_end_at)}
-                </p>
-              )}
-              {requirement.technical_requirements && (
-                <p className="text-slate-500">{requirement.technical_requirements}</p>
-              )}
-              <p className="mt-4 flex flex-wrap items-center gap-2">
-                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">
-                  {REVIEW_LABELS[requirement.review_status]}
-                </span>
-                {requirement.reserved_quantity > 0 && (
-                  <span className="text-xs text-slate-500">
-                    {requirement.reserved_quantity} of {requirement.quantity} reserved
+          {queue.data.map((requirement, index) => {
+            const availability = availabilityByRequirementId.get(requirement.id)
+            const availabilityFailed = availabilityQueries[index]?.isError
+
+            return (
+              <li
+                key={requirement.id}
+                className="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-5 text-sm"
+              >
+                <p className="font-semibold">
+                  {requirement.equipment_type} &times;{requirement.quantity}
+                  <span className="mt-1 block font-normal text-slate-500">
+                    for {requirement.event_name ?? 'Untitled event'}
                   </span>
+                </p>
+                {requirement.event_start_at && requirement.event_end_at && (
+                  <p className="text-slate-500">
+                    {formatSingaporeTime(requirement.event_start_at)} to{' '}
+                    {formatSingaporeTime(requirement.event_end_at)}
+                  </p>
                 )}
-                {/* SCRUM-43 AC6: the requirement changed after something was reserved
+                {requirement.technical_requirements && (
+                  <p className="text-slate-500">{requirement.technical_requirements}</p>
+                )}
+                <p className="mt-4 flex flex-wrap items-center gap-2">
+                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">
+                    {REVIEW_LABELS[requirement.review_status]}
+                  </span>
+                  {requirement.reserved_quantity > 0 && (
+                    <span className="text-xs text-slate-500">
+                      {requirement.reserved_quantity} of {requirement.quantity} reserved
+                    </span>
+                  )}
+                  {/* SCRUM-43 AC6: the requirement changed after something was reserved
                     against it. The reservation is not released; this is the half of AC6
                     addressed to Technical Support, who decide what happens to it. */}
-                {requirement.has_flagged_reservation && (
-                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-900">
-                    Reservation to reconsider
-                  </span>
+                  {requirement.has_flagged_reservation && (
+                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-900">
+                      Reservation to reconsider
+                    </span>
+                  )}
+                </p>
+                {availability ? (
+                  <p className="mt-3 rounded bg-sky-50 p-3 text-sm text-sky-950">
+                    <span className="font-medium">Availability for this event: </span>
+                    {availability.stock} in stock, {availability.reserved} reserved for overlapping
+                    events, {availability.available} available. Recommended outcome:{' '}
+                    <span className="font-medium">{REVIEW_LABELS[availability.result]}</span>.
+                  </p>
+                ) : availabilityFailed ? (
+                  <p className="mt-3 text-sm text-red-600">Could not calculate availability.</p>
+                ) : (
+                  <p className="mt-3 text-sm text-slate-500">Calculating availability…</p>
                 )}
-              </p>
-              <div className="mt-5 flex flex-wrap gap-2">
-                <label className="flex items-center gap-1">
-                  <span className="sr-only">
-                    Outcome for {requirement.equipment_type} on{' '}
-                    {requirement.event_name ?? 'Untitled event'}
-                  </span>
-                  <select
-                    defaultValue=""
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <label className="flex items-center gap-1">
+                    <span className="sr-only">
+                      Outcome for {requirement.equipment_type} on{' '}
+                      {requirement.event_name ?? 'Untitled event'}
+                    </span>
+                    <select
+                      defaultValue=""
+                      disabled={busy}
+                      aria-label={`Outcome for ${requirement.equipment_type} on ${requirement.event_name ?? 'Untitled event'}`}
+                      onChange={(changed) => {
+                        const verdict = changed.target.value as ReviewOutcome
+                        if (!verdict) return
+                        starting()
+                        record.mutate({ requirement, verdict })
+                      }}
+                      className="rounded border border-slate-300 p-1.5 text-sm disabled:opacity-50"
+                    >
+                      <option value="">Record an outcome</option>
+                      <option value="available">Available</option>
+                      <option value="partially_available">Partially available</option>
+                      <option value="unavailable">Unavailable</option>
+                    </select>
+                  </label>
+                  <button
+                    type="button"
                     disabled={busy}
-                    aria-label={`Outcome for ${requirement.equipment_type} on ${requirement.event_name ?? 'Untitled event'}`}
-                    onChange={(changed) => {
-                      const verdict = changed.target.value as ReviewOutcome
-                      if (!verdict) return
+                    aria-label={`Reserve equipment for ${requirement.equipment_type} on ${requirement.event_name ?? 'Untitled event'}`}
+                    onClick={() => {
                       starting()
-                      record.mutate({ requirement, verdict })
+                      reserve.mutate(requirement)
                     }}
-                    className="rounded border border-slate-300 p-1.5 text-sm disabled:opacity-50"
+                    className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
                   >
-                    <option value="">Record an outcome</option>
-                    <option value="available">Available</option>
-                    <option value="partially_available">Partially available</option>
-                    <option value="unavailable">Unavailable</option>
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  disabled={busy}
-                  aria-label={`Reserve equipment for ${requirement.equipment_type} on ${requirement.event_name ?? 'Untitled event'}`}
-                  onClick={() => {
-                    starting()
-                    reserve.mutate(requirement)
-                  }}
-                  className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-                >
-                  Reserve
-                </button>
-              </div>
-            </li>
-          ))}
+                    Reserve
+                  </button>
+                </div>
+              </li>
+            )
+          })}
         </ul>
       )}
 

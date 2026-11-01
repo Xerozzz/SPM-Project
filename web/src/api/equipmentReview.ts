@@ -33,6 +33,15 @@ export interface RequirementForReview {
   has_flagged_reservation: boolean
 }
 
+/** SCRUM-52 AC4: live stock calculation for a requirement's event window. */
+export interface RequirementAvailability {
+  id: string
+  stock: number
+  reserved: number
+  available: number
+  result: ReviewOutcome
+}
+
 /** SCRUM-53 AC7: what one reserve action did, and where the requirement now stands. */
 export interface ReservationOutcome {
   requirement_id: string
@@ -79,9 +88,7 @@ async function failureOf(response: Response, fallback: string): Promise<Error> {
   return new Error(detail ?? `${fallback} (${response.status})`)
 }
 
-export async function listRequirementsForReview(
-  token: string,
-): Promise<RequirementForReview[]> {
+export async function listRequirementsForReview(token: string): Promise<RequirementForReview[]> {
   const response = await fetch('/api/equipment-requirements/review', {
     headers: authHeaders(token),
   })
@@ -89,6 +96,18 @@ export async function listRequirementsForReview(
     throw new Error(`Could not load the equipment review queue (${response.status})`)
   }
   return (await response.json()) as RequirementForReview[]
+}
+
+/** Read the API's availability recommendation without recording an outcome or reserving stock. */
+export async function checkEquipmentAvailability(
+  token: string,
+  eventRequestId: string,
+): Promise<RequirementAvailability[]> {
+  const response = await fetch(`/api/event-requests/${eventRequestId}/equipment-availability`, {
+    headers: authHeaders(token),
+  })
+  if (!response.ok) throw await failureOf(response, 'Could not check equipment availability')
+  return (await response.json()) as RequirementAvailability[]
 }
 
 /** SCRUM-44 AC2: record whether this requirement can be fulfilled. */
