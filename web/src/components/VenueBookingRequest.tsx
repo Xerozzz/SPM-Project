@@ -336,7 +336,13 @@ function ExistingVenueBookings({
                 </>
               )}
             </dl>
-            {booking.conflict && (
+            {booking.conflict && booking.status === 'pending' && (
+              <p className="mt-2 rounded bg-amber-50 p-2 text-amber-800" role="status">
+                Venue Staff cannot approve this request. {describeConflict(booking.conflict)} Choose
+                another time or venue.
+              </p>
+            )}
+            {booking.conflict && booking.status !== 'pending' && (
               <p className="mt-2 rounded bg-amber-50 p-2 text-amber-800" role="status">
                 Needs attention. {describeConflict(booking.conflict)} Venue Staff have been told;
                 contact them to agree what moves.

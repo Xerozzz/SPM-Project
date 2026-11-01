@@ -15,7 +15,13 @@ from domain import (
     venue_session,
     venue_suitability,
 )
-from domain.booking_conflict import BookedPeriod, UnavailablePeriod, ensure_no_conflict
+from domain.booking_conflict import (
+    BookedPeriod,
+    ConflictingBookingError,
+    UnavailablePeriod,
+    VenueUnavailableError,
+    ensure_no_conflict,
+)
 from domain.event_request import (
     EQUIPMENT_REQUIREMENT_FACILITIES,
     EventRequestFields,
@@ -261,6 +267,23 @@ def check_approvable(db: Session, booking_id: uuid.UUID) -> VenueBooking:
         raise BookingNotFoundError
     _ensure_no_conflict(db, booking)
     return booking
+
+
+def pending_conflict(
+    db: Session, booking: VenueBooking
+) -> ConflictingBookingError | VenueUnavailableError | None:
+    """What would stop Venue Staff approving this pending request, if anything.
+
+    Lets the Coordinator see a clash on a request they just sent, rather than only
+    finding out when it is rejected. Read only, like `check_approvable`.
+    """
+    if booking.status is not BookingStatus.PENDING:
+        return None
+    try:
+        _ensure_no_conflict(db, booking)
+    except (ConflictingBookingError, VenueUnavailableError) as exc:
+        return exc
+    return None
 
 
 def approve(

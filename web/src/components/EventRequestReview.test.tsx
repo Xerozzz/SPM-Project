@@ -633,6 +633,19 @@ test('SCRUM-89 AC4: a booking with nothing wrong says nothing', async () => {
   expect(screen.queryByText(/Needs attention/)).toBeNull()
 })
 
+test('SCRUM-73: a pending request that clashes tells the coordinator to pick again', async () => {
+  // Reported from testing: a request sent into a blocked slot showed no warning, so the
+  // Coordinator only found out when Venue Staff could not approve it.
+  signInAsCoordinator()
+  renderExistingBookingReview([{ ...rejectedBooking, status: 'pending', conflict: CLASH }])
+
+  await openReviewDetails()
+  expect(await screen.findByText(/Venue Staff cannot approve this request/)).toBeInTheDocument()
+  expect(screen.getByText(/Clashes with a confirmed booking from/)).toBeInTheDocument()
+  expect(screen.getByText(/Choose another time or venue/)).toBeInTheDocument()
+  expect(screen.queryByText(/Needs attention/)).toBeNull()
+})
+
 // ------------------------------------------ SCRUM-82: the Coordinator's side of a clash
 //
 // Reported from testing: a clash named a period that did not overlap the booking it was
