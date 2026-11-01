@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from domain.registration import LIVE_STATUSES, RegistrationStatus
 from models.event_registration import EventRegistration, EventRegistrationHistory
+from models.event_request import EventRequest
 
 
 def get_live_for_attendee(
@@ -33,6 +34,19 @@ def get_for_attendee(
         .order_by(EventRegistration.submission_order.desc())
     )
     return db.scalars(statement).first()
+
+
+def list_events_registered_by(db: Session, attendee_id: uuid.UUID) -> list[EventRequest]:
+    """Every event this attendee has a registration on, whatever its status now."""
+    registered = select(EventRegistration.event_request_id).where(
+        EventRegistration.attendee_id == attendee_id
+    )
+    statement = (
+        select(EventRequest)
+        .where(EventRequest.id.in_(registered))
+        .order_by(EventRequest.start_at, EventRequest.id)
+    )
+    return list(db.scalars(statement))
 
 
 def get_for_update(

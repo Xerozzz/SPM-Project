@@ -2,12 +2,16 @@
 
 export type RegistrationStatus = 'pending' | 'waitlisted' | 'accepted' | 'withdrawn' | 'cancelled'
 
+export type AttendeeEventStatus =
+  'draft' | 'submitted' | 'confirmed' | 'approved' | 'rejected' | 'completed' | 'cancelled'
+
 export interface AttendeeEvent {
   id: string
   name: string | null
   description: string | null
   start_at: string | null
   end_at: string | null
+  status: AttendeeEventStatus
   intake_open: boolean
 }
 
