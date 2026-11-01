@@ -318,6 +318,7 @@ async def test_a_request_is_decided_once(
     assert again.json()["detail"] == "this change request is already approved"
 
 
+@pytest.mark.story("SCRUM-47")
 def test_the_service_rechecks_the_coordinator_on_the_locked_row(
     db: Session, make_user: MakeUser
 ) -> None:
