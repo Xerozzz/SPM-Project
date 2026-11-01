@@ -52,6 +52,16 @@ function renderQueue(handler?: (key: string, init?: RequestInit) => Response | u
     const answer = handler?.(key, init)
     if (answer) return answer
     if (key === 'GET /api/equipment-requirements/review') return json([PROJECTOR])
+    if (key === 'GET /api/event-requests/event-1/equipment-availability')
+      return json([
+        {
+          id: PROJECTOR.id,
+          stock: 4,
+          reserved: 0,
+          available: 4,
+          result: 'available',
+        },
+      ])
     throw new Error(`unexpected request ${key}`)
   })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -82,6 +92,31 @@ test('SCRUM-44 AC1: what needs assessing, with the timing needed to assess it', 
   expect(screen.getByText('Needs an HDMI cable')).toBeInTheDocument()
   expect(screen.getByText('Pending review')).toBeInTheDocument()
   expect(screen.getByRole('listitem')).toHaveClass('rounded-2xl')
+})
+
+test('shows the API availability calculation and recommended outcome before a review', async () => {
+  renderQueue((key) =>
+    key === 'GET /api/event-requests/event-1/equipment-availability'
+      ? json([
+          {
+            id: PROJECTOR.id,
+            stock: 4,
+            reserved: 1,
+            available: 3,
+            result: 'partially_available',
+          },
+        ])
+      : undefined,
+  )
+
+  expect(
+    await screen.findByText(
+      (_content, element) =>
+        element?.tagName === 'P' &&
+        element.textContent ===
+          'Availability for this event: 4 in stock, 1 reserved for overlapping events, 3 available. Recommended outcome: Partially available.',
+    ),
+  ).toBeInTheDocument()
 })
 
 test('SCRUM-44 AC2: recording an outcome sends it and says so', async () => {
