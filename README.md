@@ -5,8 +5,6 @@ moment an Organiser drafts a request through coordinator assignment, venue and e
 arrangement, safety review, confirmation, attendee registration, and on to completion or
 cancellation — with an audit trail at every step.
 
-Everything runs with one command:
-
 ```bash
 docker compose up --build
 ```
@@ -35,8 +33,6 @@ humans and AI assistants alike.
 ## What the system does
 
 Sign-in is role-based, and the workspace shows only the screens a role is entitled to.
-Authorisation is never written inline — every read and write of an event names the
-permission it needs ([ADR-0035](./docs/adr/0035-coordinator-assigned-event-access.md)).
 
 | Role | What they can do |
 |---|---|
@@ -48,30 +44,6 @@ permission it needs ([ADR-0035](./docs/adr/0035-coordinator-assigned-event-acces
 | **Safety Officer** | Review an arranged plan and record an approval, rejection or request for changes against the exact plan that was read |
 | **Attendee** | Browse open events, register, and withdraw |
 
-Everyone has a private notification inbox. Notifications carry no presentation payload —
-they name the event and the kind of thing that happened, and the screens render from live
-state, so a notification can never go stale
-([ADR-0022](./docs/adr/0022-notification-inbox.md),
-[ADR-0079](./docs/adr/0079-workspace-navigation-and-usability-conventions.md)).
-
-Three things are worth pointing at in a design review:
-
-- **Conflicts are prevented by the database, not by the application.** Overlapping venue
-  bookings are impossible because of a `tstzrange` + `EXCLUDE USING gist` constraint that
-  covers confirmed bookings and tentative holds alike. The application check exists only
-  to produce a friendly error first
-  ([ADR-0002](./docs/adr/0002-booking-conflict-detection.md),
-  [ADR-0019](./docs/adr/0019-venue-buffer-effective-intervals.md)).
-- **The hard logic is pure.** Venue suitability, overlap, the status machine, safety
-  fingerprints, confirmation readiness and reminder due times all live in `api/domain/`,
-  which may not import SQLAlchemy or FastAPI. That is why it is unit-tested exhaustively
-  and in milliseconds ([ADR-0003](./docs/adr/0003-layered-architecture.md)).
-- **Two background timers run inside the API**: one expires tentative venue holds, one
-  sweeps due arrangement reminders. They are deliberately separate, so a failure in
-  either cannot stop the other
-  ([ADR-0030](./docs/adr/0030-expire-tentative-holds-with-an-in-process-timer.md),
-  [ADR-0063](./docs/adr/0063-reminder-occurrences-as-rows-with-a-derived-due-time.md)).
-
 ## Prerequisites
 
 | Tool | Version | Why |
@@ -79,12 +51,8 @@ Three things are worth pointing at in a design review:
 | Docker Desktop | 24+, with Compose v2 | Runs the whole stack; nothing else is required |
 | Git | any recent | — |
 
-That is the whole list. Python, Node and PostgreSQL run **inside** the containers, so you
-do not need them installed to run the application or its tests. (`make` is optional, and
-is not available on Windows by default — every target below is also given as a plain
-`docker compose` command. Playwright is the one exception: see
-[End-to-end tests](#end-to-end-tests).)
-
+Python, Node and PostgreSQL run **inside** the containers, so you
+do not need them installed to run the application or its tests. 
 ## Run the application
 
 ```bash
@@ -144,48 +112,6 @@ The seed also builds **twelve test events, one per stage of an event's life**, s
 screen has something in it the moment you sign in: a rejected request waiting to be
 resubmitted, a plan ready for safety review, a confirmed event with registrations open, an
 event whose venue has just been closed, a completed one, a cancelled one, and so on.
-
-**[docs/manual-testing.md](./docs/manual-testing.md) says which account tests what, event
-by event.** Start there rather than building a scenario by hand.
-
-The test events are rebuilt every time the API starts, so you can break them freely and
-get them back with `docker compose restart api` or `make seed`. Users are never modified
-once created.
-
-## Quality gates
-
-Everything below runs on every pull request ([.github/workflows/ci.yml](./.github/workflows/ci.yml)),
-and `main` is protected.
-
-| Gate | Current state |
-|---|---|
-| Backend tests (pytest) | **1,857** tests, green |
-| Frontend unit tests (Vitest + React Testing Library) | **521** tests across 48 files, green |
-| End-to-end tests (Playwright, real browser, whole stack) | **52** tests across 31 specs |
-| Backend coverage | gate is **90%** on `api/`; currently **98.24%** |
-| Domain coverage | gate is **100%** on `api/domain/`, and met — a pure layer has no excuse for an uncovered line |
-| Lint and types | `ruff check`, `ruff format --check`, `mypy` on the backend; ESLint, `tsc --noEmit` and a production build on the frontend |
-| Migrations | applied from an empty database on every run, so the schema can always be rebuilt from migration 0001 |
-| Traceability | regenerated from the tests themselves and uploaded as an artifact; **0 untagged tests** |
-
-Every test names the story it proves, and **83 stories** currently have tests attached
-(plus `US-0`, the scaffold itself):
-
-```python
-@pytest.mark.story("SCRUM-85")
-def test_a_reminder_is_sent_once_per_occurrence(): ...
-```
-
-The marker is registered with `--strict-markers`, so a typo fails the run instead of
-silently dropping the test out of the traceability matrix. Generate the matrix at any
-time:
-
-```bash
-docker compose run --rm api python ../scripts/traceability.py tests
-```
-
-It also lists untagged tests, which is the signal that somebody shipped a test without
-linking it to a story.
 
 ## Everyday commands
 
@@ -295,22 +221,6 @@ SQLAlchemy or FastAPI inside `domain/` fails the lint step.
   ([ADR-0079](./docs/adr/0079-workspace-navigation-and-usability-conventions.md)).
 - `api/` and `web/` are bind-mounted into their containers and run with hot reload, so a
   saved file is live within a second or two, with no rebuild.
-
-## Writing a story
-
-1. Branch: `feat/SCRUM-14-short-description`. One story per branch, one story per PR.
-2. Check [docs/adr/README.md](./docs/adr/README.md) for a decision covering what you are
-   about to touch, and write an ADR if you hit a trigger in AGENTS.md section 5.
-3. Write the code in the right layer, and the test beside it, tagged with the story:
-
-   ```python
-   @pytest.mark.story("SCRUM-14")
-   def test_overlapping_booking_is_rejected(): ...
-   ```
-
-4. Run `make lint` and `make test` before you push.
-5. Open a PR with the template completed, including the AI-usage disclosure.
-6. Get a review. No self-merging, and `main` stays releasable.
 
 ## Troubleshooting
 
