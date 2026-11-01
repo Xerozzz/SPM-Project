@@ -110,6 +110,22 @@ test.each([
   expect(screen.queryByRole('button', { name: /Cancel arrangement/ })).toBeNull()
 })
 
+test('SCRUM-118: what cancelling does is shown before Cancel arrangement is pressed', async () => {
+  renderSection()
+
+  expect(await screen.findByRole('note')).toHaveTextContent(
+    'This event is confirmed. Cancelling an arrangement starts a venue change: the event goes back to planning, needs a new safety review, and new registrations are paused.',
+  )
+  expect(screen.queryByRole('dialog')).toBeNull()
+})
+
+test('SCRUM-118: no warning is shown when nothing can be cancelled', async () => {
+  renderSection({ ...EVENT, coordinator_id: 'coordinator-2' } as EventRequest)
+
+  expect(await screen.findByText(/Morning workshop/)).toBeInTheDocument()
+  expect(screen.queryByRole('note')).toBeNull()
+})
+
 test('SCRUM-118: the dialog warns what a venue change does', async () => {
   renderSection()
   const dialog = await openDialog()
