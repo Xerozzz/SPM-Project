@@ -50,6 +50,7 @@ someone else made two weeks ago.
 | [0037](0037-plan-from-maintained-equipment-requirements.md) | Plan from the maintained equipment requirements, not the organiser's string | Proposed |
 | [0038](0038-equipment-reservations-by-type-with-row-locks.md) | Reserve equipment by type, serialised with catalogue row locks | Proposed |
 | [0039](0039-peer-organisers-see-calendar-projection-only.md) | Limit peer Organisers to the organisation-calendar projection | Proposed |
+| [0040](0040-session-label-on-venue-booking.md) | Store the session label on the venue booking row | Proposed |
 | [0041](0041-significant-changes-as-change-request-records.md) | Record a significant change as a change request with one row per changed value | Proposed |
 | [0042](0042-confirmed-events-refuse-ordinary-updates.md) | Confirmed events refuse ordinary updates | Proposed |
 | [0043](0043-decide-change-requests-apply-event-fields-only.md) | Deciding a change request applies the event fields and flags arrangements | Proposed |

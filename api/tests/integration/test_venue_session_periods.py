@@ -60,7 +60,7 @@ async def _submit_session(
     )
 
 
-@pytest.mark.story("US-111")
+@pytest.mark.story("SCRUM-111")
 async def test_labelled_shorter_session_stores_supplied_period(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -86,7 +86,7 @@ async def test_labelled_shorter_session_stores_supplied_period(
     assert (row.start_at, row.end_at) != (event.start_at, event.end_at)
 
 
-@pytest.mark.story("US-111")
+@pytest.mark.story("SCRUM-111")
 async def test_parallel_sessions_at_different_venues_stay_independent(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -110,7 +110,7 @@ async def test_parallel_sessions_at_different_venues_stay_independent(
     assert [item["id"] for item in history.json()] == [one.json()["id"], two.json()["id"]]
 
 
-@pytest.mark.story("US-111")
+@pytest.mark.story("SCRUM-111")
 async def test_invalid_session_or_wrong_state_creates_no_booking(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -146,7 +146,7 @@ async def test_invalid_session_or_wrong_state_creates_no_booking(
     assert bookings(db) == []
 
 
-@pytest.mark.story("US-111")
+@pytest.mark.story("SCRUM-111")
 async def test_search_uses_the_session_period_not_the_parent(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -194,7 +194,7 @@ async def test_search_uses_the_session_period_not_the_parent(
     assert availability.json()["available"] is True
 
 
-@pytest.mark.story("US-111")
+@pytest.mark.story("SCRUM-111")
 async def test_same_venue_session_overlap_is_refused(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -237,7 +237,7 @@ async def test_same_venue_session_overlap_is_refused(
     assert refused.status_code == 409
 
 
-@pytest.mark.story("US-111")
+@pytest.mark.story("SCRUM-111")
 async def test_staff_decision_coordinator_list_and_calendar_agree(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -282,7 +282,7 @@ async def test_staff_decision_coordinator_list_and_calendar_agree(
     assert rows[0].status is BookingStatus.REJECTED
 
 
-@pytest.mark.story("US-111")
+@pytest.mark.story("SCRUM-111")
 async def test_suitability_uses_parent_event_requirements(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
@@ -306,7 +306,7 @@ async def test_suitability_uses_parent_event_requirements(
     assert created.json()["suitability"]["mismatch_codes"] == ["CAPACITY_EXCEEDED"]
 
 
-@pytest.mark.story("US-111")
+@pytest.mark.story("SCRUM-111")
 async def test_whole_event_rows_keep_recorded_periods(
     db: Session, make_user: MakeUser, make_client: MakeClient
 ) -> None:
